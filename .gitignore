@@ -23,3 +23,6 @@ coverage/
 
 # Local generated data
 okr-transparency-app/data/okr-snapshot.json
+
+# Root-level analysis drafts
+/*.md
