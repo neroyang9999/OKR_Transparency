@@ -1,0 +1,25 @@
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and runtime output
+*.log
+*.pid
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Node/Next.js dependencies and build output
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+
+# Local generated data
+okr-transparency-app/data/okr-snapshot.json
