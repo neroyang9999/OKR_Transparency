@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import type { OkrRecord } from "@/lib/okr/types";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import { normalizePeriod } from "@/lib/periods";
+import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const softwareChildTeams = [
@@ -42,9 +43,10 @@ const teamNav: TeamNavItem[] = [
 export default async function HomePage({
   searchParams
 }: {
-  searchParams: Promise<{ team?: string; period?: string }>;
+  searchParams: Promise<{ team?: string; period?: string; lang?: string }>;
 }) {
-  const [{ team, period }, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const [{ team, period, lang: rawLang }, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const lang = normalizeLang(rawLang);
   const selectedTeam = normalizeTeam(team);
   const selectedPeriod = normalizePeriod(period);
   const selectedRecords = data.records.filter((record) => record.team === selectedTeam);
@@ -60,9 +62,9 @@ export default async function HomePage({
     : [];
 
   return (
-    <AppShell active="Overview">
+    <AppShell active="overview">
       <div className="grid min-h-[calc(100vh-104px)] gap-5 lg:grid-cols-[300px_1fr]">
-        <TeamSidebar items={teamNav} selectedTeam={selectedTeam} />
+        <TeamSidebar items={teamNav} selectedTeam={selectedTeam} lang={lang} />
 
         <section className="min-w-0">
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">
@@ -73,17 +75,17 @@ export default async function HomePage({
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <span>2026 Q3</span>
                   <span>·</span>
-                  <span>{selectedRecords.length} records</span>
+                  <span>{selectedRecords.length} {t(lang, "records")}</span>
                   <span>·</span>
-                  <span>{data.meta.source} source</span>
+                  <span>{data.meta.source} {t(lang, "source")}</span>
                 </div>
               </div>
             </div>
-            <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} />
+            <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} />
           </div>
 
           {rootObjectives.length === 0 ? (
-            <EmptyTeam />
+            <EmptyTeam lang={lang} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-border bg-white shadow-subtle">
               {rootObjectives.map((objective, index) => (
@@ -92,6 +94,7 @@ export default async function HomePage({
                   index={index}
                   objective={objective}
                   records={data.records}
+                  lang={lang}
                 />
               ))}
 
@@ -99,20 +102,20 @@ export default async function HomePage({
                 <div className="border-t border-border bg-slate-50 px-6 py-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <Users className="h-4 w-4 text-blue-500" />
-                    {selectedTeam} 下级团队
+                    {selectedTeam} {t(lang, "childTeams")}
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     {childTeams.map((child) => (
                       <Link
                         key={child.okr_id}
-                        href={`/?team=${encodeURIComponent(child.team)}`}
+                        href={hrefWithLang(`/?team=${encodeURIComponent(child.team)}`, lang)}
                         className="rounded-md border border-border bg-white p-3 hover:border-blue-200 hover:bg-blue-50"
                       >
                         <div className="flex items-center gap-3">
                           <TeamAvatar name={child.team} />
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{child.team}</div>
-                            <div className="mt-1 truncate text-xs text-muted-foreground">{child.objective}</div>
+                            <div className="mt-1 truncate text-xs text-muted-foreground">{translateText(child.objective, lang)}</div>
                           </div>
                         </div>
                       </Link>
@@ -131,11 +134,13 @@ export default async function HomePage({
 function ObjectiveBlock({
   index,
   objective,
-  records
+  records,
+  lang
 }: {
   index: number;
   objective: OkrRecord;
   records: OkrRecord[];
+  lang: Lang;
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
   const progress = objective.score === null ? 0 : Math.round(objective.score * 100);
@@ -154,13 +159,13 @@ function ObjectiveBlock({
             <span>{objective.owner}</span>
             <TypeBadge value={objective.type} />
             <ConfidenceBadge value={objective.confidence} />
-            <span>Score <Score value={objective.score} /></span>
+            <span>{t(lang, "score")} <Score value={objective.score} /></span>
           </div>
           <Link
-            href={`/okr/${encodeURIComponent(objective.okr_id)}`}
+            href={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
             className="mt-2 block text-xl font-semibold leading-8 text-slate-950 hover:text-blue-700"
           >
-            目标：{objective.objective}
+            {t(lang, "targetPrefix")}{translateText(objective.objective, lang)}
           </Link>
           <div className="mt-3 h-2 max-w-3xl overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
@@ -168,7 +173,7 @@ function ObjectiveBlock({
 
           <div className="mt-5 space-y-3 border-y border-border py-3">
             {children.filter((record) => record.kr).map((kr) => (
-              <KRRow key={kr.okr_id} kr={kr} />
+              <KRRow key={kr.okr_id} kr={kr} lang={lang} />
             ))}
           </div>
 
@@ -177,9 +182,9 @@ function ObjectiveBlock({
               <FileText className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-900">进度记录</div>
+              <div className="text-sm font-semibold text-slate-900">{t(lang, "progressNotes")}</div>
               <div className="mt-1 text-sm leading-5 text-muted-foreground">
-                {objective.risks || objective.decisions_needed || "当前没有高风险记录，等待下一次 check-in 更新。"}
+                {translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
               </div>
             </div>
           </div>
@@ -189,19 +194,19 @@ function ObjectiveBlock({
   );
 }
 
-function KRRow({ kr }: { kr: OkrRecord }) {
+function KRRow({ kr, lang }: { kr: OkrRecord; lang: Lang }) {
   const progress = kr.score === null ? 0 : Math.round(kr.score * 100);
   const tone = kr.confidence === "Green" ? "bg-emerald-400" : kr.confidence === "Red" ? "bg-rose-400" : "bg-blue-400";
 
   return (
     <Link
-      href={`/okr/${encodeURIComponent(kr.okr_id)}`}
+      href={hrefWithLang(`/okr/${encodeURIComponent(kr.okr_id)}`, lang)}
       className="block rounded-md border border-transparent px-3 py-3 transition hover:border-blue-100 hover:bg-slate-50"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           <CircleDot className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-          <span className="text-sm font-semibold leading-6 text-slate-900">{kr.kr}</span>
+          <span className="text-sm font-semibold leading-6 text-slate-900">{translateText(kr.kr, lang)}</span>
         </div>
         <Badge
           className="shrink-0"
@@ -230,10 +235,10 @@ function TeamAvatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg" })
   );
 }
 
-function EmptyTeam() {
+function EmptyTeam({ lang }: { lang: Lang }) {
   return (
     <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-sm text-muted-foreground">
-      当前团队还没有 OKR 数据。
+      {t(lang, "noTeamData")}
     </div>
   );
 }

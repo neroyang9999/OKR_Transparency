@@ -1,19 +1,25 @@
 import { AppShell } from "@/components/app-shell";
 import { OkrMap } from "@/components/okr-map";
 import { getOkrTreeResponse } from "@/lib/okr/store";
+import { normalizeLang, t } from "@/lib/i18n";
 
-export default async function MapPage() {
-  const data = await getOkrTreeResponse();
+export default async function MapPage({
+  searchParams
+}: {
+  searchParams: Promise<{ lang?: string }>;
+}) {
+  const [params, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const lang = normalizeLang(params.lang);
 
   return (
-    <AppShell active="OKR Map">
+    <AppShell active="okrMap">
       <div className="mb-5">
-        <h1 className="text-2xl font-semibold text-slate-950">OKR Alignment Map</h1>
+        <h1 className="text-2xl font-semibold text-slate-950">{t(lang, "mapTitle")}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          从 Engineering Objective 到 Engineering KR，再到 Team KR。点击任意节点进入详情和源文档。
+          {t(lang, "mapSubtitle")}
         </p>
       </div>
-      <OkrMap tree={data.tree} />
+      <OkrMap tree={data.tree} lang={lang} />
     </AppShell>
   );
 }

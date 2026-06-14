@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { periodHref, periods, type Period } from "@/lib/periods";
+import { periodHref, periodLabel, periods, type Period } from "@/lib/periods";
+import { t, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function PeriodSwitcher({
   selectedPeriod,
-  selectedTeam
+  selectedTeam,
+  lang
 }: {
   selectedPeriod: string;
   selectedTeam: string;
+  lang: Lang;
 }) {
   const currentIndex = Math.max(0, periods.findIndex((period) => period.id === selectedPeriod));
   const newerPeriod = periods[currentIndex - 1];
@@ -23,6 +26,7 @@ export function PeriodSwitcher({
           direction="newer"
           period={newerPeriod}
           selectedTeam={selectedTeam}
+          lang={lang}
         />
         {periods.map((period) => (
           <PeriodTab
@@ -30,12 +34,14 @@ export function PeriodSwitcher({
             period={period}
             selected={period.id === selectedPeriod}
             selectedTeam={selectedTeam}
+            lang={lang}
           />
         ))}
         <PeriodArrow
           direction="older"
           period={olderPeriod}
           selectedTeam={selectedTeam}
+          lang={lang}
         />
       </div>
     </div>
@@ -45,22 +51,24 @@ export function PeriodSwitcher({
 function PeriodTab({
   period,
   selected,
-  selectedTeam
+  selectedTeam,
+  lang
 }: {
   period: Period;
   selected: boolean;
   selectedTeam: string;
+  lang: Lang;
 }) {
   return (
     <Link
-      href={periodHref(period.id, selectedTeam)}
+      href={periodHref(period.id, selectedTeam, lang)}
       className={cn(
         "grid h-10 min-w-40 place-items-center border-l border-border px-5 text-sm font-medium transition-colors",
         selected ? "bg-blue-50/70 text-blue-600" : "text-slate-700 hover:bg-slate-50"
       )}
       aria-current={selected ? "page" : undefined}
     >
-      {period.label}
+      {periodLabel(period, lang)}
     </Link>
   );
 }
@@ -68,17 +76,19 @@ function PeriodTab({
 function PeriodArrow({
   direction,
   period,
-  selectedTeam
+  selectedTeam,
+  lang
 }: {
   direction: "newer" | "older";
   period?: Period;
   selectedTeam: string;
+  lang: Lang;
 }) {
   const icon = direction === "newer"
     ? <ChevronLeft className="h-4 w-4" />
     : <ChevronRight className="h-4 w-4" />;
-  const label = direction === "newer" ? "切换到更新周期" : "切换到更早周期";
-  const tooltip = period ? period.label : "无更多周期";
+  const label = direction === "newer" ? t(lang, "newerPeriod") : t(lang, "olderPeriod");
+  const tooltip = period ? periodLabel(period, lang) : t(lang, "noMorePeriods");
   const tooltipClassName = cn(
     "pointer-events-none absolute top-[-38px] z-40 whitespace-nowrap rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition group-hover:opacity-100",
     "after:absolute after:left-1/2 after:top-full after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-4 after:border-t-4 after:border-x-transparent after:border-t-slate-900",
@@ -99,7 +109,7 @@ function PeriodArrow({
 
   return (
     <Link
-      href={periodHref(period.id, selectedTeam)}
+      href={periodHref(period.id, selectedTeam, lang)}
       className="group relative grid h-10 w-10 shrink-0 place-items-center border-l border-border text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-950"
       aria-label={label}
     >
