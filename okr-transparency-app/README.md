@@ -11,6 +11,20 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+For the local page-editing prototype on Windows, you can also run:
+
+```powershell
+.\start-local.cmd
+```
+
+Then open `http://127.0.0.1:3001/?mode=edit&team=Software`.
+
+## Page Editing Prototype
+
+Add `mode=edit` to the overview page to edit OKRs directly in the browser. Drafts are saved to `data/okr-drafts.json`; publishing writes the selected team's records into `data/okr-snapshot.json`.
+
+The prototype keeps the existing read-only pages intact. It uses `dev-admin-token` locally for draft save and publish API calls.
+
 ## Data Sources
 
 The app reads a structured OKR table and stores the latest valid normalized snapshot.

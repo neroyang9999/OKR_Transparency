@@ -25,6 +25,7 @@ export type OkrRecord = {
   decisions_needed: string;
   source_doc_url: string;
   last_update: string;
+  aligned_to_id?: string;
 };
 
 export type OkrNode = OkrRecord & {

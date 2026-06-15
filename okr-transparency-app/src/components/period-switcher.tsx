@@ -9,11 +9,13 @@ import { cn } from "@/lib/utils";
 export function PeriodSwitcher({
   selectedPeriod,
   selectedTeam,
-  lang
+  lang,
+  mode
 }: {
   selectedPeriod: string;
   selectedTeam: string;
   lang: Lang;
+  mode?: string;
 }) {
   const currentIndex = Math.max(0, periods.findIndex((period) => period.id === selectedPeriod));
   const newerPeriod = periods[currentIndex - 1];
@@ -27,6 +29,7 @@ export function PeriodSwitcher({
           period={newerPeriod}
           selectedTeam={selectedTeam}
           lang={lang}
+          mode={mode}
         />
         {periods.map((period) => (
           <PeriodTab
@@ -35,6 +38,7 @@ export function PeriodSwitcher({
             selected={period.id === selectedPeriod}
             selectedTeam={selectedTeam}
             lang={lang}
+            mode={mode}
           />
         ))}
         <PeriodArrow
@@ -42,6 +46,7 @@ export function PeriodSwitcher({
           period={olderPeriod}
           selectedTeam={selectedTeam}
           lang={lang}
+          mode={mode}
         />
       </div>
     </div>
@@ -52,16 +57,18 @@ function PeriodTab({
   period,
   selected,
   selectedTeam,
-  lang
+  lang,
+  mode
 }: {
   period: Period;
   selected: boolean;
   selectedTeam: string;
   lang: Lang;
+  mode?: string;
 }) {
   return (
     <Link
-      href={periodHref(period.id, selectedTeam, lang)}
+      href={periodHref(period.id, selectedTeam, lang, mode)}
       className={cn(
         "grid h-10 min-w-40 place-items-center border-l border-border px-5 text-sm font-medium transition-colors",
         selected ? "bg-blue-50/70 text-blue-600" : "text-slate-700 hover:bg-slate-50"
@@ -77,12 +84,14 @@ function PeriodArrow({
   direction,
   period,
   selectedTeam,
-  lang
+  lang,
+  mode
 }: {
   direction: "newer" | "older";
   period?: Period;
   selectedTeam: string;
   lang: Lang;
+  mode?: string;
 }) {
   const icon = direction === "newer"
     ? <ChevronLeft className="h-4 w-4" />
@@ -109,7 +118,7 @@ function PeriodArrow({
 
   return (
     <Link
-      href={periodHref(period.id, selectedTeam, lang)}
+      href={periodHref(period.id, selectedTeam, lang, mode)}
       className="group relative grid h-10 w-10 shrink-0 place-items-center border-l border-border text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-950"
       aria-label={label}
     >

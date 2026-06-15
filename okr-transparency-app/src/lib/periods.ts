@@ -16,8 +16,9 @@ export function normalizePeriod(period?: string): string {
   return periods.some((item) => item.id === period) ? period! : "2026-q3";
 }
 
-export function periodHref(period: string, team: string, lang: Lang = "zh") {
-  return hrefWithLang(`/?team=${encodeURIComponent(team)}&period=${encodeURIComponent(period)}`, lang);
+export function periodHref(period: string, team: string, lang: Lang = "zh", mode?: string) {
+  const modeQuery = mode ? `&mode=${encodeURIComponent(mode)}` : "";
+  return hrefWithLang(`/?team=${encodeURIComponent(team)}&period=${encodeURIComponent(period)}${modeQuery}`, lang);
 }
 
 export function periodLabel(period: Period, lang: Lang) {

@@ -10,14 +10,12 @@ const snapshotPath = path.join(dataDir, "okr-snapshot.json");
 const samplePath = path.join(dataDir, "sample-okrs.csv");
 
 export async function readOkrSnapshot(): Promise<OkrSnapshot> {
-  if (!hasConfiguredSource()) return readSampleSnapshot();
-
   try {
     const snapshotText = await fs.readFile(snapshotPath, "utf8");
     const snapshot = JSON.parse(snapshotText) as OkrSnapshot;
     if (snapshot.meta.source !== "sample") return snapshot;
   } catch {
-    return readSampleSnapshot();
+    if (!hasConfiguredSource()) return readSampleSnapshot();
   }
 
   return readSampleSnapshot();
