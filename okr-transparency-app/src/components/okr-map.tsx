@@ -165,7 +165,7 @@ function ObjectiveNodeCard({ item, lang }: { item: PositionedNode; lang: Lang })
 
   return (
     <Link
-      href={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
+      href={hrefWithLang(`/?team=${encodeURIComponent(objective.team)}`, lang)}
       className={cn(
         "absolute z-10 block rounded-sm border border-border border-l-4 bg-white px-4 py-3 shadow-md transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg",
         tone

@@ -11,13 +11,13 @@ export function OkrRecordCard({ record, compact = false, lang = "zh" }: { record
     <Card className="transition hover:border-slate-300 hover:shadow-sm">
       <CardContent className={compact ? "p-3" : "p-4"}>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>{record.okr_id}</Badge>
+          <Badge tone="blue">{record.kr ? "KR" : "Objective"}</Badge>
           <Badge tone={record.level === "Engineering" ? "blue" : "gray"}>{record.level}</Badge>
           <Badge tone="gray">{record.team}</Badge>
           <TypeBadge value={record.type} />
           <ConfidenceBadge value={record.confidence} />
         </div>
-        <Link href={hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang)} className="group mt-3 block">
+        <Link href={hrefWithLang(`/teams?team=${encodeURIComponent(record.team)}`, lang)} className="group mt-3 block">
           <h3 className="text-sm font-semibold leading-5 text-slate-950 group-hover:text-blue-700">
             {translateText(record.kr || record.objective, lang)}
           </h3>
