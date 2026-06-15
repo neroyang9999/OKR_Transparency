@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CircleDot,
   FileText,
+  Link2,
   Users
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -9,7 +10,10 @@ import { PeriodSwitcher } from "@/components/period-switcher";
 import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
+import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
 import type { OkrRecord } from "@/lib/okr/types";
+import { readDraft } from "@/lib/okr/drafts";
+import { readPeriodRecords } from "@/lib/okr/drafts";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import { normalizePeriod } from "@/lib/periods";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
@@ -43,14 +47,16 @@ const teamNav: TeamNavItem[] = [
 export default async function HomePage({
   searchParams
 }: {
-  searchParams: Promise<{ team?: string; period?: string; lang?: string }>;
+  searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string }>;
 }) {
-  const [{ team, period, lang: rawLang }, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const [{ team, period, lang: rawLang, mode }, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
   const lang = normalizeLang(rawLang);
   const selectedTeam = normalizeTeam(team);
   const selectedPeriod = normalizePeriod(period);
-  const selectedRecords = data.records.filter((record) => record.team === selectedTeam);
-  const recordById = new Map(data.records.map((record) => [record.okr_id, record]));
+  const draft = mode === "edit" ? await readDraft(selectedTeam, selectedPeriod) : null;
+  const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
+  const selectedRecords = periodRecords.filter((record) => record.team === selectedTeam);
+  const recordById = new Map(periodRecords.map((record) => [record.okr_id, record]));
   const rootObjectives = selectedRecords.filter((record) => {
     const parent = record.parent_id ? recordById.get(record.parent_id) : null;
     return !parent || parent.team !== selectedTeam;
@@ -58,8 +64,9 @@ export default async function HomePage({
   const selectedNavItem = teamNav.find((item) => item.name === selectedTeam);
   const childTeamNames = new Set(selectedNavItem?.children.map((child) => child.name) ?? []);
   const childTeams = childTeamNames.size > 0
-    ? data.records.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
+    ? periodRecords.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
     : [];
+  const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam);
 
   return (
     <AppShell active="overview">
@@ -67,6 +74,10 @@ export default async function HomePage({
         <TeamSidebar items={teamNav} selectedTeam={selectedTeam} lang={lang} />
 
         <section className="min-w-0">
+          {draft ? (
+            <OkrEditBoard initialDraft={draft} lang={lang} alignmentOptions={alignmentOptions} />
+          ) : (
+            <>
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <TeamAvatar name={selectedTeam} size="lg" />
@@ -81,7 +92,15 @@ export default async function HomePage({
                 </div>
               </div>
             </div>
-            <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} />
+            <div className="flex flex-wrap items-center gap-2">
+              <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} />
+              <Link
+                href={hrefWithLang(`/?team=${encodeURIComponent(selectedTeam)}&period=${encodeURIComponent(selectedPeriod)}&mode=edit`, lang)}
+                className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {t(lang, "editOkrs")}
+              </Link>
+            </div>
           </div>
 
           {rootObjectives.length === 0 ? (
@@ -93,7 +112,7 @@ export default async function HomePage({
                   key={objective.okr_id}
                   index={index}
                   objective={objective}
-                  records={data.records}
+                  records={periodRecords}
                   lang={lang}
                 />
               ))}
@@ -125,6 +144,8 @@ export default async function HomePage({
               )}
             </div>
           )}
+            </>
+          )}
         </section>
       </div>
     </AppShell>
@@ -144,6 +165,8 @@ function ObjectiveBlock({
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
   const progress = objective.score === null ? 0 : Math.round(objective.score * 100);
+  const alignedRecord = objective.parent_id ? records.find((record) => record.okr_id === objective.parent_id) : null;
+  const alignedParent = alignedRecord?.parent_id ? records.find((record) => record.okr_id === alignedRecord.parent_id) : null;
 
   return (
     <article className={cn("relative px-6 py-6", index > 0 && "border-t border-border")}>
@@ -167,6 +190,7 @@ function ObjectiveBlock({
           >
             {t(lang, "targetPrefix")}{translateText(objective.objective, lang)}
           </Link>
+          {alignedRecord && <AlignmentPill record={alignedRecord} parent={alignedParent} lang={lang} />}
           <div className="mt-3 h-2 max-w-3xl overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
           </div>
@@ -224,6 +248,50 @@ function KRRow({ kr, lang }: { kr: OkrRecord; lang: Lang }) {
   );
 }
 
+function AlignmentPill({
+  record,
+  parent,
+  lang
+}: {
+  record: OkrRecord;
+  parent?: OkrRecord | null;
+  lang: Lang;
+}) {
+  const progress = record.score === null ? null : Math.round(record.score * 100);
+  const title = record.kr || record.objective;
+  const kind = record.kr ? "KR" : "O";
+
+  return (
+    <span className="group relative mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+      <Link2 className="h-3.5 w-3.5 shrink-0" />
+      <span>{lang === "en" ? "Aligned to" : "对齐"}</span>
+      <span>{record.team}</span>
+      <span className="text-blue-300">/</span>
+      <span>{record.owner}</span>
+      <span className="rounded bg-white px-1">{kind}</span>
+      <span className="max-w-[520px] truncate">{translateText(title, lang)}</span>
+      <span className="pointer-events-none absolute left-4 top-full z-40 hidden w-[420px] rounded-lg border border-border bg-white p-4 text-left text-slate-700 shadow-xl group-hover:block">
+        <span className="flex items-center justify-between gap-3">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-slate-950">{record.team} / {record.owner}</span>
+            <span className="mt-1 block text-xs text-slate-500">{record.okr_id} · {kind}</span>
+          </span>
+          <ConfidenceBadge value={record.confidence} />
+        </span>
+        <span className="mt-3 block text-sm font-semibold leading-6 text-slate-900">{translateText(title, lang)}</span>
+        {parent && (
+          <span className="mt-2 block rounded bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+            {lang === "en" ? "Parent Objective" : "所属 Objective"}：{translateText(parent.objective, lang)}
+          </span>
+        )}
+        <span className="mt-3 block text-xs text-slate-500">
+          {lang === "en" ? "Progress" : "进度"}：{progress === null ? "N/A" : `${progress}%`}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 function TeamAvatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg" }) {
   return (
     <span className={cn(
@@ -267,4 +335,32 @@ function initials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function getAlignmentOptions(records: OkrRecord[], team: string): AlignmentOption[] {
+  const parentTeam = parentTeamFor(team);
+  if (!parentTeam) return [];
+
+  const recordById = new Map(records.map((record) => [record.okr_id, record]));
+  return records
+    .filter((record) => record.team === parentTeam)
+    .map((record) => {
+      const parent = record.parent_id ? recordById.get(record.parent_id) : null;
+      return {
+        id: record.okr_id,
+        kind: record.kr ? "KR" : "O",
+        team: record.team,
+        owner: record.owner,
+        title: record.kr || record.objective,
+        parentTitle: record.kr ? parent?.objective ?? record.objective : undefined,
+        progress: record.score === null ? null : Math.round(record.score * 100),
+        confidence: record.confidence
+      } satisfies AlignmentOption;
+    });
+}
+
+function parentTeamFor(team: string) {
+  if (softwareChildTeams.some((child) => child.name === team)) return "Software";
+  if (hardwareChildTeams.some((child) => child.name === team)) return "Hardware";
+  return null;
 }
