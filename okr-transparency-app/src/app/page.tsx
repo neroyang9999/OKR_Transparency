@@ -1,12 +1,12 @@
 import Link from "next/link";
 import {
   CircleDot,
-  FileText,
   Link2,
   Users
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PeriodSwitcher } from "@/components/period-switcher";
+import { ProgressNoteCard } from "@/components/progress-note-card";
 import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board"
 import type { OkrRecord } from "@/lib/okr/types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
+import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import { normalizePeriod } from "@/lib/periods";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
@@ -49,7 +50,11 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string }>;
 }) {
-  const [{ team, period, lang: rawLang, mode }, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const [{ team, period, lang: rawLang, mode }, data, progressNotes] = await Promise.all([
+    searchParams,
+    getOkrTreeResponse(),
+    readProgressNotes()
+  ]);
   const lang = normalizeLang(rawLang);
   const selectedTeam = normalizeTeam(team);
   const selectedPeriod = normalizePeriod(period);
@@ -113,6 +118,8 @@ export default async function HomePage({
                   index={index}
                   objective={objective}
                   records={periodRecords}
+                  selectedPeriod={selectedPeriod}
+                  progressNotes={progressNotes}
                   lang={lang}
                 />
               ))}
@@ -156,17 +163,26 @@ function ObjectiveBlock({
   index,
   objective,
   records,
+  selectedPeriod,
+  progressNotes,
   lang
 }: {
   index: number;
   objective: OkrRecord;
   records: OkrRecord[];
+  selectedPeriod: string;
+  progressNotes: ProgressNote[];
   lang: Lang;
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
   const progress = objective.score === null ? 0 : Math.round(objective.score * 100);
   const alignedRecord = objective.parent_id ? records.find((record) => record.okr_id === objective.parent_id) : null;
   const alignedParent = alignedRecord?.parent_id ? records.find((record) => record.okr_id === alignedRecord.parent_id) : null;
+  const progressNote = progressNotes.find((note) =>
+    note.team === objective.team &&
+    note.periodId === selectedPeriod &&
+    note.objectiveId === objective.okr_id
+  );
 
   return (
     <article className={cn("relative px-6 py-6", index > 0 && "border-t border-border")}>
@@ -201,17 +217,16 @@ function ObjectiveBlock({
             ))}
           </div>
 
-          <div className="mt-5 flex gap-3 rounded-md bg-slate-50 p-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-slate-500 shadow-subtle">
-              <FileText className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-900">{t(lang, "progressNotes")}</div>
-              <div className="mt-1 text-sm leading-5 text-muted-foreground">
-                {translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
-              </div>
-            </div>
-          </div>
+          <ProgressNoteCard
+            team={objective.team}
+            periodId={selectedPeriod}
+            objectiveId={objective.okr_id}
+            initialNote={progressNote?.note ?? ""}
+            fallbackNote={translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
+            updatedBy={progressNote?.updatedBy}
+            updatedAt={progressNote?.updatedAt}
+            lang={lang}
+          />
         </div>
       </div>
     </article>
