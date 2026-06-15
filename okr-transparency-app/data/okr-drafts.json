@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "drafts": [
+    {
+      "version": 1,
+      "team": "Software",
+      "periodId": "2026-q3",
+      "updatedAt": "2026-06-15T03:10:35.846Z",
+      "objectives": [
+        {
+          "id": "SW-KR1",
+          "periodId": "2026-q3",
+          "team": "Software",
+          "title": "提升 EOL release 质量，减少 escaped defects",
+          "owner": "Software Lead",
+          "type": "Aspirational",
+          "confidence": "Yellow",
+          "weight": 100,
+          "progress": 40,
+          "alignedToId": "ENG-O1-KR1",
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "SW-KR1-KRMQEKKCAC-1",
+              "title": "提升KR1",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 50,
+              "confidence": "Yellow",
+              "weight": 50,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "SW-KR1-KRMQEKKERW-2",
+              "title": "提升KR2",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 22,
+              "confidence": "Yellow",
+              "weight": 50,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ]
+        },
+        {
+          "id": "SW-KR2",
+          "periodId": "2026-q3",
+          "team": "Software",
+          "title": "支持 EOL 成本下降和标准配置可用",
+          "owner": "Software Lead",
+          "type": "Aspirational",
+          "confidence": "Green",
+          "weight": 100,
+          "progress": 19.9,
+          "alignedToId": "ENG-O1-KR2",
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "SW-KR2-KRMQEKKHQN-1",
+              "title": "111",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 90,
+              "confidence": "Yellow",
+              "weight": 50,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "SW-KR2-KRMQEKKJ7M-2",
+              "title": "222",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 22,
+              "confidence": "Yellow",
+              "weight": 50,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ]
+        },
+        {
+          "id": "SW-KR3",
+          "periodId": "2026-q3",
+          "team": "Software",
+          "title": "支持 Smart Camera E2E launch readiness",
+          "owner": "Software Lead",
+          "type": "Committed",
+          "confidence": "Red",
+          "weight": 100,
+          "progress": 80,
+          "alignedToId": "ENG-O2-KR1",
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "SW-KR3-KRMQEKKLY6-1",
+              "title": "23333",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 22,
+              "confidence": "Yellow",
+              "weight": 50,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "SW-KR3-KRMQEKKNIR-2",
+              "title": "444",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 22,
+              "confidence": "Yellow",
+              "weight": 50,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "team": "TPM Team",
+      "periodId": "2026-q3",
+      "updatedAt": "2026-06-15T02:15:13.975Z",
+      "objectives": [
+        {
+          "id": "TPM-TEAM-OMQEKYUMO",
+          "periodId": "2026-q3",
+          "team": "TPM Team",
+          "title": "test_1234",
+          "owner": "TPM Team",
+          "type": "Committed",
+          "confidence": "Yellow",
+          "weight": 100,
+          "progress": null,
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "TPM-TEAM-OMQEKYUMO-KRMQEKYUMO-1",
+              "title": "111",
+              "owner": "TPM Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "TPM-TEAM-OMQEKYUMO-KRMQEKYUMO-2",
+              "title": "222",
+              "owner": "TPM Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "TPM-TEAM-OMQEKYUMO-KRMQEKYUMO-3",
+              "title": "111",
+              "owner": "TPM Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.4,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "team": "Application Team",
+      "periodId": "2026-q3",
+      "updatedAt": "2026-06-15T03:46:56.621Z",
+      "objectives": [
+        {
+          "id": "APPLICATION-TEAM-OMQEL50BO",
+          "periodId": "2026-q3",
+          "team": "Application Team",
+          "title": "想办法提升O1 KR1",
+          "owner": "Application Team",
+          "type": "Committed",
+          "confidence": "Yellow",
+          "weight": 100,
+          "progress": 11,
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "APPLICATION-TEAM-OMQEL50BO-KRMQEL50BO-1",
+              "title": "11",
+              "owner": "Application Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 11,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "APPLICATION-TEAM-OMQEL50BO-KRMQEL50BO-2",
+              "title": "222",
+              "owner": "Application Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 2,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": "",
+              "alignedToId": "SW-KR1-KRMQEKKERW-2"
+            },
+            {
+              "id": "APPLICATION-TEAM-OMQEL50BO-KRMQEL50BO-3",
+              "title": "33333",
+              "owner": "Application Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": 12,
+              "confidence": "Yellow",
+              "weight": 33.4,
+              "risks": "",
+              "decisionsNeeded": "",
+              "alignedToId": "SW-KR2-KRMQEKKHQN-1"
+            }
+          ],
+          "alignedToId": "SW-KR1-KRMQEKKCAC-1"
+        },
+        {
+          "id": "APPLICATION-TEAM-OMQENCDVJ",
+          "periodId": "2026-q3",
+          "team": "Application Team",
+          "title": "12313",
+          "owner": "Application Team",
+          "type": "Committed",
+          "confidence": "Yellow",
+          "weight": 100,
+          "progress": null,
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "APPLICATION-TEAM-OMQENCDVJ-KRMQENCDVJ-1",
+              "title": "111",
+              "owner": "Application Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "APPLICATION-TEAM-OMQENCDVJ-KRMQENCDVJ-2",
+              "title": "11",
+              "owner": "Application Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "APPLICATION-TEAM-OMQENCDVJ-KRMQENCDVJ-3",
+              "title": "111",
+              "owner": "Application Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.4,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ],
+          "alignedToId": "SW-KR3"
+        }
+      ]
+    }
+  ]
+}
