@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Engineering OKR Transparency",
-  description: "Internal Engineering OKR alignment and transparency dashboard"
+  title: "Team OKR Transparency",
+  description: "Internal team OKR alignment and transparency dashboard"
 };
 
 export default function RootLayout({

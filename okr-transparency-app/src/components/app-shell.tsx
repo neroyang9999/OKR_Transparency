@@ -62,7 +62,7 @@ export function AppShell({ children, active }: { children: React.ReactNode; acti
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-5 py-6">{children}</main>
+      <main className={cn("mx-auto px-5 py-6", active === "okrMap" ? "max-w-none" : "max-w-7xl")}>{children}</main>
     </div>
   );
 }
