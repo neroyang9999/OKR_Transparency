@@ -36,15 +36,19 @@ export async function syncFromConfiguredSource(): Promise<OkrSnapshot> {
 }
 
 async function readConfiguredRows() {
-  if (process.env.GOOGLE_DOC_ID) {
+  const googleDocId = process.env.GOOGLE_DOC_ID;
+  const csvUrl = process.env.OKR_SOURCE_CSV_URL;
+  const csvFile = process.env.OKR_SOURCE_CSV_FILE || "sample-okrs.csv";
+
+  if (googleDocId) {
     return {
       name: "google-doc" as const,
-      rows: await readGoogleDocRows(process.env.GOOGLE_DOC_ID)
+      rows: await readGoogleDocRows(googleDocId)
     };
   }
 
-  if (process.env.OKR_SOURCE_CSV_URL) {
-    const response = await fetch(process.env.OKR_SOURCE_CSV_URL, { cache: "no-store" });
+  if (csvUrl) {
+    const response = await fetch(csvUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`CSV URL returned ${response.status}`);
     }
@@ -54,7 +58,6 @@ async function readConfiguredRows() {
     };
   }
 
-  const csvFile = process.env.OKR_SOURCE_CSV_FILE ?? "sample-okrs.csv";
   const csvPath = path.join(process.cwd(), "data", path.basename(csvFile));
   return {
     name: "csv" as const,

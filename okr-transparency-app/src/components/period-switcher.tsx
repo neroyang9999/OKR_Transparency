@@ -10,16 +10,19 @@ export function PeriodSwitcher({
   selectedPeriod,
   selectedTeam,
   lang,
-  mode
+  mode,
+  periodsOverride
 }: {
   selectedPeriod: string;
   selectedTeam: string;
   lang: Lang;
   mode?: string;
+  periodsOverride?: Period[];
 }) {
-  const currentIndex = Math.max(0, periods.findIndex((period) => period.id === selectedPeriod));
-  const newerPeriod = periods[currentIndex - 1];
-  const olderPeriod = periods[currentIndex + 1];
+  const availablePeriods = periodsOverride ?? periods;
+  const currentIndex = Math.max(0, availablePeriods.findIndex((period) => period.id === selectedPeriod));
+  const newerPeriod = availablePeriods[currentIndex - 1];
+  const olderPeriod = availablePeriods[currentIndex + 1];
 
   return (
     <div className="flex min-w-0 items-center">
@@ -31,7 +34,7 @@ export function PeriodSwitcher({
           lang={lang}
           mode={mode}
         />
-        {periods.map((period) => (
+        {availablePeriods.map((period) => (
           <PeriodTab
             key={period.id}
             period={period}

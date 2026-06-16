@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "defaultPeriodId": "2026-q3",
+  "periods": [
+    {
+      "id": "2026-q3",
+      "label": "2026 年 7 月 - 9 月",
+      "labelEn": "Jul - Sep 2026",
+      "shortLabel": "2026 Q3",
+      "editable": true,
+      "locked": false
+    },
+    {
+      "id": "2026-q2",
+      "label": "2026 年 4 月 - 6 月",
+      "labelEn": "Apr - Jun 2026",
+      "shortLabel": "2026 Q2",
+      "editable": false,
+      "locked": true
+    }
+  ],
+  "defaultTeam": "Software",
+  "teams": [
+    {
+      "name": "Software",
+      "owner": "Software Lead",
+      "parentTeam": "",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "Application Team",
+      "owner": "Application Lead",
+      "parentTeam": "Software",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "Integration Team",
+      "owner": "Integration Lead",
+      "parentTeam": "Software",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "QA Team",
+      "owner": "QA Lead",
+      "parentTeam": "Software",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "Platform Team",
+      "owner": "Platform Lead",
+      "parentTeam": "Software",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "Algorithm Team",
+      "owner": "Algorithm Lead",
+      "parentTeam": "Software",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "TPM Team",
+      "owner": "TPM Lead",
+      "parentTeam": "Software",
+      "color": "bg-blue-500",
+      "enabled": true
+    },
+    {
+      "name": "Hardware",
+      "owner": "Hardware Lead",
+      "parentTeam": "",
+      "color": "bg-emerald-500",
+      "enabled": true
+    },
+    {
+      "name": "Optics Team",
+      "owner": "Optics Lead",
+      "parentTeam": "Hardware",
+      "color": "bg-emerald-500",
+      "enabled": true
+    },
+    {
+      "name": "Advanced Technology",
+      "owner": "Advanced Tech Lead",
+      "parentTeam": "",
+      "color": "bg-violet-500",
+      "enabled": true
+    },
+    {
+      "name": "AP OPS",
+      "owner": "AP OPS Lead",
+      "parentTeam": "",
+      "color": "bg-amber-500",
+      "enabled": true
+    }
+  ],
+  "permissions": [
+    {
+      "team": "Software",
+      "accounts": "software-lead@company.com, tpm@company.com",
+      "canEdit": true,
+      "canPublish": true,
+      "notes": "上云后按登录账号匹配"
+    },
+    {
+      "team": "Hardware",
+      "accounts": "hardware-lead@company.com",
+      "canEdit": true,
+      "canPublish": true,
+      "notes": "上云后按登录账号匹配"
+    }
+  ],
+  "settings": {
+    "defaultLanguage": "zh",
+    "showEditLinks": true,
+    "allowProgressNotes": true,
+    "backupExportEnabled": true
+  }
+}

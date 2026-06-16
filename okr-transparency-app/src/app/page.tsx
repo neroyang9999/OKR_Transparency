@@ -11,53 +11,33 @@ import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
+import { readAdminConfig, type AdminConfig } from "@/lib/admin/config";
 import type { OkrRecord } from "@/lib/okr/types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
 import { getOkrTreeResponse } from "@/lib/okr/store";
-import { normalizePeriod } from "@/lib/periods";
+import type { Period } from "@/lib/periods";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-
-const softwareChildTeams = [
-  { name: "Application Team", owner: "Application Lead" },
-  { name: "Integration Team", owner: "Integration Lead" },
-  { name: "QA Team", owner: "QA Lead" },
-  { name: "Platform Team", owner: "Platform Lead" },
-  { name: "Algorithm Team", owner: "Algorithm Lead" },
-  { name: "TPM Team", owner: "TPM Lead" }
-];
-
-const hardwareChildTeams = [
-  { name: "Optics Team", owner: "Optics Lead" }
-];
-
-const teamNav: TeamNavItem[] = [
-  {
-    name: "Software",
-    owner: "Software Lead",
-    color: "bg-blue-500",
-    children: softwareChildTeams
-  },
-  { name: "Hardware", owner: "Hardware Lead", color: "bg-emerald-500", children: hardwareChildTeams },
-  { name: "Advanced Technology", owner: "Advanced Tech Lead", color: "bg-violet-500", children: [] },
-  { name: "AP OPS", owner: "AP OPS Lead", color: "bg-amber-500", children: [] }
-];
 
 export default async function HomePage({
   searchParams
 }: {
   searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string }>;
 }) {
-  const [{ team, period, lang: rawLang, mode }, data, progressNotes] = await Promise.all([
+  const [{ team, period, lang: rawLang, mode }, data, progressNotes, adminConfig] = await Promise.all([
     searchParams,
     getOkrTreeResponse(),
-    readProgressNotes()
+    readProgressNotes(),
+    readAdminConfig()
   ]);
-  const lang = normalizeLang(rawLang);
-  const selectedTeam = normalizeTeam(team);
-  const selectedPeriod = normalizePeriod(period);
+  const lang = normalizeLang(rawLang ?? adminConfig.settings.defaultLanguage);
+  const selectedTeam = normalizeTeam(team, adminConfig);
+  const selectedPeriod = normalizePeriodFromConfig(period, adminConfig);
+  const periods = getConfiguredPeriods(adminConfig);
+  const selectedPeriodLabel = periods.find((item) => item.id === selectedPeriod)?.shortLabel ?? selectedPeriod;
+  const teamNav = buildTeamNav(adminConfig);
   const draft = mode === "edit" ? await readDraft(selectedTeam, selectedPeriod) : null;
   const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const selectedRecords = periodRecords.filter((record) => record.team === selectedTeam);
@@ -71,7 +51,7 @@ export default async function HomePage({
   const childTeams = childTeamNames.size > 0
     ? periodRecords.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
     : [];
-  const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam);
+  const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
 
   return (
     <AppShell active="overview">
@@ -89,7 +69,7 @@ export default async function HomePage({
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-semibold text-slate-950">{selectedTeam} OKR</h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span>2026 Q3</span>
+                  <span>{selectedPeriodLabel}</span>
                   <span>·</span>
                   <span>{selectedRecords.length} {t(lang, "records")}</span>
                   <span>·</span>
@@ -98,13 +78,15 @@ export default async function HomePage({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} />
-              <Link
-                href={hrefWithLang(`/?team=${encodeURIComponent(selectedTeam)}&period=${encodeURIComponent(selectedPeriod)}&mode=edit`, lang)}
-                className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                {t(lang, "editOkrs")}
-              </Link>
+              <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} periodsOverride={periods} />
+              {adminConfig.settings.showEditLinks && (
+                <Link
+                  href={hrefWithLang(`/?team=${encodeURIComponent(selectedTeam)}&period=${encodeURIComponent(selectedPeriod)}&mode=edit`, lang)}
+                  className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  {t(lang, "editOkrs")}
+                </Link>
+              )}
             </div>
           </div>
 
@@ -120,6 +102,7 @@ export default async function HomePage({
                   records={periodRecords}
                   selectedPeriod={selectedPeriod}
                   progressNotes={progressNotes}
+                  showProgressNotes={adminConfig.settings.allowProgressNotes}
                   lang={lang}
                 />
               ))}
@@ -165,6 +148,7 @@ function ObjectiveBlock({
   records,
   selectedPeriod,
   progressNotes,
+  showProgressNotes,
   lang
 }: {
   index: number;
@@ -172,6 +156,7 @@ function ObjectiveBlock({
   records: OkrRecord[];
   selectedPeriod: string;
   progressNotes: ProgressNote[];
+  showProgressNotes: boolean;
   lang: Lang;
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
@@ -217,16 +202,18 @@ function ObjectiveBlock({
             ))}
           </div>
 
-          <ProgressNoteCard
-            team={objective.team}
-            periodId={selectedPeriod}
-            objectiveId={objective.okr_id}
-            initialNote={progressNote?.note ?? ""}
-            fallbackNote={translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
-            updatedBy={progressNote?.updatedBy}
-            updatedAt={progressNote?.updatedAt}
-            lang={lang}
-          />
+          {showProgressNotes && (
+            <ProgressNoteCard
+              team={objective.team}
+              periodId={selectedPeriod}
+              objectiveId={objective.okr_id}
+              initialNote={progressNote?.note ?? ""}
+              fallbackNote={translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
+              updatedBy={progressNote?.updatedBy}
+              updatedAt={progressNote?.updatedAt}
+              lang={lang}
+            />
+          )}
         </div>
       </div>
     </article>
@@ -326,16 +313,10 @@ function EmptyTeam({ lang }: { lang: Lang }) {
   );
 }
 
-function normalizeTeam(team?: string) {
-  const allowed = new Set([
-    "Software",
-    ...softwareChildTeams.map((child) => child.name),
-    "Hardware",
-    ...hardwareChildTeams.map((child) => child.name),
-    "Advanced Technology",
-    "AP OPS"
-  ]);
-  return team && allowed.has(team) ? team : "Software";
+function normalizeTeam(team: string | undefined, config: AdminConfig) {
+  const enabledTeams = config.teams.filter((item) => item.enabled);
+  const allowed = new Set(enabledTeams.map((item) => item.name));
+  return team && allowed.has(team) ? team : config.defaultTeam;
 }
 
 function isTeamRoot(record: OkrRecord, recordById: Map<string, OkrRecord>) {
@@ -352,8 +333,8 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function getAlignmentOptions(records: OkrRecord[], team: string): AlignmentOption[] {
-  const parentTeam = parentTeamFor(team);
+function getAlignmentOptions(records: OkrRecord[], team: string, config: AdminConfig): AlignmentOption[] {
+  const parentTeam = parentTeamFor(team, config);
   if (!parentTeam) return [];
 
   const recordById = new Map(records.map((record) => [record.okr_id, record]));
@@ -374,8 +355,28 @@ function getAlignmentOptions(records: OkrRecord[], team: string): AlignmentOptio
     });
 }
 
-function parentTeamFor(team: string) {
-  if (softwareChildTeams.some((child) => child.name === team)) return "Software";
-  if (hardwareChildTeams.some((child) => child.name === team)) return "Hardware";
-  return null;
+function parentTeamFor(team: string, config: AdminConfig) {
+  return config.teams.find((item) => item.name === team && item.enabled)?.parentTeam || null;
+}
+
+function normalizePeriodFromConfig(period: string | undefined, config: AdminConfig) {
+  return config.periods.some((item) => item.id === period) ? period! : config.defaultPeriodId;
+}
+
+function getConfiguredPeriods(config: AdminConfig): Period[] {
+  return config.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
+}
+
+function buildTeamNav(config: AdminConfig): TeamNavItem[] {
+  const enabledTeams = config.teams.filter((team) => team.enabled);
+  return enabledTeams
+    .filter((team) => !team.parentTeam)
+    .map((team) => ({
+      name: team.name,
+      owner: team.owner,
+      color: team.color,
+      children: enabledTeams
+        .filter((child) => child.parentTeam === team.name)
+        .map((child) => ({ name: child.name, owner: child.owner }))
+    }));
 }

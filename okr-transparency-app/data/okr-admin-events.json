@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "events": [
+    {
+      "type": "config.update",
+      "actor": "Admin",
+      "status": "ok",
+      "message": "Updated admin configuration",
+      "id": "evt-mqgkhh4g-phy8ln",
+      "createdAt": "2026-06-16T11:36:57.329Z"
+    },
+    {
+      "type": "login",
+      "actor": "Admin",
+      "status": "ok",
+      "message": "Admin login",
+      "id": "evt-mqgimegm-o8z4cc",
+      "createdAt": "2026-06-16T10:44:47.926Z"
+    }
+  ]
+}
