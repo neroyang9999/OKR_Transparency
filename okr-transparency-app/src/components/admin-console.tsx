@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { Activity, Lock, LogOut, RotateCcw, Save, Settings, Shield, SlidersHorizontal, Users } from "lucide-react";
+import { Activity, Search, Lock, LogOut, RotateCcw, Save, Settings, Shield, SlidersHorizontal, UserPlus, Users } from "lucide-react";
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { cn } from "@/lib/utils";
 
@@ -325,23 +325,181 @@ function TeamConfig({ config, setConfig }: AdminSectionProps) {
 }
 
 function UserRoleConfig({ config, setConfig }: AdminSectionProps) {
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<AdminRole | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const normalizedQuery = query.trim().toLowerCase();
+  const totalUsers = config.users.length;
+  const enabledUsers = config.users.filter((user) => user.enabled).length;
+  const roleCounts = {
+    super_admin: config.users.filter((user) => user.role === "super_admin").length,
+    team_leader: config.users.filter((user) => user.role === "team_leader").length,
+    user: config.users.filter((user) => user.role === "user").length
+  };
+  const visibleUsers = config.users
+    .map((user, index) => ({ user, index }))
+    .filter(({ user }) => {
+      const matchesQuery = !normalizedQuery || [user.email, user.displayName, user.role, ...user.teams, ...user.ownerAliases]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+      const matchesRole = roleFilter === "all" || user.role === roleFilter;
+      const matchesStatus = statusFilter === "all" || (statusFilter === "enabled" ? user.enabled : !user.enabled);
+      return matchesQuery && matchesRole && matchesStatus;
+    });
+
   return (
-    <Panel>
-      <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">
-        Google 登录后按这里的邮箱匹配角色。super_admin 可管理全部；team_leader 可编辑和发布授权团队；user 只能编辑 owner alias 匹配自己的 KR。
-      </div>
-      {config.users.map((user, index) => (
-        <div key={`${user.email}-${index}`} className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-3">
-          <TextField label="邮箱" value={user.email} onChange={(email) => updateUser(config, setConfig, index, { email })} />
-          <TextField label="显示名" value={user.displayName} onChange={(displayName) => updateUser(config, setConfig, index, { displayName })} />
-          <SelectField label="角色" value={user.role} options={["super_admin", "team_leader", "user"]} onChange={(role) => updateUser(config, setConfig, index, { role: role as AdminRole })} />
-          <TextField label="团队，逗号分隔" value={user.teams.join(", ")} onChange={(teams) => updateUser(config, setConfig, index, { teams: splitList(teams) })} />
-          <TextField label="Owner aliases，逗号分隔" value={user.ownerAliases.join(", ")} onChange={(ownerAliases) => updateUser(config, setConfig, index, { ownerAliases: splitList(ownerAliases) })} />
-          <Checkbox label="启用" checked={user.enabled} onChange={(enabled) => updateUser(config, setConfig, index, { enabled })} />
+    <div className="space-y-4">
+      <div>
+        <div className="text-sm text-muted-foreground">
+          Google 登录后按邮箱匹配角色。建议只保留 2-3 个 super admin，team lead 按团队授权，普通用户按 owner alias 授权。
         </div>
-      ))}
-      <AddButton label="添加用户" onClick={() => setConfig({ ...config, users: [...config.users, { email: "user@company.com", displayName: "New User", role: "user", teams: [config.defaultTeam], ownerAliases: ["New User"], enabled: true }] })} />
-    </Panel>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <RoleMetric title="用户总数" value={String(totalUsers)} />
+        <RoleMetric title="已启用" value={String(enabledUsers)} />
+        <RoleMetric title="Super admin" value={String(roleCounts.super_admin)} />
+        <RoleMetric title="Team lead" value={String(roleCounts.team_leader)} />
+        <RoleMetric title="普通用户" value={String(roleCounts.user)} />
+      </div>
+
+      <Panel>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative min-w-[260px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="按用户名、邮箱、团队或 owner alias 搜索"
+              className="h-9 w-full rounded-md border border-border pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+            />
+          </label>
+          <select
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value as AdminRole | "all")}
+            className="h-9 rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-blue-400"
+          >
+            <option value="all">全部角色</option>
+            <option value="super_admin">super_admin</option>
+            <option value="team_leader">team_leader</option>
+            <option value="user">user</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as "all" | "enabled" | "disabled")}
+            className="h-9 rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-blue-400"
+          >
+            <option value="all">全部状态</option>
+            <option value="enabled">已启用</option>
+            <option value="disabled">已停用</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setConfig({ ...config, users: [...config.users, { email: "user@company.com", displayName: "New User", role: "user", teams: [config.defaultTeam], ownerAliases: ["New User"], enabled: true }] })}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <UserPlus className="h-4 w-4" />
+            添加用户
+          </button>
+        </div>
+
+        <div className="text-sm text-muted-foreground">显示结果 {visibleUsers.length} / {totalUsers}</div>
+
+        <div className="overflow-x-auto rounded-md border border-border">
+          <div className="min-w-[920px]">
+            <div className="grid grid-cols-[minmax(260px,1.35fr)_130px_minmax(150px,0.8fr)_minmax(190px,1fr)_110px] border-b border-border bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+              <div>用户</div>
+              <div>角色</div>
+              <div>团队</div>
+              <div>Owner aliases</div>
+              <div>状态</div>
+            </div>
+            {visibleUsers.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">没有匹配的用户</div>
+            ) : visibleUsers.map(({ user, index }) => (
+              <div key={`${user.email}-${index}`} className="grid grid-cols-[minmax(260px,1.35fr)_130px_minmax(150px,0.8fr)_minmax(190px,1fr)_110px] items-center gap-3 border-b border-border px-3 py-3 text-sm last:border-b-0">
+                <div className="flex min-w-0 items-center gap-3">
+                  <UserAvatar name={user.displayName || user.email} enabled={user.enabled} />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <input
+                      value={user.displayName}
+                      onChange={(event) => updateUser(config, setConfig, index, { displayName: event.target.value })}
+                      aria-label="显示名"
+                      className="h-7 w-full rounded-md border border-transparent bg-transparent px-2 font-medium text-slate-900 outline-none hover:border-border focus:border-blue-400 focus:bg-white"
+                    />
+                    <input
+                      value={user.email}
+                      onChange={(event) => updateUser(config, setConfig, index, { email: event.target.value })}
+                      aria-label="邮箱"
+                      className="h-7 w-full rounded-md border border-transparent bg-transparent px-2 text-xs text-slate-500 outline-none hover:border-border focus:border-blue-400 focus:bg-white"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={user.role}
+                  onChange={(event) => updateUser(config, setConfig, index, { role: event.target.value as AdminRole })}
+                  aria-label="角色"
+                  className="h-8 rounded-md border border-border bg-white px-2 text-sm outline-none focus:border-blue-400"
+                >
+                  <option value="super_admin">super_admin</option>
+                  <option value="team_leader">team_leader</option>
+                  <option value="user">user</option>
+                </select>
+                <input
+                  value={user.teams.join(", ")}
+                  onChange={(event) => updateUser(config, setConfig, index, { teams: splitList(event.target.value) })}
+                  aria-label="团队"
+                  className="h-8 rounded-md border border-border px-2 text-sm outline-none focus:border-blue-400"
+                />
+                <input
+                  value={user.ownerAliases.join(", ")}
+                  onChange={(event) => updateUser(config, setConfig, index, { ownerAliases: splitList(event.target.value) })}
+                  aria-label="Owner aliases"
+                  className="h-8 rounded-md border border-border px-2 text-sm outline-none focus:border-blue-400"
+                />
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={user.enabled}
+                    onChange={(event) => updateUser(config, setConfig, index, { enabled: event.target.checked })}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  {user.enabled ? "活动" : "停用"}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function RoleMetric({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-white px-4 py-3 shadow-subtle">
+      <div className="text-sm text-muted-foreground">{title}</div>
+      <div className="mt-1 text-2xl font-semibold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function UserAvatar({ name, enabled }: { name: string; enabled: boolean }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "U";
+
+  return (
+    <div className={cn(
+      "grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white",
+      enabled ? "bg-blue-600" : "bg-slate-300"
+    )}>
+      {initials}
+    </div>
   );
 }
 
