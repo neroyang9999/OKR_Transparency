@@ -310,6 +310,129 @@
           "alignedToId": "SW-KR3"
         }
       ]
+    },
+    {
+      "version": 1,
+      "team": "AP OPS",
+      "periodId": "2026-q3",
+      "updatedAt": "2026-06-15T06:27:36.048Z",
+      "objectives": [
+        {
+          "id": "AP-OPS-OMQETZRPH",
+          "periodId": "2026-q3",
+          "team": "AP OPS",
+          "title": "",
+          "owner": "AP OPS",
+          "type": "Committed",
+          "confidence": "Yellow",
+          "weight": 100,
+          "progress": null,
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "AP-OPS-OMQETZRPH-KRMQETZRPH-1",
+              "title": "",
+              "owner": "AP OPS",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "AP-OPS-OMQETZRPH-KRMQETZRPH-2",
+              "title": "",
+              "owner": "AP OPS",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "AP-OPS-OMQETZRPH-KRMQETZRPH-3",
+              "title": "",
+              "owner": "AP OPS",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.4,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "team": "QA Team",
+      "periodId": "2026-q3",
+      "updatedAt": "2026-06-15T08:55:42.019Z",
+      "objectives": [
+        {
+          "id": "QA-TEAM-OMQEZ9LKU",
+          "periodId": "2026-q3",
+          "team": "QA Team",
+          "title": "测试提高xx",
+          "owner": "QA Team",
+          "type": "Committed",
+          "confidence": "Yellow",
+          "weight": 100,
+          "progress": null,
+          "status": "draft",
+          "keyResults": [
+            {
+              "id": "QA-TEAM-OMQEZ9LKU-KRMQEZ9LKU-1",
+              "title": "xx1",
+              "owner": "QA Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "QA-TEAM-OMQEZ9LKU-KRMQEZ9LKU-2",
+              "title": "xx2",
+              "owner": "QA Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "QA-TEAM-OMQEZ9LKU-KRMQEZ9LKU-3",
+              "title": "xx3",
+              "owner": "QA Team",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.4,
+              "risks": "",
+              "decisionsNeeded": ""
+            }
+          ],
+          "alignedToId": "SW-TOP-O1"
+        }
+      ]
     }
   ]
 }

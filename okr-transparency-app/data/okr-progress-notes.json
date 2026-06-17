@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "notes": [
+    {
+      "team": "Software",
+      "periodId": "2026-q3",
+      "objectiveId": "SW-TOP-O1",
+      "weekStart": "2026-06-15",
+      "summary": "进度更新22",
+      "status": "Yellow",
+      "risks": "暂无",
+      "nextSteps": "暂无",
+      "updatedBy": "Lead",
+      "updatedAt": "2026-06-17T02:17:33.069Z"
+    },
+    {
+      "team": "Software",
+      "periodId": "2026-q3",
+      "objectiveId": "SW-KR3",
+      "weekStart": "2026-06-15",
+      "summary": "Test_12345",
+      "status": "Yellow",
+      "risks": "",
+      "nextSteps": "",
+      "updatedBy": "Lead",
+      "updatedAt": "2026-06-15T08:55:05.968Z"
+    }
+  ]
+}

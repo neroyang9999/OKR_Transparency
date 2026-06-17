@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAuthorized } from "@/lib/admin-auth";
-import { readProgressNote, writeProgressNote } from "@/lib/okr/progress-notes";
+import { isAuthorized } from "../../../lib/admin-auth";
+import { readProgressNotesForObjective, writeProgressNote } from "../../../lib/okr/progress-notes";
+import type { ConfidenceLevel } from "../../../lib/okr/types";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -12,8 +13,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "team, period, and objective are required" }, { status: 400 });
   }
 
-  const note = await readProgressNote(team, periodId, objectiveId);
-  return NextResponse.json({ note });
+  const notes = await readProgressNotesForObjective(team, periodId, objectiveId);
+  return NextResponse.json({ notes });
 }
 
 export async function PUT(request: NextRequest) {
@@ -26,7 +27,12 @@ export async function PUT(request: NextRequest) {
       team?: string;
       periodId?: string;
       objectiveId?: string;
+      weekStart?: string;
+      summary?: string;
       note?: string;
+      status?: string;
+      risks?: string;
+      nextSteps?: string;
       updatedBy?: string;
     };
 
@@ -38,7 +44,11 @@ export async function PUT(request: NextRequest) {
       team: body.team,
       periodId: body.periodId,
       objectiveId: body.objectiveId,
-      note: body.note ?? "",
+      weekStart: body.weekStart,
+      summary: body.summary ?? body.note ?? "",
+      status: normalizeStatus(body.status),
+      risks: body.risks,
+      nextSteps: body.nextSteps,
       updatedBy: body.updatedBy
     });
     return NextResponse.json({ note });
@@ -48,4 +58,8 @@ export async function PUT(request: NextRequest) {
       { status: 422 }
     );
   }
+}
+
+function normalizeStatus(status: string | undefined): ConfidenceLevel | undefined {
+  return status === "Green" || status === "Yellow" || status === "Red" ? status : undefined;
 }

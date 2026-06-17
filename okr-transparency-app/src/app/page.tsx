@@ -163,7 +163,7 @@ function ObjectiveBlock({
   const progress = objective.score === null ? 0 : Math.round(objective.score * 100);
   const alignedRecord = objective.parent_id ? records.find((record) => record.okr_id === objective.parent_id) : null;
   const alignedParent = alignedRecord?.parent_id ? records.find((record) => record.okr_id === alignedRecord.parent_id) : null;
-  const progressNote = progressNotes.find((note) =>
+  const objectiveProgressNotes = progressNotes.filter((note) =>
     note.team === objective.team &&
     note.periodId === selectedPeriod &&
     note.objectiveId === objective.okr_id
@@ -207,10 +207,10 @@ function ObjectiveBlock({
               team={objective.team}
               periodId={selectedPeriod}
               objectiveId={objective.okr_id}
-              initialNote={progressNote?.note ?? ""}
+              progressNotes={objectiveProgressNotes}
               fallbackNote={translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
-              updatedBy={progressNote?.updatedBy}
-              updatedAt={progressNote?.updatedAt}
+              defaultStatus={objective.confidence}
+              fullHistoryHref={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
               lang={lang}
             />
           )}
