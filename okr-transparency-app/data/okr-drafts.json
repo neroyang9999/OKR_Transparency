@@ -5,7 +5,7 @@
       "version": 1,
       "team": "Software",
       "periodId": "2026-q3",
-      "updatedAt": "2026-06-15T03:10:35.846Z",
+      "updatedAt": "2026-06-17T03:52:53.588Z",
       "objectives": [
         {
           "id": "SW-KR1",
@@ -16,7 +16,7 @@
           "type": "Aspirational",
           "confidence": "Yellow",
           "weight": 100,
-          "progress": 40,
+          "progress": 100,
           "alignedToId": "ENG-O1-KR1",
           "status": "draft",
           "keyResults": [

@@ -38,6 +38,7 @@ export default async function HomePage({
   const periods = getConfiguredPeriods(adminConfig);
   const selectedPeriodLabel = periods.find((item) => item.id === selectedPeriod)?.shortLabel ?? selectedPeriod;
   const teamNav = buildTeamNav(adminConfig);
+  const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
   const draft = mode === "edit" ? await readDraft(selectedTeam, selectedPeriod) : null;
   const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const selectedRecords = periodRecords.filter((record) => record.team === selectedTeam);
@@ -60,7 +61,7 @@ export default async function HomePage({
 
         <section className="min-w-0">
           {draft ? (
-            <OkrEditBoard initialDraft={draft} lang={lang} alignmentOptions={alignmentOptions} />
+            <OkrEditBoard initialDraft={draft} lang={lang} alignmentOptions={alignmentOptions} teamOwner={selectedTeamOwner} />
           ) : (
             <>
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">

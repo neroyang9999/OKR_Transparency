@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/admin-auth";
+import { readAdminConfig } from "@/lib/admin/config";
 import { readDraft, writeDraft } from "@/lib/okr/drafts";
 import { validateDraft, type OkrDraft } from "@/lib/okr/edit-types";
 
@@ -18,7 +19,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const draft = await request.json() as OkrDraft;
-    const saved = await writeDraft(draft);
+    const saved = await writeDraft(draft, await getTeamOwner(draft.team));
     return NextResponse.json({ draft: saved, validation: validateDraft(saved) });
   } catch (error) {
     return NextResponse.json(
@@ -26,4 +27,9 @@ export async function PUT(request: NextRequest) {
       { status: 422 }
     );
   }
+}
+
+async function getTeamOwner(team: string) {
+  const config = await readAdminConfig();
+  return config.teams.find((item) => item.name === team && item.enabled)?.owner ?? team;
 }

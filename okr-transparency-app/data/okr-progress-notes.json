@@ -4,6 +4,18 @@
     {
       "team": "Software",
       "periodId": "2026-q3",
+      "objectiveId": "SW-KR3",
+      "weekStart": "2026-06-15",
+      "summary": "暂无 ，高风险",
+      "status": "Red",
+      "risks": "",
+      "nextSteps": "Need help",
+      "updatedBy": "Lead",
+      "updatedAt": "2026-06-17T03:23:57.750Z"
+    },
+    {
+      "team": "Software",
+      "periodId": "2026-q3",
       "objectiveId": "SW-TOP-O1",
       "weekStart": "2026-06-15",
       "summary": "进度更新22",
@@ -11,19 +23,7 @@
       "risks": "暂无",
       "nextSteps": "暂无",
       "updatedBy": "Lead",
-      "updatedAt": "2026-06-17T02:17:33.069Z"
-    },
-    {
-      "team": "Software",
-      "periodId": "2026-q3",
-      "objectiveId": "SW-KR3",
-      "weekStart": "2026-06-15",
-      "summary": "Test_12345",
-      "status": "Yellow",
-      "risks": "",
-      "nextSteps": "",
-      "updatedBy": "Lead",
-      "updatedAt": "2026-06-15T08:55:05.968Z"
+      "updatedAt": "2026-06-17T03:23:35.745Z"
     }
   ]
 }

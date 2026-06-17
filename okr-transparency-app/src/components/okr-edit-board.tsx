@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
-import { createEmptyKr, createEmptyObjective, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
+import { calculateObjectiveProgress, createEmptyKr, createEmptyObjective, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ type OkrEditBoardProps = {
   initialDraft: OkrDraft;
   lang: Lang;
   alignmentOptions: AlignmentOption[];
+  teamOwner: string;
 };
 
 export type AlignmentOption = {
@@ -31,8 +33,9 @@ const adminToken = "dev-admin-token";
 const confidenceOptions: ConfidenceLevel[] = ["Green", "Yellow", "Red"];
 const typeOptions: OkrType[] = ["Committed", "Aspirational", "Learning"];
 
-export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBoardProps) {
-  const [draft, setDraft] = useState(initialDraft);
+export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }: OkrEditBoardProps) {
+  const router = useRouter();
+  const [draft, setDraft] = useState(() => normalizeDraft(initialDraft, teamOwner));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const validation = useMemo(() => validateDraft(draft), [draft]);
@@ -56,7 +59,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
     changeDraft((current) => ({
       ...current,
       objectives: current.objectives.map((objective) =>
-        objective.id === objectiveId ? { ...objective, ...patch } : objective
+        objective.id === objectiveId ? { ...objective, ...patch, owner: teamOwner } : objective
       )
     }));
   }
@@ -68,7 +71,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
         objective.id === objectiveId
           ? {
               ...objective,
-              keyResults: objective.keyResults.map((kr) => kr.id === krId ? { ...kr, ...patch } : kr)
+              keyResults: objective.keyResults.map((kr) => kr.id === krId ? { ...kr, ...patch, owner: teamOwner } : kr)
             }
           : objective
       )
@@ -78,7 +81,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
   function addObjective() {
     changeDraft((current) => ({
       ...current,
-      objectives: [...current.objectives, createEmptyObjective(current.team, current.periodId, current.team)]
+      objectives: [...current.objectives, createEmptyObjective(current.team, current.periodId, teamOwner)]
     }));
   }
 
@@ -96,7 +99,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
         if (objective.id !== objectiveId) return objective;
         const nextKrs = [
           ...objective.keyResults,
-          createEmptyKr(objective.id, objective.keyResults.length, objective.owner, objective.keyResults.length + 1)
+          createEmptyKr(objective.id, objective.keyResults.length, teamOwner, objective.keyResults.length + 1)
         ];
         return { ...objective, keyResults: redistributeWeights(nextKrs) };
       })
@@ -115,7 +118,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
 
   async function publish() {
     setSaveState("saving");
-    await saveDraft(draft, setSaveState, setMessage, copy.saved);
+    const saved = await saveDraft(draft, setSaveState, setMessage, copy.saved);
+    if (!saved) return;
 
     const response = await fetch("/api/okrs/publish", {
       method: "POST",
@@ -134,6 +138,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
 
     setSaveState("saved");
     setMessage(copy.published);
+    router.push(hrefWithLang(`/?team=${encodeURIComponent(draft.team)}&period=${encodeURIComponent(draft.periodId)}`, lang));
   }
 
   return (
@@ -168,7 +173,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
           <button
             type="button"
             onClick={publish}
-            disabled={validation.errors.length > 0}
+            disabled={saveState === "saving" || validation.errors.length > 0}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send className="h-4 w-4" />
@@ -186,7 +191,9 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
       )}
 
       <div className="space-y-5">
-        {draft.objectives.map((objective, objectiveIndex) => (
+        {draft.objectives.map((objective, objectiveIndex) => {
+          const objectiveProgress = calculateObjectiveProgress(objective.keyResults);
+          return (
           <article key={objective.id} className="overflow-hidden rounded-lg border border-blue-400 bg-white shadow-subtle">
             <div className="grid gap-3 px-5 py-5 lg:grid-cols-[1fr_120px_120px_44px]">
               <div className="min-w-0">
@@ -208,12 +215,12 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
                   />
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
-                  <Input label={copy.owner} value={objective.owner} onChange={(value) => updateObjective(objective.id, { owner: value })} />
+                  <ReadOnlyField label={copy.owner} value={teamOwner} />
                   <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} />
                   <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} />
                 </div>
               </div>
-              <NumberInput label={copy.progress} value={objective.progress} onChange={(value) => updateObjective(objective.id, { progress: value })} />
+              <ReadOnlyField label={copy.progress} value={objectiveProgress === null ? "N/A" : `${objectiveProgress}%`} />
               <NumberInput label={copy.weight} value={objective.weight} onChange={(value) => updateObjective(objective.id, { weight: value ?? 100 })} />
               <button
                 type="button"
@@ -273,7 +280,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions }: OkrEditBo
               <div className="text-sm font-medium text-slate-500">{saveState === "saved" ? copy.saved : copy.autoSaving}</div>
             </div>
           </article>
-        ))}
+          );
+        })}
 
         <button
           type="button"
@@ -431,7 +439,7 @@ async function saveDraft(
   setSaveState: (state: "saved" | "saving" | "dirty" | "error") => void,
   setMessage: (message: string) => void,
   savedMessage: string
-) {
+): Promise<boolean> {
   setSaveState("saving");
   const response = await fetch("/api/okrs/draft", {
     method: "PUT",
@@ -446,11 +454,12 @@ async function saveDraft(
     const body = await response.json().catch(() => ({})) as { error?: string };
     setSaveState("error");
     setMessage(body.error ?? "Save failed");
-    return;
+    return false;
   }
 
   setSaveState("saved");
   setMessage(savedMessage);
+  return true;
 }
 
 function redistributeWeights(keyResults: EditableKr[]) {
@@ -493,15 +502,13 @@ function Textarea({ value, onChange, placeholder, className }: { value: string; 
   );
 }
 
-function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-9 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-blue-400"
-      />
+      <span className="mt-1 flex h-9 w-full items-center rounded-md border border-border bg-slate-50 px-3 text-sm font-medium text-slate-700">
+        {value}
+      </span>
     </label>
   );
 }
@@ -516,12 +523,22 @@ function NumberInput({ label, value, onChange }: { label: string; value: number 
         max={100}
         step={0.1}
         value={value ?? ""}
-        onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
+        onChange={(event) => {
+          const nextValue = parsePercentInput(event.target.value);
+          if (nextValue !== undefined) onChange(nextValue);
+        }}
         placeholder="暂无"
         className="mt-1 h-10 w-full rounded-md border border-border bg-white px-3 text-sm tabular-nums outline-none focus:border-blue-400"
       />
     </label>
   );
+}
+
+function parsePercentInput(value: string) {
+  if (value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return undefined;
+  return Math.min(100, Math.max(0, number));
 }
 
 function Select({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {

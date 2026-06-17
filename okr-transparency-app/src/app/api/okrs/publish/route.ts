@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/admin-auth";
-import { appendAdminEvent, backupCurrentSnapshot } from "@/lib/admin/config";
+import { appendAdminEvent, backupCurrentSnapshot, readAdminConfig } from "@/lib/admin/config";
 import { publishDraft } from "@/lib/okr/drafts";
 
 export async function POST(request: NextRequest) {
@@ -10,8 +10,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json() as { team?: string; periodId?: string };
+    const team = body.team ?? "Software";
+    const periodId = body.periodId ?? "2026-Q3";
     await backupCurrentSnapshot();
-    const result = await publishDraft(body.team ?? "Software", body.periodId ?? "2026-Q3");
+    const result = await publishDraft(team, periodId, await getTeamOwner(team));
     if (result.errors.length > 0) {
       await appendAdminEvent({
         type: "publish",
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
       type: "publish",
       actor: "Admin",
       status: "ok",
-      message: `Published ${body.team ?? "Software"} ${body.periodId ?? "2026-Q3"}`
+      message: `Published ${team} ${periodId}`
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -40,4 +42,9 @@ export async function POST(request: NextRequest) {
       { status: 422 }
     );
   }
+}
+
+async function getTeamOwner(team: string) {
+  const config = await readAdminConfig();
+  return config.teams.find((item) => item.name === team && item.enabled)?.owner ?? team;
 }

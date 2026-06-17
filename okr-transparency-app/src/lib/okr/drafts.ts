@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { draftToRecords, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
+import { draftToRecords, normalizeDraft, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
 import { readOkrSnapshot, writeOkrSnapshot } from "./store";
 import type { OkrSnapshot } from "./types";
 
@@ -35,12 +35,13 @@ export async function readDraft(team: string, periodId: string): Promise<OkrDraf
   return recordsToDraft(snapshot.records, team, periodId, periodId === defaultEditablePeriod);
 }
 
-export async function writeDraft(draft: OkrDraft) {
+export async function writeDraft(draft: OkrDraft, teamOwner = draft.team) {
   const file = await readDraftFile();
+  const normalizedDraft = normalizeDraft(draft, teamOwner);
   const nextDraft: OkrDraft = {
-    ...draft,
+    ...normalizedDraft,
     updatedAt: new Date().toISOString(),
-    objectives: draft.objectives.map((objective) => ({ ...objective, status: "draft" }))
+    objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "draft" }))
   };
   const index = file.drafts.findIndex((item) => item.team === draft.team && item.periodId === draft.periodId);
   const drafts = index >= 0
@@ -52,18 +53,19 @@ export async function writeDraft(draft: OkrDraft) {
   return nextDraft;
 }
 
-export async function publishDraft(team: string, periodId: string): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
+export async function publishDraft(team: string, periodId: string, teamOwner = team): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
   const draft = await readDraft(team, periodId);
   const validation = validateDraft(draft);
   if (validation.errors.length > 0) {
     return { snapshot: await readOkrSnapshot(), ...validation };
   }
 
+  const normalizedDraft = normalizeDraft(draft, teamOwner);
   const current = await readOkrSnapshot();
   const publishedRecords = draftToRecords({
-    ...draft,
-    objectives: draft.objectives.map((objective) => ({ ...objective, status: "published" }))
-  });
+    ...normalizedDraft,
+    objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" }))
+  }, teamOwner);
   const nextRecords = [
     ...current.records.filter((record) => record.team !== team || draft.periodId !== defaultEditablePeriod),
     ...publishedRecords
@@ -88,9 +90,9 @@ export async function publishDraft(team: string, periodId: string): Promise<{ sn
     await writeOkrSnapshot(snapshot);
   }
   await writeDraft({
-    ...draft,
-    objectives: draft.objectives.map((objective) => ({ ...objective, status: "published" }))
-  });
+    ...normalizedDraft,
+    objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" }))
+  }, teamOwner);
 
   return { snapshot, ...validation };
 }

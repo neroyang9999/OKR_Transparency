@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
 import { BarChart3, GitBranch, Search, Users } from "lucide-react";
+import { APP_VERSION } from "@/lib/app-version";
 import { hrefWithLang, normalizeLang, t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,12 @@ export function AppShell({ children, active }: { children: React.ReactNode; acti
               />
             </div>
             <div>
-              <div className="text-sm font-semibold leading-4">{t(lang, "brandTitle")}</div>
+              <div className="flex items-center gap-2 text-sm font-semibold leading-4">
+                <span>{t(lang, "brandTitle")}</span>
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-slate-500">
+                  v{APP_VERSION}
+                </span>
+              </div>
               <div className="text-xs text-muted-foreground">{t(lang, "brandSubtitle")}</div>
             </div>
           </Link>
