@@ -42,19 +42,19 @@ export type DraftValidation = {
   warnings: string[];
 };
 
-export function normalizeDraft(draft: OkrDraft, teamOwner = draft.team): OkrDraft {
+export function normalizeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwner = true): OkrDraft {
   const owner = teamOwner.trim() || draft.team;
   return {
     ...draft,
     objectives: draft.objectives.map((objective) => ({
       ...objective,
       team: draft.team,
-      owner,
+      owner: forceOwner ? owner : objective.owner.trim() || owner,
       progress: normalizeNullablePercent(objective.progress),
       weight: normalizePercent(objective.weight, 100),
       keyResults: objective.keyResults.map((kr) => ({
         ...kr,
-        owner,
+        owner: forceOwner ? owner : kr.owner.trim() || objective.owner.trim() || owner,
         progress: normalizeNullablePercent(kr.progress),
         weight: normalizePercent(kr.weight, 0)
       }))
@@ -107,10 +107,10 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
   };
 }
 
-export function draftToRecords(draft: OkrDraft, teamOwner = draft.team): OkrRecord[] {
+export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwner = true): OkrRecord[] {
   const today = new Date().toISOString().slice(0, 10);
   const records: OkrRecord[] = [];
-  const normalizedDraft = normalizeDraft(draft, teamOwner);
+  const normalizedDraft = normalizeDraft(draft, teamOwner, forceOwner);
 
   normalizedDraft.objectives.forEach((objective) => {
     const objectiveProgress = calculateObjectiveProgress(objective.keyResults);

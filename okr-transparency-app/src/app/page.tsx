@@ -12,6 +12,7 @@ import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
 import { readAdminConfig, type AdminConfig } from "@/lib/admin/config";
+import { getAccessForSessionUser, getCurrentSessionUser, getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
@@ -26,11 +27,12 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string }>;
 }) {
-  const [{ team, period, lang: rawLang, mode }, data, progressNotes, adminConfig] = await Promise.all([
+  const [{ team, period, lang: rawLang, mode }, data, progressNotes, adminConfig, sessionUser] = await Promise.all([
     searchParams,
     getOkrTreeResponse(),
     readProgressNotes(),
-    readAdminConfig()
+    readAdminConfig(),
+    getCurrentSessionUser()
   ]);
   const lang = normalizeLang(rawLang ?? adminConfig.settings.defaultLanguage);
   const selectedTeam = normalizeTeam(team, adminConfig);
@@ -39,7 +41,9 @@ export default async function HomePage({
   const selectedPeriodLabel = periods.find((item) => item.id === selectedPeriod)?.shortLabel ?? selectedPeriod;
   const teamNav = buildTeamNav(adminConfig);
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
-  const draft = mode === "edit" ? await readDraft(selectedTeam, selectedPeriod) : null;
+  const access = getAccessForSessionUser(adminConfig, sessionUser);
+  const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
+  const draft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
   const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const selectedRecords = periodRecords.filter((record) => record.team === selectedTeam);
   const recordById = new Map(periodRecords.map((record) => [record.okr_id, record]));
@@ -61,7 +65,7 @@ export default async function HomePage({
 
         <section className="min-w-0">
           {draft ? (
-            <OkrEditBoard initialDraft={draft} lang={lang} alignmentOptions={alignmentOptions} teamOwner={selectedTeamOwner} />
+            <OkrEditBoard initialDraft={draft} lang={lang} alignmentOptions={alignmentOptions} teamOwner={selectedTeamOwner} policy={editPolicy} />
           ) : (
             <>
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">
@@ -80,7 +84,7 @@ export default async function HomePage({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} periodsOverride={periods} />
-              {adminConfig.settings.showEditLinks && (
+              {adminConfig.settings.showEditLinks && editPolicy.canEdit && (
                 <Link
                   href={hrefWithLang(`/?team=${encodeURIComponent(selectedTeam)}&period=${encodeURIComponent(selectedPeriod)}&mode=edit`, lang)}
                   className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"

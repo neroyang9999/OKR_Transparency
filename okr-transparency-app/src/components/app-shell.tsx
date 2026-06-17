@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { BarChart3, GitBranch, Search, Users } from "lucide-react";
 import { APP_VERSION } from "@/lib/app-version";
 import { hrefWithLang, normalizeLang, t } from "@/lib/i18n";
@@ -19,6 +20,7 @@ export function AppShell({ children, active }: { children: React.ReactNode; acti
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const lang = normalizeLang(searchParams.get("lang") ?? undefined);
+  const { data: session } = useSession();
 
   return (
     <div className="min-h-screen">
@@ -64,6 +66,24 @@ export function AppShell({ children, active }: { children: React.ReactNode; acti
                 </Link>
               );
             })}
+            {session?.user?.email ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
+                title={session.user.email}
+              >
+                <span className="truncate">{session.user.email}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void signIn("google")}
+                className="hidden h-9 items-center rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
+              >
+                登录
+              </button>
+            )}
             <LanguageToggle pathname={pathname} searchParams={searchParams} />
           </nav>
         </div>

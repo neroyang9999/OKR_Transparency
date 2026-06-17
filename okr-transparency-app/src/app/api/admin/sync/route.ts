@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAuthorized } from "@/lib/admin-auth";
-import { appendAdminEvent, backupCurrentSnapshot } from "@/lib/admin/config";
+import { appendAdminEvent, backupCurrentSnapshot, readAdminConfig } from "@/lib/admin/config";
+import { canManageAdmin, resolveRequestAccess } from "@/lib/admin/permissions";
 import { syncFromConfiguredSource } from "@/lib/okr/sync";
 import { readOkrSnapshot } from "@/lib/okr/store";
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const config = await readAdminConfig();
+  const access = await resolveRequestAccess(request, config);
+  if (!canManageAdmin(access)) {
     return NextResponse.json({ error: "Admin session required" }, { status: 401 });
   }
 
@@ -14,7 +16,7 @@ export async function POST(request: NextRequest) {
     const snapshot = await syncFromConfiguredSource();
     await appendAdminEvent({
       type: "sync",
-      actor: "Admin",
+      actor: access?.displayName ?? "Admin",
       status: "ok",
       message: `Synced ${snapshot.records.length} OKR records`
     });
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
     const snapshot = await readOkrSnapshot();
     await appendAdminEvent({
       type: "sync",
-      actor: "Admin",
+      actor: access?.displayName ?? "Admin",
       status: "error",
       message: error instanceof Error ? error.message : "Unknown sync error"
     });

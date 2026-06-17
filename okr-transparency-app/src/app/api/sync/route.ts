@@ -1,10 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { readAdminConfig } from "@/lib/admin/config";
+import { canManageAdmin, resolveRequestAccess } from "@/lib/admin/permissions";
 import { syncFromConfiguredSource } from "@/lib/okr/sync";
 import { readOkrSnapshot } from "@/lib/okr/store";
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Admin token required" }, { status: 401 });
+  const config = await readAdminConfig();
+  const access = await resolveRequestAccess(request, config);
+  if (!canManageAdmin(access)) {
+    return NextResponse.json({ error: "Admin session required" }, { status: 401 });
   }
 
   try {
@@ -23,16 +27,4 @@ export async function POST(request: NextRequest) {
       { status: 422 }
     );
   }
-}
-
-function isAuthorized(request: NextRequest) {
-  const expectedToken =
-    process.env.OKR_ADMIN_TOKEN ??
-    (process.env.NODE_ENV === "production" ? "" : "dev-admin-token");
-
-  const headerToken = request.headers.get("x-admin-token");
-  const authHeader = request.headers.get("authorization") ?? "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
-
-  return Boolean(expectedToken) && (headerToken === expectedToken || bearerToken === expectedToken);
 }

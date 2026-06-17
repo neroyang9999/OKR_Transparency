@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAuthorized } from "../../../lib/admin-auth";
+import { readAdminConfig } from "../../../lib/admin/config";
+import { canEditOwner, canManageTeam, resolveRequestAccess, validateEditablePeriod } from "../../../lib/admin/permissions";
+import { readPeriodRecords } from "../../../lib/okr/drafts";
 import { readProgressNotesForObjective, writeProgressNote } from "../../../lib/okr/progress-notes";
+import { readOkrSnapshot } from "../../../lib/okr/store";
 import type { ConfidenceLevel } from "../../../lib/okr/types";
 
 export async function GET(request: NextRequest) {
@@ -18,11 +21,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Admin token required" }, { status: 401 });
-  }
-
   try {
+    const config = await readAdminConfig();
+    const access = await resolveRequestAccess(request, config);
+    if (!access) return NextResponse.json({ error: "Login required" }, { status: 401 });
+
     const body = await request.json() as {
       team?: string;
       periodId?: string;
@@ -39,6 +42,13 @@ export async function PUT(request: NextRequest) {
     if (!body.team || !body.periodId || !body.objectiveId) {
       return NextResponse.json({ error: "team, periodId, and objectiveId are required" }, { status: 400 });
     }
+    const period = validateEditablePeriod(config, body.periodId);
+    if (!period.ok) return NextResponse.json({ error: period.error }, { status: 403 });
+    const periodRecords = await readPeriodRecords(body.periodId) ?? (await readOkrSnapshot()).records;
+    const objective = periodRecords.find((record) => record.team === body.team && record.okr_id === body.objectiveId);
+    if (!canManageTeam(config, body.team, access) && !canEditOwner(access, objective?.owner ?? "")) {
+      return NextResponse.json({ error: "No progress note permission for this team" }, { status: 403 });
+    }
 
     const note = await writeProgressNote({
       team: body.team,
@@ -49,7 +59,7 @@ export async function PUT(request: NextRequest) {
       status: normalizeStatus(body.status),
       risks: body.risks,
       nextSteps: body.nextSteps,
-      updatedBy: body.updatedBy
+      updatedBy: access.displayName
     });
     return NextResponse.json({ note });
   } catch (error) {

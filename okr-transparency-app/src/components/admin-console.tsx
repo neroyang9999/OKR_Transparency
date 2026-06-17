@@ -1,22 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { Activity, Lock, LogOut, RotateCcw, Save, Settings, Shield, SlidersHorizontal, Users } from "lucide-react";
-import type { AdminConfig, AdminEvent, AdminPeriod, AdminPermission, AdminTeam } from "@/lib/admin/config";
+import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { cn } from "@/lib/utils";
 
-type TabId = "overview" | "periods" | "teams" | "permissions" | "sync" | "settings";
+type TabId = "overview" | "periods" | "teams" | "users" | "sync" | "settings";
 
 const tabs: Array<{ id: TabId; label: string; icon: typeof Activity }> = [
   { id: "overview", label: "系统概览", icon: Activity },
   { id: "periods", label: "周期管理", icon: SlidersHorizontal },
   { id: "teams", label: "团队管理", icon: Users },
-  { id: "permissions", label: "权限配置", icon: Shield },
+  { id: "users", label: "用户与角色", icon: Shield },
   { id: "sync", label: "同步与发布", icon: RotateCcw },
   { id: "settings", label: "系统设置", icon: Settings }
 ];
 
 export function AdminConsole() {
+  const { data: session } = useSession();
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState("");
@@ -45,9 +47,9 @@ export function AdminConsole() {
   useEffect(() => {
     async function boot() {
       setLoading(true);
-      const session = await fetch("/api/admin/session").then((response) => response.json()) as { authenticated: boolean };
-      setAuthenticated(session.authenticated);
-      if (session.authenticated) await loadAdminData();
+      const adminSession = await fetch("/api/admin/session").then((response) => response.json()) as { authenticated: boolean };
+      setAuthenticated(adminSession.authenticated);
+      if (adminSession.authenticated) await loadAdminData();
       setLoading(false);
     }
 
@@ -74,6 +76,7 @@ export function AdminConsole() {
 
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
+    await signOut({ redirect: false });
     setAuthenticated(false);
     setConfig(null);
     setEvents([]);
@@ -123,7 +126,7 @@ export function AdminConsole() {
       config.teams.some((team) => team.enabled),
       Boolean(config.defaultTeam),
       Boolean(config.defaultPeriodId),
-      config.permissions.length > 0
+      config.users.length > 0
     ];
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
   }, [config]);
@@ -140,9 +143,21 @@ export function AdminConsole() {
             <Lock className="h-5 w-5" />
           </div>
           <h1 className="mt-4 text-2xl font-semibold text-slate-950">OKR 管理后台</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">输入 admin token 后进入配置后台。密钥不会展示在页面中。</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">使用 Google 登录 super admin 账号进入后台；admin token 仅作为本地 emergency fallback。</p>
+          <button
+            type="button"
+            onClick={() => void signIn("google")}
+            className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            使用 Google 登录
+          </button>
+          {session?.user?.email && (
+            <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              当前 Google 账号：{session.user.email}
+            </div>
+          )}
           <label className="mt-5 block">
-            <span className="text-xs font-medium text-slate-500">Admin token</span>
+            <span className="text-xs font-medium text-slate-500">Emergency admin token</span>
             <input
               type="password"
               value={token}
@@ -226,7 +241,7 @@ export function AdminConsole() {
           {activeTab === "overview" && <Overview config={config} events={events} completeness={completeness} />}
           {activeTab === "periods" && <PeriodConfig config={config} setConfig={setConfig} />}
           {activeTab === "teams" && <TeamConfig config={config} setConfig={setConfig} />}
-          {activeTab === "permissions" && <PermissionConfig config={config} setConfig={setConfig} />}
+          {activeTab === "users" && <UserRoleConfig config={config} setConfig={setConfig} />}
           {activeTab === "sync" && <SyncPanel events={events} busy={busy} onSync={runSync} onRollback={rollback} />}
           {activeTab === "settings" && <SettingsPanel config={config} setConfig={setConfig} />}
         </main>
@@ -247,7 +262,7 @@ function Overview({ config, events, completeness }: { config: AdminConfig; event
       <Metric title="配置完整度" value={`${completeness}%`} />
       <Metric title="启用团队" value={String(config.teams.filter((team) => team.enabled).length)} />
       <Metric title="开放周期" value={String(config.periods.filter((period) => period.editable && !period.locked).length)} />
-      <Metric title="权限规则" value={String(config.permissions.length)} />
+      <Metric title="授权用户" value={String(config.users.filter((user) => user.enabled).length)} />
       <EventList title="最近同步" event={lastSync} />
       <EventList title="最近发布" event={lastPublish} />
     </div>
@@ -309,24 +324,23 @@ function TeamConfig({ config, setConfig }: AdminSectionProps) {
   );
 }
 
-function PermissionConfig({ config, setConfig }: AdminSectionProps) {
+function UserRoleConfig({ config, setConfig }: AdminSectionProps) {
   return (
     <Panel>
       <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">
-        这里预留上云后的账号权限配置。V1 只保存规则，不直接拦截公开页或编辑页；接入登录账号后按团队和账号匹配编辑/发布权限。
+        Google 登录后按这里的邮箱匹配角色。super_admin 可管理全部；team_leader 可编辑和发布授权团队；user 只能编辑 owner alias 匹配自己的 KR。
       </div>
-      {config.permissions.map((permission, index) => (
-        <div key={`${permission.team}-${index}`} className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-4">
-          <TextField label="团队" value={permission.team} onChange={(team) => updatePermission(config, setConfig, index, { team })} />
-          <TextField label="账号 / 邮箱白名单" value={permission.accounts} onChange={(accounts) => updatePermission(config, setConfig, index, { accounts })} />
-          <Checkbox label="可编辑" checked={permission.canEdit} onChange={(canEdit) => updatePermission(config, setConfig, index, { canEdit })} />
-          <Checkbox label="可发布" checked={permission.canPublish} onChange={(canPublish) => updatePermission(config, setConfig, index, { canPublish })} />
-          <div className="md:col-span-4">
-            <TextField label="备注" value={permission.notes} onChange={(notes) => updatePermission(config, setConfig, index, { notes })} />
-          </div>
+      {config.users.map((user, index) => (
+        <div key={`${user.email}-${index}`} className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-3">
+          <TextField label="邮箱" value={user.email} onChange={(email) => updateUser(config, setConfig, index, { email })} />
+          <TextField label="显示名" value={user.displayName} onChange={(displayName) => updateUser(config, setConfig, index, { displayName })} />
+          <SelectField label="角色" value={user.role} options={["super_admin", "team_leader", "user"]} onChange={(role) => updateUser(config, setConfig, index, { role: role as AdminRole })} />
+          <TextField label="团队，逗号分隔" value={user.teams.join(", ")} onChange={(teams) => updateUser(config, setConfig, index, { teams: splitList(teams) })} />
+          <TextField label="Owner aliases，逗号分隔" value={user.ownerAliases.join(", ")} onChange={(ownerAliases) => updateUser(config, setConfig, index, { ownerAliases: splitList(ownerAliases) })} />
+          <Checkbox label="启用" checked={user.enabled} onChange={(enabled) => updateUser(config, setConfig, index, { enabled })} />
         </div>
       ))}
-      <AddButton label="添加权限规则" onClick={() => setConfig({ ...config, permissions: [...config.permissions, { team: "New Team", accounts: "", canEdit: true, canPublish: false, notes: "上云后按登录账号匹配" }] })} />
+      <AddButton label="添加用户" onClick={() => setConfig({ ...config, users: [...config.users, { email: "user@company.com", displayName: "New User", role: "user", teams: [config.defaultTeam], ownerAliases: ["New User"], enabled: true }] })} />
     </Panel>
   );
 }
@@ -414,6 +428,10 @@ function updateTeam(config: AdminConfig, setConfig: (config: AdminConfig) => voi
   setConfig({ ...config, teams: config.teams.map((team, itemIndex) => itemIndex === index ? { ...team, ...patch } : team) });
 }
 
-function updatePermission(config: AdminConfig, setConfig: (config: AdminConfig) => void, index: number, patch: Partial<AdminPermission>) {
-  setConfig({ ...config, permissions: config.permissions.map((permission, itemIndex) => itemIndex === index ? { ...permission, ...patch } : permission) });
+function updateUser(config: AdminConfig, setConfig: (config: AdminConfig) => void, index: number, patch: Partial<AdminUser>) {
+  setConfig({ ...config, users: config.users.map((user, itemIndex) => itemIndex === index ? { ...user, ...patch } : user) });
+}
+
+function splitList(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }

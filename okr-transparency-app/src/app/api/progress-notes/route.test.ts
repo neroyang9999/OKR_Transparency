@@ -59,7 +59,7 @@ describe("/api/progress-notes", () => {
       body: JSON.stringify({ team: "Software", periodId: "2026-q3", objectiveId: "SW-O1", summary: "Update" })
     }));
 
-    await expect(response.json()).resolves.toEqual({ error: "Admin token required" });
+    await expect(response.json()).resolves.toEqual({ error: "Login required" });
     expect(response.status).toBe(401);
   });
 

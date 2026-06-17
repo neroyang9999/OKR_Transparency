@@ -1,14 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAuthorized } from "@/lib/admin-auth";
-import { rollbackSnapshot } from "@/lib/admin/config";
+import { readAdminConfig, rollbackSnapshot } from "@/lib/admin/config";
+import { canManageAdmin, resolveRequestAccess } from "@/lib/admin/permissions";
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const config = await readAdminConfig();
+  const access = await resolveRequestAccess(request, config);
+  if (!canManageAdmin(access)) {
     return NextResponse.json({ error: "Admin session required" }, { status: 401 });
   }
 
   try {
-    const snapshot = await rollbackSnapshot();
+    const snapshot = await rollbackSnapshot(access?.displayName ?? "Admin");
     return NextResponse.json({ snapshot });
   } catch (error) {
     return NextResponse.json(

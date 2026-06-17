@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { readOkrSnapshot, writeOkrSnapshot } from "@/lib/okr/store";
-import type { OkrSnapshot } from "@/lib/okr/types";
+import { readOkrSnapshot, writeOkrSnapshot } from "../okr/store";
+import type { OkrSnapshot } from "../okr/types";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath = path.join(dataDir, "okr-admin-config.json");
@@ -33,6 +33,17 @@ export type AdminPermission = {
   notes: string;
 };
 
+export type AdminRole = "super_admin" | "team_leader" | "user";
+
+export type AdminUser = {
+  email: string;
+  displayName: string;
+  role: AdminRole;
+  teams: string[];
+  ownerAliases: string[];
+  enabled: boolean;
+};
+
 export type AdminConfig = {
   version: 1;
   defaultPeriodId: string;
@@ -40,6 +51,7 @@ export type AdminConfig = {
   defaultTeam: string;
   teams: AdminTeam[];
   permissions: AdminPermission[];
+  users: AdminUser[];
   settings: {
     defaultLanguage: "zh" | "en";
     showEditLinks: boolean;
@@ -148,6 +160,7 @@ function normalizeAdminConfig(input: Partial<AdminConfig>): AdminConfig {
     defaultTeam: teams.some((team) => team.name === input.defaultTeam) ? input.defaultTeam! : fallback.defaultTeam,
     teams,
     permissions: normalizePermissions(input.permissions, fallback.permissions),
+    users: normalizeUsers(input.users, fallback.users),
     settings: {
       defaultLanguage: input.settings?.defaultLanguage === "en" ? "en" : "zh",
       showEditLinks: input.settings?.showEditLinks ?? fallback.settings.showEditLinks,
@@ -183,6 +196,32 @@ function defaultAdminConfig(): AdminConfig {
       { team: "Software", accounts: "software-lead@company.com, tpm@company.com", canEdit: true, canPublish: true, notes: "上云后按登录账号匹配" },
       { team: "Hardware", accounts: "hardware-lead@company.com", canEdit: true, canPublish: true, notes: "上云后按登录账号匹配" }
     ],
+    users: [
+      {
+        email: "admin@company.com",
+        displayName: "Admin",
+        role: "super_admin",
+        teams: [],
+        ownerAliases: ["Admin"],
+        enabled: true
+      },
+      {
+        email: "software-lead@company.com",
+        displayName: "Software Lead",
+        role: "team_leader",
+        teams: ["Software"],
+        ownerAliases: ["Software Lead"],
+        enabled: true
+      },
+      {
+        email: "member@company.com",
+        displayName: "Team Member",
+        role: "user",
+        teams: ["Software"],
+        ownerAliases: ["Team Member"],
+        enabled: true
+      }
+    ],
     settings: {
       defaultLanguage: "zh",
       showEditLinks: true,
@@ -190,6 +229,18 @@ function defaultAdminConfig(): AdminConfig {
       backupExportEnabled: true
     }
   };
+}
+
+function normalizeUsers(input: Partial<AdminUser>[] | undefined, fallback: AdminUser[]) {
+  if (!Array.isArray(input)) return fallback;
+  return input.map((user) => ({
+    email: String(user.email ?? "").trim().toLowerCase(),
+    displayName: String(user.displayName ?? "").trim(),
+    role: user.role === "super_admin" || user.role === "team_leader" || user.role === "user" ? user.role : "user",
+    teams: Array.isArray(user.teams) ? user.teams.map((team) => String(team).trim()).filter(Boolean) : [],
+    ownerAliases: Array.isArray(user.ownerAliases) ? user.ownerAliases.map((alias) => String(alias).trim()).filter(Boolean) : [],
+    enabled: user.enabled ?? true
+  }));
 }
 
 function normalizePermissions(input: Partial<AdminPermission>[] | undefined, fallback: AdminPermission[]) {

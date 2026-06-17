@@ -7,6 +7,7 @@ import { Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } 
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { calculateObjectiveProgress, createEmptyKr, createEmptyObjective, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
+import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ type OkrEditBoardProps = {
   lang: Lang;
   alignmentOptions: AlignmentOption[];
   teamOwner: string;
+  policy: TeamEditPolicy;
 };
 
 export type AlignmentOption = {
@@ -29,13 +31,14 @@ export type AlignmentOption = {
   confidence: string;
 };
 
-const adminToken = "dev-admin-token";
 const confidenceOptions: ConfidenceLevel[] = ["Green", "Yellow", "Red"];
 const typeOptions: OkrType[] = ["Committed", "Aspirational", "Learning"];
 
-export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }: OkrEditBoardProps) {
+export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy }: OkrEditBoardProps) {
   const router = useRouter();
-  const [draft, setDraft] = useState(() => normalizeDraft(initialDraft, teamOwner));
+  const defaultOwner = policy.ownerOptions[0] ?? teamOwner;
+  const canEditWholeTeam = policy.canPublish;
+  const [draft, setDraft] = useState(() => normalizeDraft(initialDraft, defaultOwner, false));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const validation = useMemo(() => validateDraft(draft), [draft]);
@@ -59,7 +62,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
     changeDraft((current) => ({
       ...current,
       objectives: current.objectives.map((objective) =>
-        objective.id === objectiveId ? { ...objective, ...patch, owner: teamOwner } : objective
+        objective.id === objectiveId ? { ...objective, ...patch } : objective
       )
     }));
   }
@@ -71,7 +74,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
         objective.id === objectiveId
           ? {
               ...objective,
-              keyResults: objective.keyResults.map((kr) => kr.id === krId ? { ...kr, ...patch, owner: teamOwner } : kr)
+              keyResults: objective.keyResults.map((kr) => kr.id === krId ? { ...kr, ...patch } : kr)
             }
           : objective
       )
@@ -81,7 +84,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
   function addObjective() {
     changeDraft((current) => ({
       ...current,
-      objectives: [...current.objectives, createEmptyObjective(current.team, current.periodId, teamOwner)]
+      objectives: [...current.objectives, createEmptyObjective(current.team, current.periodId, defaultOwner)]
     }));
   }
 
@@ -99,7 +102,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
         if (objective.id !== objectiveId) return objective;
         const nextKrs = [
           ...objective.keyResults,
-          createEmptyKr(objective.id, objective.keyResults.length, teamOwner, objective.keyResults.length + 1)
+          createEmptyKr(objective.id, objective.keyResults.length, defaultOwner, objective.keyResults.length + 1)
         ];
         return { ...objective, keyResults: redistributeWeights(nextKrs) };
       })
@@ -125,7 +128,6 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-admin-token": adminToken
       },
       body: JSON.stringify({ team: draft.team, periodId: draft.periodId })
     });
@@ -173,7 +175,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
           <button
             type="button"
             onClick={publish}
-            disabled={saveState === "saving" || validation.errors.length > 0}
+            disabled={saveState === "saving" || validation.errors.length > 0 || !policy.canPublish}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send className="h-4 w-4" />
@@ -193,6 +195,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
       <div className="space-y-5">
         {draft.objectives.map((objective, objectiveIndex) => {
           const objectiveProgress = calculateObjectiveProgress(objective.keyResults);
+          const objectiveLocked = !canEditWholeTeam;
           return (
           <article key={objective.id} className="overflow-hidden rounded-lg border border-blue-400 bg-white shadow-subtle">
             <div className="grid gap-3 px-5 py-5 lg:grid-cols-[1fr_120px_120px_44px]">
@@ -203,6 +206,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
                     options={alignmentOptions}
                     copy={copy}
                     onChange={(alignedToId) => updateObjective(objective.id, { alignedToId })}
+                    disabled={objectiveLocked}
                   />
                 )}
                 <div className="flex items-start gap-3">
@@ -212,19 +216,21 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
                     onChange={(value) => updateObjective(objective.id, { title: value })}
                     placeholder={copy.objectivePlaceholder}
                     className="text-xl font-semibold"
+                    disabled={objectiveLocked}
                   />
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
-                  <ReadOnlyField label={copy.owner} value={teamOwner} />
-                  <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} />
-                  <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} />
+                  <Select label={copy.owner} value={objective.owner} options={policy.ownerOptions} onChange={(value) => updateObjective(objective.id, { owner: value })} disabled={objectiveLocked} />
+                  <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} />
+                  <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} />
                 </div>
               </div>
               <ReadOnlyField label={copy.progress} value={objectiveProgress === null ? "N/A" : `${objectiveProgress}%`} />
-              <NumberInput label={copy.weight} value={objective.weight} onChange={(value) => updateObjective(objective.id, { weight: value ?? 100 })} />
+              <NumberInput label={copy.weight} value={objective.weight} onChange={(value) => updateObjective(objective.id, { weight: value ?? 100 })} disabled={objectiveLocked} />
               <button
                 type="button"
                 onClick={() => removeObjective(objective.id)}
+                disabled={objectiveLocked}
                 className="mt-7 grid h-9 w-9 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                 aria-label={copy.deleteObjective}
               >
@@ -245,15 +251,20 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
                             onChange={(value) => updateKr(objective.id, kr.id, { title: value })}
                             placeholder={copy.krPlaceholder}
                             className="font-medium"
+                            disabled={!canEditWholeTeam && !isEditableOwner(kr.owner, policy.editableOwnerAliases)}
                           />
+                          <div className="mt-2 max-w-xs">
+                            <Select label={copy.owner} value={kr.owner} options={policy.ownerOptions} onChange={(value) => updateKr(objective.id, kr.id, { owner: value })} disabled={!canEditWholeTeam} />
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <NumberInput label={copy.progress} value={kr.progress} onChange={(value) => updateKr(objective.id, kr.id, { progress: value })} />
-                    <NumberInput label={copy.weight} value={kr.weight} onChange={(value) => updateKr(objective.id, kr.id, { weight: value ?? 0 })} />
+                    <NumberInput label={copy.progress} value={kr.progress} onChange={(value) => updateKr(objective.id, kr.id, { progress: value })} disabled={!canEditWholeTeam && !isEditableOwner(kr.owner, policy.editableOwnerAliases)} />
+                    <NumberInput label={copy.weight} value={kr.weight} onChange={(value) => updateKr(objective.id, kr.id, { weight: value ?? 0 })} disabled={!canEditWholeTeam} />
                     <button
                       type="button"
                       onClick={() => removeKr(objective.id, kr.id)}
+                      disabled={!canEditWholeTeam}
                       className="mt-7 grid h-9 w-9 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                       aria-label={copy.deleteKr}
                     >
@@ -265,6 +276,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
               <button
                 type="button"
                 onClick={() => addKr(objective.id)}
+                disabled={!canEditWholeTeam}
                 className="inline-flex h-14 items-center gap-2 px-20 text-sm font-semibold text-slate-600 hover:text-blue-700"
               >
                 <Plus className="h-4 w-4" />
@@ -286,6 +298,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner }
         <button
           type="button"
           onClick={addObjective}
+          disabled={!canEditWholeTeam}
           className="flex h-20 w-full items-center gap-4 rounded-lg border border-border bg-white px-7 text-lg font-semibold text-slate-500 shadow-subtle hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
         >
           <span className="grid h-10 w-10 place-items-center rounded-full bg-slate-100">
@@ -302,12 +315,14 @@ function AlignmentPicker({
   value,
   options,
   copy,
-  onChange
+  onChange,
+  disabled = false
 }: {
   value?: string;
   options: AlignmentOption[];
   copy: typeof zh;
   onChange: (value?: string) => void;
+  disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -360,6 +375,7 @@ function AlignmentPicker({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          disabled={disabled}
           placeholder={copy.searchAlignment}
           className="h-10 w-full rounded-md border border-border bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400"
         />
@@ -445,7 +461,6 @@ async function saveDraft(
     method: "PUT",
     headers: {
       "content-type": "application/json",
-      "x-admin-token": adminToken
     },
     body: JSON.stringify(draft)
   });
@@ -490,11 +505,12 @@ function MessageList({ title, items, tone }: { title: string; items: string[]; t
   );
 }
 
-function Textarea({ value, onChange, placeholder, className }: { value: string; onChange: (value: string) => void; placeholder: string; className?: string }) {
+function Textarea({ value, onChange, placeholder, className, disabled = false }: { value: string; onChange: (value: string) => void; placeholder: string; className?: string; disabled?: boolean }) {
   return (
     <textarea
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
       placeholder={placeholder}
       rows={2}
       className={cn("min-h-12 w-full resize-y rounded-md border border-transparent bg-transparent px-2 py-1 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-200 focus:bg-blue-50", className)}
@@ -513,7 +529,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NumberInput({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number | null) => void }) {
+function NumberInput({ label, value, onChange, disabled = false }: { label: string; value: number | null; onChange: (value: number | null) => void; disabled?: boolean }) {
   return (
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
@@ -527,6 +543,7 @@ function NumberInput({ label, value, onChange }: { label: string; value: number 
           const nextValue = parsePercentInput(event.target.value);
           if (nextValue !== undefined) onChange(nextValue);
         }}
+        disabled={disabled}
         placeholder="暂无"
         className="mt-1 h-10 w-full rounded-md border border-border bg-white px-3 text-sm tabular-nums outline-none focus:border-blue-400"
       />
@@ -541,19 +558,25 @@ function parsePercentInput(value: string) {
   return Math.min(100, Math.max(0, number));
 }
 
-function Select({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
+function Select({ label, value, options, onChange, disabled = false }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void; disabled?: boolean }) {
   return (
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
         className="mt-1 h-9 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-blue-400"
       >
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     </label>
   );
+}
+
+function isEditableOwner(owner: string, aliases: string[]) {
+  const normalizedOwner = owner.trim().toLowerCase();
+  return Boolean(normalizedOwner) && aliases.some((alias) => alias.trim().toLowerCase() === normalizedOwner);
 }
 
 const zh = {

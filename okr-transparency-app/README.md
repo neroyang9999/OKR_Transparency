@@ -19,11 +19,31 @@ For the local page-editing prototype on Windows, you can also run:
 
 Then open `http://127.0.0.1:3001/?mode=edit&team=Software`.
 
-## Page Editing Prototype
+## Authentication and Permissions
 
-Add `mode=edit` to the overview page to edit OKRs directly in the browser. Drafts are saved to `data/okr-drafts.json`; publishing writes the selected team's records into `data/okr-snapshot.json`.
+OKRs are publicly visible to everyone. Editing, publishing, sync, rollback, and admin configuration require authentication.
 
-The prototype keeps the existing read-only pages intact. It uses `dev-admin-token` locally for draft save and publish API calls.
+Google OAuth is the normal identity source. Configure:
+
+- `AUTH_SECRET`
+- `AUTH_GOOGLE_ID`
+- `AUTH_GOOGLE_SECRET`
+
+Google OAuth callback URL:
+
+`http://localhost:3000/api/auth/callback/google`
+
+The admin backend stores role rules in `data/okr-admin-config.json`:
+
+- `super_admin`: all admin, edit, publish, sync, and rollback permissions.
+- `team_leader`: edit and publish assigned teams.
+- `user`: edit only OKR/KR records whose owner matches one of their `ownerAliases`.
+
+`OKR_ADMIN_TOKEN` remains available as a local emergency fallback for admin configuration and operational writes.
+
+## Page Editing
+
+Authorized users can add `mode=edit` to the overview page to edit OKRs directly in the browser. Drafts are saved to `data/okr-drafts.json`; publishing writes the selected team's records into `data/okr-snapshot.json`.
 
 ## Data Sources
 
@@ -42,13 +62,13 @@ For Google Docs API access, provide either:
 
 ## Sync
 
-`POST /api/sync` triggers a read-only source sync. Set `OKR_ADMIN_TOKEN` and pass it with:
+`POST /api/sync` triggers a read-only source sync. It requires a `super_admin` Google session or the emergency `OKR_ADMIN_TOKEN` fallback:
 
 ```powershell
 Invoke-RestMethod -Method Post http://localhost:3000/api/sync -Headers @{ "x-admin-token" = "<token>" }
 ```
 
-If `OKR_ADMIN_TOKEN` is unset in development, use `dev-admin-token`.
+If `OKR_ADMIN_TOKEN` is unset in development, the emergency fallback token is `dev-admin-token`.
 
 ## Required OKR Fields
 

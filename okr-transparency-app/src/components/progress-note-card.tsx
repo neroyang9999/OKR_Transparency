@@ -19,7 +19,6 @@ type ProgressNoteCardProps = {
   lang: Lang;
 };
 
-const adminToken = "dev-admin-token";
 const recentHistoryLimit = 4;
 
 export function ProgressNoteCard({
@@ -65,8 +64,7 @@ export function ProgressNoteCard({
     const response = await fetch("/api/progress-notes", {
       method: "PUT",
       headers: {
-        "content-type": "application/json",
-        "x-admin-token": adminToken
+        "content-type": "application/json"
       },
       body: JSON.stringify({
         team,
@@ -76,8 +74,7 @@ export function ProgressNoteCard({
         summary: draftSummary,
         status: draftStatus,
         risks: draftRisks,
-        nextSteps: draftNextSteps,
-        updatedBy: copy.defaultLead
+        nextSteps: draftNextSteps
       })
     });
 
