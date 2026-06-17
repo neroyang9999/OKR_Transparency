@@ -10,7 +10,7 @@ export type TeamNavItem = {
   name: string;
   owner: string;
   color: string;
-  children: Array<{ name: string; owner: string }>;
+  children: Array<{ name: string; owner: string; color: string }>;
 };
 
 export function TeamSidebar({
@@ -57,7 +57,10 @@ export function TeamSidebar({
                     href={hrefWithLang(`/?team=${encodeURIComponent(item.name)}`, lang)}
                     className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5"
                   >
-                    <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white", item.color)}>
+                    <span className={cn(
+                      "relative z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white shadow-sm ring-2 ring-white"
+                    )}
+                    style={{ backgroundColor: teamColor(item.color) }}>
                       {initials(item.name)}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -85,22 +88,24 @@ export function TeamSidebar({
 
                 {expanded && item.children.length > 0 && (
                   <div className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-4">
-                    {item.children.map((child) => (
+                    {item.children.map((child) => {
+                      const selectedChild = selectedTeam === child.name;
+                      return (
                       <Link
                         key={child.name}
                         href={hrefWithLang(`/?team=${encodeURIComponent(child.name)}`, lang)}
                         className={cn(
                           "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-slate-50",
-                          selectedTeam === child.name && "bg-blue-50 text-slate-950"
+                          selectedChild && "bg-blue-50 text-slate-950"
                         )}
                       >
-                        <TeamAvatar name={child.name} />
+                        <TeamAvatar name={child.name} color={child.color} selected={selectedChild} />
                         <span className="min-w-0">
                           <span className="block truncate font-semibold">{child.name}</span>
                           <span className="block truncate text-xs text-muted-foreground">{child.owner}</span>
                         </span>
                       </Link>
-                    ))}
+                    );})}
                   </div>
                 )}
               </div>
@@ -116,12 +121,32 @@ function useOpenTeams(initialOpen: string[]) {
   return useState<Set<string>>(() => new Set(initialOpen));
 }
 
-function TeamAvatar({ name }: { name: string }) {
+function TeamAvatar({ name, color, selected }: { name: string; color?: string; selected?: boolean }) {
   return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 text-xs font-semibold text-white">
+    <span className={cn(
+      "relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white shadow-sm ring-2 ring-white",
+      selected && "ring-blue-100"
+    )}
+    style={{ backgroundColor: teamColor(color) }}>
       {initials(name)}
     </span>
   );
+}
+
+function teamColor(color?: string) {
+  switch (color) {
+    case "bg-emerald-500":
+      return "#10b981";
+    case "bg-violet-500":
+      return "#8b5cf6";
+    case "bg-amber-500":
+      return "#f59e0b";
+    case "bg-slate-500":
+      return "#64748b";
+    case "bg-blue-500":
+    default:
+      return "#3b82f6";
+  }
 }
 
 function initials(name: string) {

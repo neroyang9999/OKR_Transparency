@@ -382,6 +382,6 @@ function buildTeamNav(config: AdminConfig): TeamNavItem[] {
       color: team.color,
       children: enabledTeams
         .filter((child) => child.parentTeam === team.name)
-        .map((child) => ({ name: child.name, owner: child.owner }))
+        .map((child) => ({ name: child.name, owner: child.owner, color: child.color }))
     }));
 }
