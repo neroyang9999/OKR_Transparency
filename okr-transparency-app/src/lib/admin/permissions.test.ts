@@ -13,6 +13,7 @@ const config: AdminConfig = {
   defaultTeam: "Software",
   teams: [
     { name: "Software", owner: "Software Lead", parentTeam: "", color: "bg-blue-500", enabled: true },
+    { name: "Application Team", owner: "Application Lead", parentTeam: "Software", color: "bg-blue-500", enabled: true },
     { name: "Hardware", owner: "Hardware Lead", parentTeam: "", color: "bg-green-500", enabled: true }
   ],
   permissions: [],
@@ -20,6 +21,7 @@ const config: AdminConfig = {
     { email: "admin@company.com", displayName: "Admin", role: "super_admin", teams: [], ownerAliases: ["Admin"], enabled: true },
     { email: "lead@company.com", displayName: "Software Lead", role: "team_leader", teams: ["Software"], ownerAliases: ["Software Lead"], enabled: true },
     { email: "user@company.com", displayName: "Member", role: "user", teams: ["Software"], ownerAliases: ["Member"], enabled: true },
+    { email: "noteam@company.com", displayName: "No Team", role: "user", teams: [], ownerAliases: ["No Team"], enabled: true },
     { email: "disabled@company.com", displayName: "Disabled", role: "super_admin", teams: [], ownerAliases: ["Disabled"], enabled: false }
   ],
   settings: {
@@ -91,9 +93,10 @@ describe("role-based OKR permissions", () => {
     expect(authorizePublish(config, access, "Hardware", "2026-q3")).toMatchObject({ ok: true });
   });
 
-  it("allows team leaders to publish their team but not other teams", () => {
+  it("allows team leaders to publish their team and child teams but not unrelated teams", () => {
     const access = getAccessForSessionUser(config, { email: "lead@company.com", name: "Software Lead" });
     expect(authorizePublish(config, access, "Software", "2026-q3")).toMatchObject({ ok: true });
+    expect(authorizePublish(config, access, "Application Team", "2026-q3")).toMatchObject({ ok: true });
     expect(authorizePublish(config, access, "Hardware", "2026-q3")).toMatchObject({ ok: false });
   });
 
@@ -125,5 +128,10 @@ describe("role-based OKR permissions", () => {
 
     expect(authorizeDraftChange(config, access, draft, allowedDraft)).toMatchObject({ ok: true });
     expect(authorizeDraftChange(config, access, draft, deniedDraft)).toMatchObject({ ok: false });
+  });
+
+  it("does not grant ordinary users team edit access when their team list is empty", () => {
+    const access = getAccessForSessionUser(config, { email: "noteam@company.com", name: "No Team" });
+    expect(getTeamEditPolicy(config, "Software", access)).toMatchObject({ canEdit: false, canPublish: false });
   });
 });

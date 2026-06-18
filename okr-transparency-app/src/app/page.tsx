@@ -11,7 +11,7 @@ import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
-import { readAdminConfig, type AdminConfig } from "@/lib/admin/config";
+import { readAdminConfig, type AdminConfig, type AdminUser } from "@/lib/admin/config";
 import { getAccessForSessionUser, getCurrentSessionUser, getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
 import { readDraft } from "@/lib/okr/drafts";
@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
 export default async function HomePage({
   searchParams
 }: {
-  searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string }>;
+  searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string; member?: string }>;
 }) {
-  const [{ team, period, lang: rawLang, mode }, data, progressNotes, adminConfig, sessionUser] = await Promise.all([
+  const [{ team, period, lang: rawLang, mode, member }, data, progressNotes, adminConfig, sessionUser] = await Promise.all([
     searchParams,
     getOkrTreeResponse(),
     readProgressNotes(),
@@ -40,12 +40,16 @@ export default async function HomePage({
   const periods = getConfiguredPeriods(adminConfig);
   const selectedPeriodLabel = periods.find((item) => item.id === selectedPeriod)?.shortLabel ?? selectedPeriod;
   const teamNav = buildTeamNav(adminConfig);
+  const selectedMember = normalizeMember(member, selectedTeam, adminConfig);
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
   const access = getAccessForSessionUser(adminConfig, sessionUser);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const draft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
   const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
-  const selectedRecords = periodRecords.filter((record) => record.team === selectedTeam);
+  const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
+  const selectedRecords = selectedMember
+    ? buildOwnerScopedRecords(teamRecords, ownerAliasesForUser(selectedMember))
+    : teamRecords;
   const recordById = new Map(periodRecords.map((record) => [record.okr_id, record]));
   const rootObjectives = selectedRecords.filter((record) => {
     const parent = record.parent_id ? recordById.get(record.parent_id) : null;
@@ -53,7 +57,7 @@ export default async function HomePage({
   });
   const selectedNavItem = teamNav.find((item) => item.name === selectedTeam);
   const childTeamNames = new Set(selectedNavItem?.children.map((child) => child.name) ?? []);
-  const childTeams = childTeamNames.size > 0
+  const childTeams = !selectedMember && childTeamNames.size > 0
     ? periodRecords.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
     : [];
   const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
@@ -61,7 +65,7 @@ export default async function HomePage({
   return (
     <AppShell active="overview">
       <div className="grid min-h-[calc(100vh-104px)] gap-5 lg:grid-cols-[300px_1fr]">
-        <TeamSidebar items={teamNav} selectedTeam={selectedTeam} lang={lang} />
+        <TeamSidebar items={teamNav} selectedTeam={selectedTeam} selectedMemberEmail={selectedMember?.email} lang={lang} />
 
         <section className="min-w-0">
           {draft ? (
@@ -72,8 +76,14 @@ export default async function HomePage({
             <div className="flex min-w-0 items-center gap-3">
               <TeamAvatar name={selectedTeam} size="lg" />
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold text-slate-950">{selectedTeam} OKR</h1>
+                <h1 className="truncate text-2xl font-semibold text-slate-950">{selectedMember ? `${selectedMember.displayName} OKR` : `${selectedTeam} OKR`}</h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  {selectedMember && (
+                    <>
+                      <span>{selectedTeam}</span>
+                      <span>·</span>
+                    </>
+                  )}
                   <span>{selectedPeriodLabel}</span>
                   <span>·</span>
                   <span>{selectedRecords.length} {t(lang, "records")}</span>
@@ -83,7 +93,7 @@ export default async function HomePage({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} lang={lang} periodsOverride={periods} />
+              <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} selectedMemberEmail={selectedMember?.email} lang={lang} periodsOverride={periods} />
               {adminConfig.settings.showEditLinks && editPolicy.canEdit && (
                 <Link
                   href={hrefWithLang(`/?team=${encodeURIComponent(selectedTeam)}&period=${encodeURIComponent(selectedPeriod)}&mode=edit`, lang)}
@@ -104,7 +114,7 @@ export default async function HomePage({
                   key={objective.okr_id}
                   index={index}
                   objective={objective}
-                  records={periodRecords}
+                  records={selectedRecords}
                   selectedPeriod={selectedPeriod}
                   progressNotes={progressNotes}
                   showProgressNotes={adminConfig.settings.allowProgressNotes}
@@ -324,6 +334,43 @@ function normalizeTeam(team: string | undefined, config: AdminConfig) {
   return team && allowed.has(team) ? team : config.defaultTeam;
 }
 
+function normalizeMember(member: string | undefined, team: string, config: AdminConfig) {
+  const email = (member ?? "").trim().toLowerCase();
+  if (!email) return null;
+  return config.users.find((user) =>
+    user.enabled &&
+    user.email.toLowerCase() === email &&
+    user.teams.includes(team)
+  ) ?? null;
+}
+
+function buildOwnerScopedRecords(teamRecords: OkrRecord[], ownerAliases: string[]) {
+  const aliases = ownerAliases.map(normalizeToken);
+  const recordsById = new Map(teamRecords.map((record) => [record.okr_id, record]));
+  const visibleIds = new Set<string>();
+
+  function addParentChain(record: OkrRecord) {
+    let current: OkrRecord | undefined = record;
+    while (current) {
+      visibleIds.add(current.okr_id);
+      current = current.parent_id ? recordsById.get(current.parent_id) : undefined;
+    }
+  }
+
+  teamRecords.forEach((record) => {
+    if (!aliases.includes(normalizeToken(record.owner))) return;
+    visibleIds.add(record.okr_id);
+    addParentChain(record);
+    if (!record.kr) {
+      teamRecords
+        .filter((candidate) => candidate.parent_id === record.okr_id)
+        .forEach((child) => visibleIds.add(child.okr_id));
+    }
+  });
+
+  return teamRecords.filter((record) => visibleIds.has(record.okr_id));
+}
+
 function isTeamRoot(record: OkrRecord, recordById: Map<string, OkrRecord>) {
   const parent = record.parent_id ? recordById.get(record.parent_id) : null;
   return !parent || parent.team !== record.team;
@@ -374,14 +421,46 @@ function getConfiguredPeriods(config: AdminConfig): Period[] {
 
 function buildTeamNav(config: AdminConfig): TeamNavItem[] {
   const enabledTeams = config.teams.filter((team) => team.enabled);
+  const membersByTeam = new Map<string, ReturnType<typeof membersForTeam>>();
+  enabledTeams.forEach((team) => membersByTeam.set(team.name, membersForTeam(config.users, team.name)));
+
   return enabledTeams
     .filter((team) => !team.parentTeam)
     .map((team) => ({
       name: team.name,
       owner: team.owner,
       color: team.color,
+      members: membersByTeam.get(team.name) ?? [],
       children: enabledTeams
         .filter((child) => child.parentTeam === team.name)
-        .map((child) => ({ name: child.name, owner: child.owner, color: child.color }))
+        .map((child) => ({
+          name: child.name,
+          owner: child.owner,
+          color: child.color,
+          members: membersByTeam.get(child.name) ?? []
+        }))
     }));
+}
+
+function membersForTeam(users: AdminUser[], team: string) {
+  return users
+    .filter((user) => user.enabled && user.teams.includes(team) && user.role !== "team_leader")
+    .map((user) => ({
+      email: user.email,
+      displayName: user.displayName || user.email,
+      role: user.role
+    }))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+function ownerAliasesForUser(user: AdminUser) {
+  return Array.from(new Set([
+    ...user.ownerAliases,
+    user.displayName,
+    user.email
+  ].map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeToken(value: string) {
+  return value.trim().toLowerCase();
 }

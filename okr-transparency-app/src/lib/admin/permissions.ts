@@ -102,7 +102,7 @@ export function getTeamEditPolicy(config: AdminConfig, team: string, access: Use
     };
   }
 
-  if (access.role === "team_leader" && access.teams.includes(team)) {
+  if (access.role === "team_leader" && canLeadTeam(config, access.teams, team)) {
     return {
       canEdit: true,
       canPublish: true,
@@ -114,7 +114,7 @@ export function getTeamEditPolicy(config: AdminConfig, team: string, access: Use
 
   if (access.role === "user") {
     return {
-      canEdit: access.teams.length === 0 || access.teams.includes(team),
+      canEdit: access.teams.includes(team),
       canPublish: false,
       ownerOptions: access.ownerAliases,
       editableOwnerAliases: access.ownerAliases,
@@ -130,7 +130,7 @@ export function canManageAdmin(access: UserAccess | null) {
 }
 
 export function canManageTeam(config: AdminConfig, team: string, access: UserAccess | null) {
-  return access?.role === "super_admin" || (access?.role === "team_leader" && access.teams.includes(team));
+  return access?.role === "super_admin" || (access?.role === "team_leader" && canLeadTeam(config, access.teams, team));
 }
 
 export function canEditOwner(access: UserAccess | null, owner: string) {
@@ -176,10 +176,23 @@ export function getOwnerOptions(config: AdminConfig, team: string, access: UserA
     .filter((item) => item.name === team || item.parentTeam === team)
     .map((item) => item.owner);
   const userOwners = config.users
-    .filter((user) => user.enabled && (user.teams.includes(team) || access.role === "super_admin"))
+    .filter((user) => user.enabled && (access.role === "super_admin" || user.teams.some((userTeam) => canLeadTeam(config, [team], userTeam))))
     .flatMap((user) => user.ownerAliases.length > 0 ? user.ownerAliases : [user.displayName, user.email]);
 
   return uniqueTokens([...teamOwners, ...userOwners]);
+}
+
+function canLeadTeam(config: AdminConfig, leaderTeams: string[], team: string) {
+  if (leaderTeams.includes(team)) return true;
+  const parentByTeam = new Map(config.teams.map((item) => [item.name, item.parentTeam]));
+  let parent = parentByTeam.get(team);
+
+  while (parent) {
+    if (leaderTeams.includes(parent)) return true;
+    parent = parentByTeam.get(parent);
+  }
+
+  return false;
 }
 
 function userDraftChangeIsAllowed(previous: OkrDraft, next: OkrDraft, ownerAliases: string[]) {

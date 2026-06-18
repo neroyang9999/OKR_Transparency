@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { Activity, Search, Lock, LogOut, RotateCcw, Save, Settings, Shield, SlidersHorizontal, UserPlus, Users } from "lucide-react";
+import { Activity, Check, Pencil, Search, Lock, LogOut, RotateCcw, Save, Settings, Shield, SlidersHorizontal, Trash2, UserPlus, Users, X } from "lucide-react";
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { cn } from "@/lib/utils";
 
@@ -328,6 +328,7 @@ function UserRoleConfig({ config, setConfig }: AdminSectionProps) {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<AdminRole | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const [editingUserKey, setEditingUserKey] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const totalUsers = config.users.length;
   const enabledUsers = config.users.filter((user) => user.enabled).length;
@@ -396,7 +397,11 @@ function UserRoleConfig({ config, setConfig }: AdminSectionProps) {
           </select>
           <button
             type="button"
-            onClick={() => setConfig({ ...config, users: [...config.users, { email: "user@company.com", displayName: "New User", role: "user", teams: [config.defaultTeam], ownerAliases: ["New User"], enabled: true }] })}
+            onClick={() => {
+              const user = { email: "user@company.com", displayName: "New User", role: "user" as AdminRole, teams: [config.defaultTeam], ownerAliases: ["New User"], enabled: true };
+              setConfig({ ...config, users: [...config.users, user] });
+              setEditingUserKey(user.email);
+            }}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
           >
             <UserPlus className="h-4 w-4" />
@@ -408,67 +413,114 @@ function UserRoleConfig({ config, setConfig }: AdminSectionProps) {
 
         <div className="overflow-x-auto rounded-md border border-border">
           <div className="min-w-[920px]">
-            <div className="grid grid-cols-[minmax(260px,1.35fr)_130px_minmax(150px,0.8fr)_minmax(190px,1fr)_110px] border-b border-border bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+            <div className="grid grid-cols-[minmax(260px,1.25fr)_130px_minmax(230px,0.9fr)_minmax(190px,1fr)_100px_96px] border-b border-border bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               <div>用户</div>
               <div>角色</div>
               <div>团队</div>
               <div>Owner aliases</div>
               <div>状态</div>
+              <div>操作</div>
             </div>
             {visibleUsers.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">没有匹配的用户</div>
-            ) : visibleUsers.map(({ user, index }) => (
-              <div key={`${user.email}-${index}`} className="grid grid-cols-[minmax(260px,1.35fr)_130px_minmax(150px,0.8fr)_minmax(190px,1fr)_110px] items-center gap-3 border-b border-border px-3 py-3 text-sm last:border-b-0">
-                <div className="flex min-w-0 items-center gap-3">
-                  <UserAvatar name={user.displayName || user.email} enabled={user.enabled} />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <input
-                      value={user.displayName}
-                      onChange={(event) => updateUser(config, setConfig, index, { displayName: event.target.value })}
-                      aria-label="显示名"
-                      className="h-7 w-full rounded-md border border-transparent bg-transparent px-2 font-medium text-slate-900 outline-none hover:border-border focus:border-blue-400 focus:bg-white"
+            ) : visibleUsers.map(({ user, index }) => {
+              const userKey = user.email || `${user.displayName}-${index}`;
+              const editing = editingUserKey === userKey;
+              return (
+                <div key={`${user.email}-${index}`} className="grid grid-cols-[minmax(260px,1.25fr)_130px_minmax(230px,0.9fr)_minmax(190px,1fr)_100px_96px] items-center gap-3 border-b border-border px-3 py-3 text-sm last:border-b-0">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <UserAvatar name={user.displayName || user.email} enabled={user.enabled} />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      {editing ? (
+                        <>
+                          <input
+                            value={user.displayName}
+                            onChange={(event) => updateUser(config, setConfig, index, { displayName: event.target.value })}
+                            aria-label="显示名"
+                            className="h-7 w-full rounded-md border border-border px-2 font-medium text-slate-900 outline-none focus:border-blue-400"
+                          />
+                          <input
+                            value={user.email}
+                            onChange={(event) => updateUser(config, setConfig, index, { email: event.target.value })}
+                            aria-label="邮箱"
+                            className="h-7 w-full rounded-md border border-border px-2 text-xs text-slate-500 outline-none focus:border-blue-400"
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <div className="truncate font-medium text-slate-900">{user.displayName}</div>
+                          <div className="truncate text-xs text-slate-500">{user.email}</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {editing ? (
+                    <select
+                      value={user.role}
+                      onChange={(event) => updateUser(config, setConfig, index, { role: event.target.value as AdminRole })}
+                      aria-label="角色"
+                      className="h-8 rounded-md border border-border bg-white px-2 text-sm outline-none focus:border-blue-400"
+                    >
+                      <option value="super_admin">super_admin</option>
+                      <option value="team_leader">team_leader</option>
+                      <option value="user">user</option>
+                    </select>
+                  ) : (
+                    <span className="truncate text-sm text-slate-700">{user.role}</span>
+                  )}
+                  {editing ? (
+                    <TeamMultiSelect
+                      value={user.teams}
+                      teams={config.teams.filter((team) => team.enabled).map((team) => team.name)}
+                      onChange={(teams) => updateUser(config, setConfig, index, { teams })}
                     />
+                  ) : (
+                    <span className="truncate text-sm text-slate-700">{user.teams.length > 0 ? user.teams.join(", ") : "-"}</span>
+                  )}
+                  {editing ? (
                     <input
-                      value={user.email}
-                      onChange={(event) => updateUser(config, setConfig, index, { email: event.target.value })}
-                      aria-label="邮箱"
-                      className="h-7 w-full rounded-md border border-transparent bg-transparent px-2 text-xs text-slate-500 outline-none hover:border-border focus:border-blue-400 focus:bg-white"
+                      value={user.ownerAliases.join(", ")}
+                      onChange={(event) => updateUser(config, setConfig, index, { ownerAliases: splitList(event.target.value) })}
+                      aria-label="Owner aliases"
+                      className="h-8 rounded-md border border-border px-2 text-sm outline-none focus:border-blue-400"
                     />
+                  ) : (
+                    <span className="truncate text-sm text-slate-700">{user.ownerAliases.join(", ")}</span>
+                  )}
+                  <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={user.enabled}
+                      disabled={!editing}
+                      onChange={(event) => updateUser(config, setConfig, index, { enabled: event.target.checked })}
+                      className="h-4 w-4 rounded border-border disabled:opacity-50"
+                    />
+                    {user.enabled ? "活动" : "停用"}
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingUserKey(editing ? null : userKey)}
+                      aria-label={editing ? "完成编辑" : "编辑用户"}
+                      className="grid h-8 w-8 place-items-center rounded-md border border-border text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      {editing ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfig({ ...config, users: config.users.filter((_, itemIndex) => itemIndex !== index) });
+                        if (editing) setEditingUserKey(null);
+                      }}
+                      aria-label="删除用户"
+                      className="grid h-8 w-8 place-items-center rounded-md border border-border text-rose-500 hover:bg-rose-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
-                <select
-                  value={user.role}
-                  onChange={(event) => updateUser(config, setConfig, index, { role: event.target.value as AdminRole })}
-                  aria-label="角色"
-                  className="h-8 rounded-md border border-border bg-white px-2 text-sm outline-none focus:border-blue-400"
-                >
-                  <option value="super_admin">super_admin</option>
-                  <option value="team_leader">team_leader</option>
-                  <option value="user">user</option>
-                </select>
-                <input
-                  value={user.teams.join(", ")}
-                  onChange={(event) => updateUser(config, setConfig, index, { teams: splitList(event.target.value) })}
-                  aria-label="团队"
-                  className="h-8 rounded-md border border-border px-2 text-sm outline-none focus:border-blue-400"
-                />
-                <input
-                  value={user.ownerAliases.join(", ")}
-                  onChange={(event) => updateUser(config, setConfig, index, { ownerAliases: splitList(event.target.value) })}
-                  aria-label="Owner aliases"
-                  className="h-8 rounded-md border border-border px-2 text-sm outline-none focus:border-blue-400"
-                />
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={user.enabled}
-                    onChange={(event) => updateUser(config, setConfig, index, { enabled: event.target.checked })}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                  {user.enabled ? "活动" : "停用"}
-                </label>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </Panel>
@@ -500,6 +552,75 @@ function UserAvatar({ name, enabled }: { name: string; enabled: boolean }) {
     )}>
       {initials}
     </div>
+  );
+}
+
+function TeamMultiSelect({
+  value,
+  teams,
+  onChange
+}: {
+  value: string[];
+  teams: string[];
+  onChange: (teams: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = new Set(value);
+
+  function toggleTeam(team: string) {
+    const next = new Set(selected);
+    if (next.has(team)) next.delete(team);
+    else next.add(team);
+    onChange(teams.filter((item) => next.has(item)));
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-8 w-full items-center justify-between gap-2 rounded-md border border-border bg-white px-2 text-left text-sm outline-none hover:bg-slate-50 focus:border-blue-400"
+        aria-expanded={open}
+      >
+        <span className="truncate">{value.length > 0 ? value.join(", ") : "未分配团队"}</span>
+        <ChevronTiny open={open} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-9 z-30 w-72 rounded-md border border-border bg-white p-2 shadow-xl">
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {teams.map((team) => (
+              <label key={team} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={selected.has(team)}
+                  onChange={() => toggleTeam(team)}
+                  className="h-4 w-4 rounded border-border"
+                />
+                <span className="truncate">{team}</span>
+              </label>
+            ))}
+          </div>
+          {value.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="mt-2 inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            >
+              <X className="h-4 w-4" />
+              清空团队
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChevronTiny({ open }: { open: boolean }) {
+  return (
+    <span className="grid h-5 w-5 shrink-0 place-items-center text-slate-400">
+      <span className={cn("h-2 w-2 rotate-45 border-b border-r border-current transition-transform", open && "rotate-[225deg]")} />
+    </span>
   );
 }
 

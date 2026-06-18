@@ -78,13 +78,6 @@
       "enabled": true
     },
     {
-      "name": "Optics Team",
-      "owner": "Optics Lead",
-      "parentTeam": "Hardware",
-      "color": "bg-emerald-500",
-      "enabled": true
-    },
-    {
       "name": "Advanced Technology",
       "owner": "Advanced Tech Lead",
       "parentTeam": "",
@@ -113,6 +106,557 @@
       "canEdit": true,
       "canPublish": true,
       "notes": "上云后按登录账号匹配"
+    }
+  ],
+  "users": [
+    {
+      "email": "admin@company.com",
+      "displayName": "Admin",
+      "role": "super_admin",
+      "teams": [],
+      "ownerAliases": [
+        "Admin"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "kai@unitxlabs.com",
+      "displayName": "kai chen",
+      "role": "team_leader",
+      "teams": [
+        "Application Team"
+      ],
+      "ownerAliases": [
+        "kai chen",
+        "kai@unitxlabs.com",
+        "Application Lead"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "qiaolong@unitxlabs.com",
+      "displayName": "Qiaolong (Collin) Luo",
+      "role": "team_leader",
+      "teams": [
+        "Integration Team",
+        "Platform Team"
+      ],
+      "ownerAliases": [
+        "Qiaolong (Collin) Luo",
+        "qiaolong@unitxlabs.com",
+        "Integration Lead",
+        "Platform Lead"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "sen.lin@unitxlabs.com",
+      "displayName": "Sen Lin",
+      "role": "team_leader",
+      "teams": [
+        "Hardware"
+      ],
+      "ownerAliases": [
+        "Sen Lin",
+        "sen.lin@unitxlabs.com",
+        "Hardware Lead"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "xiaojun@unitxlabs.com",
+      "displayName": "Xiaojun (June) Duan",
+      "role": "team_leader",
+      "teams": [
+        "QA Team"
+      ],
+      "ownerAliases": [
+        "Xiaojun (June) Duan",
+        "xiaojun@unitxlabs.com",
+        "QA Lead"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yuanhang@unitxlabs.com",
+      "displayName": "yuanhang jie",
+      "role": "team_leader",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "yuanhang jie",
+        "yuanhang@unitxlabs.com",
+        "AP OPS Lead"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "ziyu.wang@unitxlabs.com",
+      "displayName": "Ziyu Wang",
+      "role": "team_leader",
+      "teams": [
+        "Algorithm Team"
+      ],
+      "ownerAliases": [
+        "Ziyu Wang",
+        "ziyu.wang@unitxlabs.com",
+        "Algorithm Lead"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "chuhao.ye@unitxlabs.com",
+      "displayName": "Chuhao Ye",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "Chuhao Ye",
+        "chuhao.ye@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "haipeng.zhao@unitxlabs.com",
+      "displayName": "haipeng zhao",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "haipeng zhao",
+        "haipeng.zhao@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "jiafu.luo@unitxlabs.com",
+      "displayName": "Jiafu Luo",
+      "role": "user",
+      "teams": [
+        "Application Team"
+      ],
+      "ownerAliases": [
+        "Jiafu Luo",
+        "jiafu.luo@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "jian.zhou@unitxlabs.com",
+      "displayName": "Jian Zhou",
+      "role": "user",
+      "teams": [
+        "Hardware"
+      ],
+      "ownerAliases": [
+        "Jian Zhou",
+        "jian.zhou@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "jiao@unitxlabs.com",
+      "displayName": "jiao huang",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "jiao huang",
+        "jiao@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "jinglin@unitxlabs.com",
+      "displayName": "jinglin yan",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "jinglin yan",
+        "jinglin@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "jinkang@unitxlabs.com",
+      "displayName": "jinkang lu",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "jinkang lu",
+        "jinkang@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "jinming.chen@unitxlabs.com",
+      "displayName": "jinming chen",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "jinming chen",
+        "jinming.chen@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "junchang.wu@unitxlabs.com",
+      "displayName": "Junchang Wu",
+      "role": "user",
+      "teams": [
+        "Application Team"
+      ],
+      "ownerAliases": [
+        "Junchang Wu",
+        "junchang.wu@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "junhong.huang@unitxlabs.com",
+      "displayName": "Junhong (John) Huang",
+      "role": "user",
+      "teams": [
+        "Algorithm Team"
+      ],
+      "ownerAliases": [
+        "Junhong (John) Huang",
+        "junhong.huang@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "junli@unitxlabs.com",
+      "displayName": "junli lin",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "junli lin",
+        "junli@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "liang.zhang@unitxlabs.com",
+      "displayName": "Liang Zhang",
+      "role": "user",
+      "teams": [
+        "QA Team"
+      ],
+      "ownerAliases": [
+        "Liang Zhang",
+        "liang.zhang@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "limin@unitxlabs.com",
+      "displayName": "Limin (Ricky) Wang",
+      "role": "user",
+      "teams": [
+        "Hardware"
+      ],
+      "ownerAliases": [
+        "Limin (Ricky) Wang",
+        "limin@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "liting@unitxlabs.com",
+      "displayName": "liting deng",
+      "role": "user",
+      "teams": [
+        "Platform Team"
+      ],
+      "ownerAliases": [
+        "liting deng",
+        "liting@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "lun@unitxlabs.com",
+      "displayName": "Lun Wu",
+      "role": "user",
+      "teams": [
+        "Algorithm Team"
+      ],
+      "ownerAliases": [
+        "Lun Wu",
+        "lun@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "lunjie@unitxlabs.com",
+      "displayName": "lunjie liu",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "lunjie liu",
+        "lunjie@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "max@unitxlabs.com",
+      "displayName": "Max Zheng",
+      "role": "user",
+      "teams": [],
+      "ownerAliases": [
+        "Max Zheng",
+        "max@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "luopeng@unitxlabs.com",
+      "displayName": "peng luo",
+      "role": "user",
+      "teams": [
+        "Application Team"
+      ],
+      "ownerAliases": [
+        "peng luo",
+        "luopeng@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "qingshan.gao@unitxlabs.com",
+      "displayName": "qingshan gao",
+      "role": "user",
+      "teams": [
+        "Platform Team"
+      ],
+      "ownerAliases": [
+        "qingshan gao",
+        "qingshan.gao@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "song.li@unitxlabs.com",
+      "displayName": "Song Li",
+      "role": "user",
+      "teams": [
+        "Application Team"
+      ],
+      "ownerAliases": [
+        "Song Li",
+        "song.li@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "wei.cai@unitxlabs.com",
+      "displayName": "wei cai",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "wei cai",
+        "wei.cai@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "xiaolei@unitxlabs.com",
+      "displayName": "xiaolei li",
+      "role": "user",
+      "teams": [
+        "Platform Team"
+      ],
+      "ownerAliases": [
+        "xiaolei li",
+        "xiaolei@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "xu.wang@unitxlabs.com",
+      "displayName": "Xu (Chris) Wang",
+      "role": "user",
+      "teams": [
+        "Hardware"
+      ],
+      "ownerAliases": [
+        "Xu (Chris) Wang",
+        "xu.wang@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "xuekun.lv@unitxlabs.com",
+      "displayName": "xuekun lv",
+      "role": "user",
+      "teams": [
+        "Hardware"
+      ],
+      "ownerAliases": [
+        "xuekun lv",
+        "xuekun.lv@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yating@unitxlabs.com",
+      "displayName": "yating li",
+      "role": "user",
+      "teams": [
+        "QA Team"
+      ],
+      "ownerAliases": [
+        "yating li",
+        "yating@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yingkang@unitxlabs.com",
+      "displayName": "yingkang du",
+      "role": "user",
+      "teams": [
+        "Integration Team"
+      ],
+      "ownerAliases": [
+        "yingkang du",
+        "yingkang@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yingqi@unitxlabs.com",
+      "displayName": "yingqi zhou",
+      "role": "user",
+      "teams": [
+        "QA Team"
+      ],
+      "ownerAliases": [
+        "yingqi zhou",
+        "yingqi@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yiqian@unitxlabs.com",
+      "displayName": "Yiqian (Yeechan) Xu",
+      "role": "user",
+      "teams": [
+        "QA Team"
+      ],
+      "ownerAliases": [
+        "Yiqian (Yeechan) Xu",
+        "yiqian@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yisheng@unitxlabs.com",
+      "displayName": "yisheng xie",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "yisheng xie",
+        "yisheng@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "youzhou.chang@unitxlabs.com",
+      "displayName": "youzhou chang",
+      "role": "user",
+      "teams": [
+        "Hardware"
+      ],
+      "ownerAliases": [
+        "youzhou chang",
+        "youzhou.chang@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yuanlong@unitxlabs.com",
+      "displayName": "yuanlong liao",
+      "role": "user",
+      "teams": [
+        "Application Team"
+      ],
+      "ownerAliases": [
+        "yuanlong liao",
+        "yuanlong@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "yuhan@unitxlabs.com",
+      "displayName": "yuhan lin",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "yuhan lin",
+        "yuhan@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "zhiang.li@unitxlabs.com",
+      "displayName": "zhiang(leon) li",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "zhiang(leon) li",
+        "zhiang.li@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "zhicheng@unitxlabs.com",
+      "displayName": "zhicheng gu",
+      "role": "user",
+      "teams": [
+        "AP OPS"
+      ],
+      "ownerAliases": [
+        "zhicheng gu",
+        "zhicheng@unitxlabs.com"
+      ],
+      "enabled": true
+    },
+    {
+      "email": "zhoujie@unitxlabs.com",
+      "displayName": "Zhoujie (Jeremy) Zhou",
+      "role": "user",
+      "teams": [
+        "Platform Team"
+      ],
+      "ownerAliases": [
+        "Zhoujie (Jeremy) Zhou",
+        "zhoujie@unitxlabs.com"
+      ],
+      "enabled": true
     }
   ],
   "settings": {

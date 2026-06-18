@@ -188,7 +188,6 @@ function defaultAdminConfig(): AdminConfig {
       { name: "Algorithm Team", owner: "Algorithm Lead", parentTeam: "Software", color: "bg-blue-500", enabled: true },
       { name: "TPM Team", owner: "TPM Lead", parentTeam: "Software", color: "bg-blue-500", enabled: true },
       { name: "Hardware", owner: "Hardware Lead", parentTeam: "", color: "bg-emerald-500", enabled: true },
-      { name: "Optics Team", owner: "Optics Lead", parentTeam: "Hardware", color: "bg-emerald-500", enabled: true },
       { name: "Advanced Technology", owner: "Advanced Tech Lead", parentTeam: "", color: "bg-violet-500", enabled: true },
       { name: "AP OPS", owner: "AP OPS Lead", parentTeam: "", color: "bg-amber-500", enabled: true }
     ],

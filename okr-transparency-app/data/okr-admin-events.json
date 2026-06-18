@@ -6,6 +6,30 @@
       "actor": "Admin",
       "status": "ok",
       "message": "Admin login",
+      "id": "evt-mqiymbyh-95gw77",
+      "createdAt": "2026-06-18T03:48:10.889Z"
+    },
+    {
+      "type": "config.update",
+      "actor": "Admin Token",
+      "status": "ok",
+      "message": "Updated admin configuration",
+      "id": "evt-mqhsxpuu-5b6hdx",
+      "createdAt": "2026-06-17T08:21:18.246Z"
+    },
+    {
+      "type": "rollback",
+      "actor": "Admin Token",
+      "status": "ok",
+      "message": "Rolled back to previous snapshot",
+      "id": "evt-mqhsxjei-2jzqfp",
+      "createdAt": "2026-06-17T08:21:09.882Z"
+    },
+    {
+      "type": "login",
+      "actor": "Admin",
+      "status": "ok",
+      "message": "Admin login",
       "id": "evt-mqhps3fl-tqrhc7",
       "createdAt": "2026-06-17T06:52:57.057Z"
     },

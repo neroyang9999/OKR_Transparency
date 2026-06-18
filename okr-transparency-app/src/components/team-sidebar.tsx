@@ -2,30 +2,51 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search, UserRound } from "lucide-react";
 import { hrefWithLang, t, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+export type TeamNavMember = {
+  email: string;
+  displayName: string;
+  role: string;
+};
+
+export type TeamNavChild = {
+  name: string;
+  owner: string;
+  color: string;
+  members: TeamNavMember[];
+};
 
 export type TeamNavItem = {
   name: string;
   owner: string;
   color: string;
-  children: Array<{ name: string; owner: string; color: string }>;
+  members: TeamNavMember[];
+  children: TeamNavChild[];
 };
 
 export function TeamSidebar({
   items,
   selectedTeam,
+  selectedMemberEmail,
   lang
 }: {
   items: TeamNavItem[];
   selectedTeam: string;
+  selectedMemberEmail?: string;
   lang: Lang;
 }) {
   const initialOpen = items
-    .filter((item) => item.name === selectedTeam || item.children.some((child) => child.name === selectedTeam))
+    .filter((item) =>
+      item.name === selectedTeam ||
+      item.members.some((member) => member.email === selectedMemberEmail) ||
+      item.children.some((child) => child.name === selectedTeam || child.members.some((member) => member.email === selectedMemberEmail))
+    )
     .map((item) => item.name);
   const [openTeams, setOpenTeams] = useOpenTeams(initialOpen);
+  const [openMemberGroups, setOpenMemberGroups] = useOpenTeams(selectedMemberEmail ? [selectedTeam] : []);
 
   return (
     <aside className="rounded-lg border border-border bg-white p-4 shadow-subtle">
@@ -44,6 +65,7 @@ export function TeamSidebar({
           {items.map((item) => {
             const selected = selectedTeam === item.name;
             const expanded = openTeams.has(item.name);
+            const hasNestedItems = item.children.length > 0 || item.members.length > 0;
 
             return (
               <div key={item.name}>
@@ -68,7 +90,7 @@ export function TeamSidebar({
                       <span className="block truncate text-xs text-muted-foreground">{item.owner}</span>
                     </span>
                   </Link>
-                  {item.children.length > 0 && (
+                  {hasNestedItems && (
                     <button
                       type="button"
                       aria-label={`${expanded ? "Collapse" : "Expand"} ${item.name}`}
@@ -86,26 +108,67 @@ export function TeamSidebar({
                   )}
                 </div>
 
-                {expanded && item.children.length > 0 && (
+                {expanded && hasNestedItems && (
                   <div className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-4">
+                    {item.members.length > 0 && (
+                      <MemberList
+                        teamName={item.name}
+                        members={item.members}
+                        selectedMemberEmail={selectedMemberEmail}
+                        lang={lang}
+                      />
+                    )}
                     {item.children.map((child) => {
                       const selectedChild = selectedTeam === child.name;
+                      const childMembersOpen = openMemberGroups.has(child.name);
                       return (
-                      <Link
-                        key={child.name}
-                        href={hrefWithLang(`/?team=${encodeURIComponent(child.name)}`, lang)}
-                        className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-slate-50",
-                          selectedChild && "bg-blue-50 text-slate-950"
-                        )}
-                      >
-                        <TeamAvatar name={child.name} color={child.color} selected={selectedChild} />
-                        <span className="min-w-0">
-                          <span className="block truncate font-semibold">{child.name}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{child.owner}</span>
-                        </span>
-                      </Link>
-                    );})}
+                        <div key={child.name}>
+                          <div
+                            className={cn(
+                              "flex items-center rounded-md text-sm hover:bg-slate-50",
+                              selectedChild && !selectedMemberEmail && "bg-blue-50 text-slate-950"
+                            )}
+                          >
+                            <Link
+                              href={hrefWithLang(`/?team=${encodeURIComponent(child.name)}`, lang)}
+                              className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
+                            >
+                              <TeamAvatar name={child.name} color={child.color} selected={selectedChild && !selectedMemberEmail} />
+                              <span className="min-w-0">
+                                <span className="block truncate font-semibold">{child.name}</span>
+                                <span className="block truncate text-xs text-muted-foreground">{child.owner}</span>
+                              </span>
+                            </Link>
+                            {child.members.length > 0 && (
+                              <button
+                                type="button"
+                                aria-label={`${childMembersOpen ? "Collapse" : "Expand"} ${child.name} members`}
+                                aria-expanded={childMembersOpen}
+                                onClick={() => setOpenMemberGroups((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(child.name)) next.delete(child.name);
+                                  else next.add(child.name);
+                                  return next;
+                                })}
+                                className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white hover:text-slate-700"
+                              >
+                                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !childMembersOpen && "-rotate-90")} />
+                              </button>
+                            )}
+                          </div>
+                          {childMembersOpen && (
+                            <div className="ml-7 mt-1 space-y-1 border-l border-slate-100 pl-3">
+                              <MemberList
+                                teamName={child.name}
+                                members={child.members}
+                                selectedMemberEmail={selectedMemberEmail}
+                                lang={lang}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -119,6 +182,44 @@ export function TeamSidebar({
 
 function useOpenTeams(initialOpen: string[]) {
   return useState<Set<string>>(() => new Set(initialOpen));
+}
+
+function MemberList({
+  teamName,
+  members,
+  selectedMemberEmail,
+  lang
+}: {
+  teamName: string;
+  members: TeamNavMember[];
+  selectedMemberEmail?: string;
+  lang: Lang;
+}) {
+  return (
+    <div className="space-y-1">
+      {members.map((member) => {
+        const selected = member.email === selectedMemberEmail;
+        return (
+          <Link
+            key={`${teamName}-${member.email}`}
+            href={hrefWithLang(`/?team=${encodeURIComponent(teamName)}&member=${encodeURIComponent(member.email)}`, lang)}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-slate-50",
+              selected && "bg-blue-50 text-slate-950"
+            )}
+          >
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500">
+              <UserRound className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{member.displayName}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{member.email}</span>
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 function TeamAvatar({ name, color, selected }: { name: string; color?: string; selected?: boolean }) {
