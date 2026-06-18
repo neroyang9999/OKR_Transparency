@@ -16,7 +16,15 @@ const navItems = [
   { href: "/search", id: "search", labelKey: "search", icon: Search }
 ] as const;
 
-export function AppShell({ children, active }: { children: React.ReactNode; active: string }) {
+export function AppShell({
+  children,
+  active,
+  hideNavigation = false
+}: {
+  children: React.ReactNode;
+  active: string;
+  hideNavigation?: boolean;
+}) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const lang = normalizeLang(searchParams.get("lang") ?? undefined);
@@ -48,41 +56,45 @@ export function AppShell({ children, active }: { children: React.ReactNode; acti
             </div>
           </Link>
           <nav className="flex min-w-0 items-center gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const label = t(lang, item.labelKey);
-              return (
-                <Link
-                  key={item.href}
-                  href={hrefWithLang(item.href, lang)}
-                  className={cn(
-                    "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-                    active === item.id && "bg-slate-950 text-white hover:bg-slate-950 hover:text-white"
-                  )}
-                  title={label}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{label}</span>
-                </Link>
-              );
-            })}
-            {session?.user?.email ? (
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
-                title={session.user.email}
-              >
-                <span className="truncate">{session.user.email}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void signIn("google")}
-                className="hidden h-9 items-center rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
-              >
-                登录
-              </button>
+            {!hideNavigation && (
+              <>
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const label = t(lang, item.labelKey);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={hrefWithLang(item.href, lang)}
+                      className={cn(
+                        "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                        active === item.id && "bg-slate-950 text-white hover:bg-slate-950 hover:text-white"
+                      )}
+                      title={label}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden sm:inline">{label}</span>
+                    </Link>
+                  );
+                })}
+                {session?.user?.email ? (
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
+                    title={session.user.email}
+                  >
+                    <span className="truncate">{session.user.email}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void signIn("google")}
+                    className="hidden h-9 items-center rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
+                  >
+                    登录
+                  </button>
+                )}
+              </>
             )}
             <LanguageToggle pathname={pathname} searchParams={searchParams} />
           </nav>

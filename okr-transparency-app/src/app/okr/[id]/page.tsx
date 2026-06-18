@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, CalendarDays } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { LoginPanel } from "@/components/login-panel";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
-import { readAdminConfig } from "@/lib/admin/config";
+import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { readProgressNotesForObjective, type ProgressNote } from "@/lib/okr/progress-notes";
 import { readOkrSnapshot } from "@/lib/okr/store";
@@ -17,20 +18,28 @@ export default async function OkrDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ lang?: string }>;
 }) {
-  const [{ id }, query, snapshot, adminConfig] = await Promise.all([
+  const [{ id }, query, pageAccess] = await Promise.all([
     params,
     searchParams,
-    readOkrSnapshot(),
-    readAdminConfig()
+    getPageAccess()
   ]);
   const lang = normalizeLang(query.lang);
+  if (!pageAccess.access) {
+    return (
+      <AppShell active="teams" hideNavigation>
+        <LoginPanel variant={pageAccess.sessionUser ? "denied" : "login"} email={pageAccess.sessionUser?.email} />
+      </AppShell>
+    );
+  }
+
+  const snapshot = await readOkrSnapshot();
   const record = snapshot.records.find((item) => item.okr_id === decodeURIComponent(id));
 
   if (!record) redirect(hrefWithLang("/teams", lang));
 
   const parent = record.parent_id ? snapshot.records.find((item) => item.okr_id === record.parent_id) : null;
   const children = snapshot.records.filter((item) => item.parent_id === record.okr_id);
-  const progressNotes = await readProgressNotesForObjective(record.team, adminConfig.defaultPeriodId, record.okr_id);
+  const progressNotes = await readProgressNotesForObjective(record.team, pageAccess.adminConfig.defaultPeriodId, record.okr_id);
   const title = record.kr || record.objective;
 
   return (

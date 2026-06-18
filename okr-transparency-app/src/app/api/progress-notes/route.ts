@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { requireApiAccess } from "../../../lib/admin/api-access";
 import { readAdminConfig } from "../../../lib/admin/config";
 import { canEditOwner, canManageTeam, resolveRequestAccess, validateEditablePeriod } from "../../../lib/admin/permissions";
 import { readPeriodRecords } from "../../../lib/okr/drafts";
@@ -7,6 +8,9 @@ import { readOkrSnapshot } from "../../../lib/okr/store";
 import type { ConfidenceLevel } from "../../../lib/okr/types";
 
 export async function GET(request: NextRequest) {
+  const authorization = await requireApiAccess(request);
+  if (!authorization.ok) return authorization.response;
+
   const searchParams = request.nextUrl.searchParams;
   const team = searchParams.get("team") ?? "";
   const periodId = searchParams.get("period") ?? "";

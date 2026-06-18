@@ -33,6 +33,8 @@ Google OAuth callback URL:
 
 `http://localhost:3000/api/auth/callback/google`
 
+While Google OAuth is not configured, local development can use the credentials fallback. In non-production, the default fallback is `admin` / `1234`; set `OKR_LOCAL_ADMIN_USERNAME` and `OKR_LOCAL_ADMIN_PASSWORD` to override it. In production, the credentials fallback is disabled unless both environment variables are explicitly set.
+
 The admin backend stores role rules in `data/okr-admin-config.json`:
 
 - `super_admin`: all admin, edit, publish, sync, and rollback permissions.

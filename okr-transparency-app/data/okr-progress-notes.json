@@ -4,6 +4,18 @@
     {
       "team": "Software",
       "periodId": "2026-q3",
+      "objectiveId": "SW-KR1",
+      "weekStart": "2026-06-15",
+      "summary": "进展正常",
+      "status": "Yellow",
+      "risks": "1",
+      "nextSteps": "2",
+      "updatedBy": "Admin",
+      "updatedAt": "2026-06-18T07:09:30.376Z"
+    },
+    {
+      "team": "Software",
+      "periodId": "2026-q3",
       "objectiveId": "SW-KR3",
       "weekStart": "2026-06-15",
       "summary": "暂无 ，高风险",

@@ -1,5 +1,7 @@
 import { AppShell } from "@/components/app-shell";
+import { LoginPanel } from "@/components/login-panel";
 import { OkrRecordCard } from "@/components/okr-record-card";
+import { getPageAccess } from "@/lib/admin/page-access";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import { searchOkrs } from "@/lib/okr/search";
 import { confidenceLevels, okrTypes, type ConfidenceLevel, type OkrType } from "@/lib/okr/types";
@@ -10,7 +12,16 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<{ q?: string; team?: string; confidence?: string; type?: string; lang?: string }>;
 }) {
-  const [params, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const [params, pageAccess] = await Promise.all([searchParams, getPageAccess()]);
+  if (!pageAccess.access) {
+    return (
+      <AppShell active="search" hideNavigation>
+        <LoginPanel variant={pageAccess.sessionUser ? "denied" : "login"} email={pageAccess.sessionUser?.email} />
+      </AppShell>
+    );
+  }
+
+  const data = await getOkrTreeResponse();
   const lang = normalizeLang(params.lang);
   const results = searchOkrs(data.records, {
     q: params.q ?? "",

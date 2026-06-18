@@ -24,8 +24,18 @@ describe("/api/progress-notes", () => {
     vi.clearAllMocks();
   });
 
-  it("rejects GET requests without required identifiers", async () => {
+  it("rejects unauthorized GET requests", async () => {
     const response = await GET(new NextRequest("http://localhost/api/progress-notes"));
+    await expect(response.json()).resolves.toEqual({ error: "Login required" });
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects authorized GET requests without required identifiers", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/progress-notes", {
+      headers: {
+        "x-admin-token": "dev-admin-token"
+      }
+    }));
     await expect(response.json()).resolves.toEqual({ error: "team, period, and objective are required" });
     expect(response.status).toBe(400);
   });
@@ -46,7 +56,11 @@ describe("/api/progress-notes", () => {
       }
     ]);
 
-    const response = await GET(new NextRequest("http://localhost/api/progress-notes?team=Software&period=2026-q3&objective=SW-O1"));
+    const response = await GET(new NextRequest("http://localhost/api/progress-notes?team=Software&period=2026-q3&objective=SW-O1", {
+      headers: {
+        "x-admin-token": "dev-admin-token"
+      }
+    }));
     await expect(response.json()).resolves.toEqual({
       notes: [expect.objectContaining({ objectiveId: "SW-O1", summary: "Weekly update" })]
     });

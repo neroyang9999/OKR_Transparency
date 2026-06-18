@@ -5,14 +5,16 @@ import {
   Users
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { LoginPanel } from "@/components/login-panel";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { ProgressNoteCard } from "@/components/progress-note-card";
 import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
-import { readAdminConfig, type AdminConfig, type AdminUser } from "@/lib/admin/config";
-import { getAccessForSessionUser, getCurrentSessionUser, getTeamEditPolicy } from "@/lib/admin/permissions";
+import { type AdminConfig, type AdminUser } from "@/lib/admin/config";
+import { getPageAccess } from "@/lib/admin/page-access";
+import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
@@ -27,13 +29,11 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string; member?: string }>;
 }) {
-  const [{ team, period, lang: rawLang, mode, member }, data, progressNotes, adminConfig, sessionUser] = await Promise.all([
+  const [{ team, period, lang: rawLang, mode, member }, pageAccess] = await Promise.all([
     searchParams,
-    getOkrTreeResponse(),
-    readProgressNotes(),
-    readAdminConfig(),
-    getCurrentSessionUser()
+    getPageAccess()
   ]);
+  const { adminConfig, sessionUser, access } = pageAccess;
   const lang = normalizeLang(rawLang ?? adminConfig.settings.defaultLanguage);
   const selectedTeam = normalizeTeam(team, adminConfig);
   const selectedPeriod = normalizePeriodFromConfig(period, adminConfig);
@@ -42,7 +42,19 @@ export default async function HomePage({
   const teamNav = buildTeamNav(adminConfig);
   const selectedMember = normalizeMember(member, selectedTeam, adminConfig);
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
-  const access = getAccessForSessionUser(adminConfig, sessionUser);
+
+  if (!access) {
+    return (
+      <AppShell active="overview" hideNavigation>
+        <LoginPanel variant={sessionUser ? "denied" : "login"} email={sessionUser?.email} />
+      </AppShell>
+    );
+  }
+
+  const [data, progressNotes] = await Promise.all([
+    getOkrTreeResponse(),
+    readProgressNotes()
+  ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const draft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
   const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];

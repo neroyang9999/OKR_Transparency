@@ -1,5 +1,7 @@
 import { AppShell } from "@/components/app-shell";
+import { LoginPanel } from "@/components/login-panel";
 import { OkrMap } from "@/components/okr-map";
+import { getPageAccess } from "@/lib/admin/page-access";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readOkrSnapshot } from "@/lib/okr/store";
 import { hrefWithLang, normalizeLang, t, type Lang } from "@/lib/i18n";
@@ -13,7 +15,15 @@ export default async function MapPage({
 }: {
   searchParams: Promise<{ lang?: string; period?: string; team?: string }>;
 }) {
-  const params = await searchParams;
+  const [params, pageAccess] = await Promise.all([searchParams, getPageAccess()]);
+  if (!pageAccess.access) {
+    return (
+      <AppShell active="okrMap" hideNavigation>
+        <LoginPanel variant={pageAccess.sessionUser ? "denied" : "login"} email={pageAccess.sessionUser?.email} />
+      </AppShell>
+    );
+  }
+
   const lang = normalizeLang(params.lang);
   const selectedPeriod = normalizePeriod(params.period);
   const snapshot = await readOkrSnapshot();

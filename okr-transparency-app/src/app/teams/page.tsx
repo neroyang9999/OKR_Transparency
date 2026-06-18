@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowUpRight, CalendarClock, CircleAlert, GitBranch } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { LoginPanel } from "@/components/login-panel";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
+import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { getOkrTreeResponse } from "@/lib/okr/store";
@@ -14,7 +16,16 @@ export default async function TeamsPage({
 }: {
   searchParams: Promise<{ team?: string; lang?: string }>;
 }) {
-  const [{ team, lang: rawLang }, data] = await Promise.all([searchParams, getOkrTreeResponse()]);
+  const [{ team, lang: rawLang }, pageAccess] = await Promise.all([searchParams, getPageAccess()]);
+  if (!pageAccess.access) {
+    return (
+      <AppShell active="teams" hideNavigation>
+        <LoginPanel variant={pageAccess.sessionUser ? "denied" : "login"} email={pageAccess.sessionUser?.email} />
+      </AppShell>
+    );
+  }
+
+  const data = await getOkrTreeResponse();
   const lang = normalizeLang(rawLang);
   const allLabel = t(lang, "all");
   const selectedTeam = team ?? allLabel;
