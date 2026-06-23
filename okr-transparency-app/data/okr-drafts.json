@@ -5,7 +5,7 @@
       "version": 1,
       "team": "Software",
       "periodId": "2026-q3",
-      "updatedAt": "2026-06-17T03:52:53.588Z",
+      "updatedAt": "2026-06-23T06:19:12.860Z",
       "objectives": [
         {
           "id": "SW-KR1",
@@ -27,9 +27,9 @@
               "baseline": "",
               "target": "",
               "actual": "",
-              "progress": 50,
+              "progress": 30,
               "confidence": "Yellow",
-              "weight": 50,
+              "weight": 33.3,
               "risks": "",
               "decisionsNeeded": ""
             },
@@ -40,9 +40,22 @@
               "baseline": "",
               "target": "",
               "actual": "",
-              "progress": 22,
+              "progress": 60,
               "confidence": "Yellow",
-              "weight": 50,
+              "weight": 33.3,
+              "risks": "",
+              "decisionsNeeded": ""
+            },
+            {
+              "id": "SW-KR1-KRMQQ97807-3",
+              "title": "KR3 test",
+              "owner": "Software Lead",
+              "baseline": "",
+              "target": "",
+              "actual": "",
+              "progress": null,
+              "confidence": "Yellow",
+              "weight": 33.4,
               "risks": "",
               "decisionsNeeded": ""
             }

@@ -17,6 +17,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const localAdmin = getLocalAdminCredentials();
 
         if (localAdmin && safeEquals(username, localAdmin.username) && safeEquals(password, localAdmin.password)) {
+          logAuthEvent("info", "credentials.authorize.success", "Credentials login accepted", { username });
           return {
             id: "local-admin",
             name: "Admin",
@@ -24,10 +25,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           };
         }
 
+        logAuthEvent("warn", "credentials.authorize.failed", "Credentials login rejected", {
+          username,
+          localAdminConfigured: Boolean(localAdmin)
+        });
         return null;
       }
     })
   ],
+  events: {
+    async signIn(message) {
+      await logAuthEvent("info", "nextauth.sign_in", "NextAuth sign-in event", {
+        provider: message.account?.provider,
+        email: message.user.email
+      });
+    },
+    async signOut() {
+      await logAuthEvent("info", "nextauth.sign_out", "NextAuth sign-out event");
+    }
+  },
+  logger: {
+    error(error) {
+      logAuthEvent("error", "nextauth.error", "NextAuth error", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    },
+    warn(code) {
+      logAuthEvent("warn", "nextauth.warn", "NextAuth warning", { code });
+    },
+    debug(code, metadata) {
+      logAuthEvent("debug", "nextauth.debug", "NextAuth debug", { code, metadata });
+    }
+  },
   trustHost: true,
   secret: process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "production" ? undefined : "dev-auth-secret-change-me")
 });
@@ -45,4 +76,18 @@ function safeEquals(left: string, right: string) {
   const rightBuffer = Buffer.from(right);
 
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+async function logAuthEvent(
+  level: "debug" | "info" | "warn" | "error",
+  event: string,
+  message: string,
+  details?: Record<string, unknown>
+) {
+  try {
+    const { writeAppLog } = await import("./src/lib/app-log");
+    await writeAppLog({ level, scope: "auth", event, message, details });
+  } catch {
+    // Logging must not block login.
+  }
 }

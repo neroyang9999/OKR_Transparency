@@ -8,10 +8,10 @@
       "weekStart": "2026-06-15",
       "summary": "进展正常",
       "status": "Yellow",
-      "risks": "1",
-      "nextSteps": "2",
+      "risks": "人力不够",
+      "nextSteps": "提高质量",
       "updatedBy": "Admin",
-      "updatedAt": "2026-06-18T07:09:30.376Z"
+      "updatedAt": "2026-06-18T08:45:50.695Z"
     },
     {
       "team": "Software",

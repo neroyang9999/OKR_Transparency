@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn, signOut } from "next-auth/react";
 import { LogIn } from "lucide-react";
@@ -20,24 +20,45 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const authOrigin = process.env.NEXT_PUBLIC_AUTH_ORIGIN;
+    if (!authOrigin || !isLoopbackHost(window.location.hostname)) return;
+
+    const nextUrl = new URL(window.location.href);
+    const targetOrigin = new URL(authOrigin);
+    nextUrl.protocol = targetOrigin.protocol;
+    nextUrl.host = targetOrigin.host;
+    window.location.replace(nextUrl.toString());
+  }, []);
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      username,
-      password,
-      redirect: false
-    });
+    try {
+      const authOrigin = process.env.NEXT_PUBLIC_AUTH_ORIGIN;
+      if (authOrigin && isLoopbackHost(window.location.hostname)) {
+        const nextUrl = new URL(window.location.href);
+        const targetOrigin = new URL(authOrigin);
+        nextUrl.protocol = targetOrigin.protocol;
+        nextUrl.host = targetOrigin.host;
+        window.location.assign(nextUrl.toString());
+        return;
+      }
 
-    setSubmitting(false);
-    if (result?.error) {
-      setError(copy.invalid);
-      return;
+      const authenticated = await signInWithCredentials(username, password, window.location.href);
+      if (!authenticated) {
+        setError(copy.invalid);
+        return;
+      }
+
+      window.location.reload();
+    } catch {
+      setError(copy.unavailable);
+    } finally {
+      setSubmitting(false);
     }
-
-    window.location.reload();
   }
 
   return (
@@ -123,6 +144,7 @@ const copies = {
     submit: "登录",
     submitting: "登录中...",
     invalid: "账号或密码不正确",
+    unavailable: "登录服务暂时不可用，请刷新后重试",
     google: "使用 Google 登录",
     signOut: "退出当前账号"
   },
@@ -136,7 +158,50 @@ const copies = {
     submit: "Sign in",
     submitting: "Signing in...",
     invalid: "Incorrect username or password",
+    unavailable: "Sign-in service is temporarily unavailable. Refresh and try again.",
     google: "Sign in with Google",
     signOut: "Sign out"
   }
 } as const;
+
+function isLoopbackHost(hostname: string) {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+}
+
+async function signInWithCredentials(username: string, password: string, callbackUrl: string) {
+  const csrfResponse = await fetch("/api/auth/csrf", {
+    credentials: "include"
+  });
+  if (!csrfResponse.ok) throw new Error("CSRF request failed");
+
+  const csrf = await csrfResponse.json() as { csrfToken?: string };
+  if (!csrf.csrfToken) throw new Error("Missing CSRF token");
+
+  const body = new URLSearchParams({
+    csrfToken: csrf.csrfToken,
+    username,
+    password,
+    redirect: "false",
+    callbackUrl
+  });
+
+  const loginResponse = await fetch("/api/auth/callback/credentials", {
+    method: "POST",
+    body,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    }
+  });
+
+  if (!loginResponse.ok && !loginResponse.redirected) return false;
+
+  const sessionResponse = await fetch("/api/auth/session", {
+    credentials: "include",
+    cache: "no-store"
+  });
+  if (!sessionResponse.ok) return false;
+
+  const session = await sessionResponse.json() as { user?: { email?: string | null } };
+  return Boolean(session.user?.email);
+}

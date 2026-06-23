@@ -3,7 +3,7 @@
   "meta": {
     "status": "ok",
     "source": "snapshot",
-    "lastSyncedAt": "2026-06-17T03:45:48.110Z",
+    "lastSyncedAt": "2026-06-18T08:31:50.254Z",
     "message": "Published Software OKR from page editor",
     "rowCount": 39
   },
@@ -623,13 +623,13 @@
       "baseline": "",
       "target": "",
       "actual": "",
-      "score": 0.36,
+      "score": 0.45,
       "confidence": "Yellow",
       "dependencies": "",
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR1-KRMQEKKCAC-1",
@@ -643,13 +643,13 @@
       "baseline": "",
       "target": "",
       "actual": "",
-      "score": 0.5,
+      "score": 0.3,
       "confidence": "Yellow",
       "dependencies": "",
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR1-KRMQEKKERW-2",
@@ -663,13 +663,13 @@
       "baseline": "",
       "target": "",
       "actual": "",
-      "score": 0.22,
+      "score": 0.6,
       "confidence": "Yellow",
       "dependencies": "",
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR2",
@@ -689,7 +689,7 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR2-KRMQEKKHQN-1",
@@ -709,7 +709,7 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR2-KRMQEKKJ7M-2",
@@ -729,7 +729,7 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR3",
@@ -749,7 +749,7 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR3-KRMQEKKLY6-1",
@@ -769,7 +769,7 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     },
     {
       "okr_id": "SW-KR3-KRMQEKKNIR-2",
@@ -789,7 +789,7 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-17"
+      "last_update": "2026-06-18"
     }
   ]
 }

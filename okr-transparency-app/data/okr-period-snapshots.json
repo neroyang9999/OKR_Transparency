@@ -3,7 +3,7 @@
   "periods": [
     {
       "periodId": "2026-q3",
-      "updatedAt": "2026-06-17T03:52:53.578Z",
+      "updatedAt": "2026-06-23T06:19:12.844Z",
       "records": [
         {
           "okr_id": "APPLICATION-TEAM-OMQEL50BO",
@@ -260,13 +260,13 @@
           "baseline": "",
           "target": "",
           "actual": "",
-          "score": 0.36,
+          "score": 0.3,
           "confidence": "Yellow",
           "dependencies": "",
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR1-KRMQEKKCAC-1",
@@ -280,13 +280,13 @@
           "baseline": "",
           "target": "",
           "actual": "",
-          "score": 0.5,
+          "score": 0.3,
           "confidence": "Yellow",
           "dependencies": "",
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR1-KRMQEKKERW-2",
@@ -300,13 +300,33 @@
           "baseline": "",
           "target": "",
           "actual": "",
-          "score": 0.22,
+          "score": 0.6,
           "confidence": "Yellow",
           "dependencies": "",
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
+        },
+        {
+          "okr_id": "SW-KR1-KRMQQ97807-3",
+          "parent_id": "SW-KR1",
+          "level": "Team",
+          "team": "Software",
+          "objective": "提升 EOL release 质量，减少 escaped defects",
+          "kr": "KR3 test",
+          "type": "Aspirational",
+          "owner": "Software Lead",
+          "baseline": "",
+          "target": "",
+          "actual": "",
+          "score": null,
+          "confidence": "Yellow",
+          "dependencies": "",
+          "risks": "",
+          "decisions_needed": "",
+          "source_doc_url": "page-edit",
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR2",
@@ -326,7 +346,7 @@
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR2-KRMQEKKHQN-1",
@@ -346,7 +366,7 @@
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR2-KRMQEKKJ7M-2",
@@ -366,7 +386,7 @@
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR3",
@@ -386,7 +406,7 @@
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR3-KRMQEKKLY6-1",
@@ -406,7 +426,7 @@
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         },
         {
           "okr_id": "SW-KR3-KRMQEKKNIR-2",
@@ -426,7 +446,7 @@
           "risks": "",
           "decisions_needed": "",
           "source_doc_url": "page-edit",
-          "last_update": "2026-06-17"
+          "last_update": "2026-06-23"
         }
       ]
     }

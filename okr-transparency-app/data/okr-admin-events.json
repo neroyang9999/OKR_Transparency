@@ -2,6 +2,30 @@
   "version": 1,
   "events": [
     {
+      "type": "publish",
+      "actor": "Admin",
+      "status": "ok",
+      "message": "Published Software 2026-q3",
+      "id": "evt-mqq97tk4-vv2ott",
+      "createdAt": "2026-06-23T06:19:12.868Z"
+    },
+    {
+      "type": "publish",
+      "actor": "Admin",
+      "status": "ok",
+      "message": "Published Software 2026-q3",
+      "id": "evt-mqj8r474-g8vb2t",
+      "createdAt": "2026-06-18T08:31:50.272Z"
+    },
+    {
+      "type": "publish",
+      "actor": "Admin",
+      "status": "ok",
+      "message": "Published Software 2026-q3",
+      "id": "evt-mqj8qcjs-0lceg3",
+      "createdAt": "2026-06-18T08:31:14.440Z"
+    },
+    {
       "type": "login",
       "actor": "Admin",
       "status": "ok",

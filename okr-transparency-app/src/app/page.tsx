@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
+import { OkrDetailDrawer, OkrDetailLink } from "@/components/okr-detail-drawer";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { ProgressNoteCard } from "@/components/progress-note-card";
 import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
@@ -27,9 +28,9 @@ import { cn } from "@/lib/utils";
 export default async function HomePage({
   searchParams
 }: {
-  searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string; member?: string }>;
+  searchParams: Promise<{ team?: string; period?: string; lang?: string; mode?: string; member?: string; detail?: string }>;
 }) {
-  const [{ team, period, lang: rawLang, mode, member }, pageAccess] = await Promise.all([
+  const [{ team, period, lang: rawLang, mode, member, detail }, pageAccess] = await Promise.all([
     searchParams,
     getPageAccess()
   ]);
@@ -73,6 +74,15 @@ export default async function HomePage({
     ? periodRecords.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
     : [];
   const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
+  const detailHref = (okrId: string) => hrefWithLang(
+    buildOverviewHref({
+      team: selectedTeam,
+      period: selectedPeriod,
+      member: selectedMember?.email,
+      detail: okrId
+    }),
+    lang
+  );
 
   return (
     <AppShell active="overview">
@@ -130,6 +140,7 @@ export default async function HomePage({
                   selectedPeriod={selectedPeriod}
                   progressNotes={progressNotes}
                   showProgressNotes={adminConfig.settings.allowProgressNotes}
+                  detailHref={detailHref}
                   lang={lang}
                 />
               ))}
@@ -161,6 +172,13 @@ export default async function HomePage({
               )}
             </div>
           )}
+          <OkrDetailDrawer
+            records={periodRecords}
+            progressNotes={progressNotes}
+            selectedPeriod={selectedPeriod}
+            selectedDetailId={detail}
+            lang={lang}
+          />
             </>
           )}
         </section>
@@ -176,6 +194,7 @@ function ObjectiveBlock({
   selectedPeriod,
   progressNotes,
   showProgressNotes,
+  detailHref,
   lang
 }: {
   index: number;
@@ -184,6 +203,7 @@ function ObjectiveBlock({
   selectedPeriod: string;
   progressNotes: ProgressNote[];
   showProgressNotes: boolean;
+  detailHref: (okrId: string) => string;
   lang: Lang;
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
@@ -212,12 +232,12 @@ function ObjectiveBlock({
             <ConfidenceBadge value={objective.confidence} />
             <span>{t(lang, "score")} <Score value={objective.score} /></span>
           </div>
-          <Link
-            href={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
+          <OkrDetailLink
+            href={detailHref(objective.okr_id)}
             className="mt-2 block text-xl font-semibold leading-8 text-slate-950 hover:text-blue-700"
           >
             {t(lang, "targetPrefix")}{translateText(objective.objective, lang)}
-          </Link>
+          </OkrDetailLink>
           {alignedRecord && <AlignmentPill record={alignedRecord} parent={alignedParent} lang={lang} />}
           <div className="mt-3 h-2 max-w-3xl overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
@@ -225,7 +245,7 @@ function ObjectiveBlock({
 
           <div className="mt-5 space-y-3 border-y border-border py-3">
             {children.filter((record) => record.kr).map((kr) => (
-              <KRRow key={kr.okr_id} kr={kr} lang={lang} />
+              <KRRow key={kr.okr_id} kr={kr} detailHref={detailHref(kr.okr_id)} lang={lang} />
             ))}
           </div>
 
@@ -247,13 +267,13 @@ function ObjectiveBlock({
   );
 }
 
-function KRRow({ kr, lang }: { kr: OkrRecord; lang: Lang }) {
+function KRRow({ kr, detailHref, lang }: { kr: OkrRecord; detailHref: string; lang: Lang }) {
   const progress = kr.score === null ? 0 : Math.round(kr.score * 100);
   const tone = kr.confidence === "Green" ? "bg-emerald-400" : kr.confidence === "Red" ? "bg-rose-400" : "bg-blue-400";
 
   return (
-    <Link
-      href={hrefWithLang(`/okr/${encodeURIComponent(kr.okr_id)}`, lang)}
+    <OkrDetailLink
+      href={detailHref}
       className="block rounded-md border border-transparent px-3 py-3 transition hover:border-blue-100 hover:bg-slate-50"
     >
       <div className="flex items-start justify-between gap-4">
@@ -273,7 +293,7 @@ function KRRow({ kr, lang }: { kr: OkrRecord; lang: Lang }) {
           <div className={cn("h-full rounded-full", tone)} style={{ width: `${progress}%` }} />
         </div>
       </div>
-    </Link>
+    </OkrDetailLink>
   );
 }
 
@@ -429,6 +449,26 @@ function normalizePeriodFromConfig(period: string | undefined, config: AdminConf
 
 function getConfiguredPeriods(config: AdminConfig): Period[] {
   return config.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
+}
+
+function buildOverviewHref({
+  team,
+  period,
+  member,
+  detail
+}: {
+  team: string;
+  period: string;
+  member?: string;
+  detail: string;
+}) {
+  const params = new URLSearchParams({
+    team,
+    period,
+    detail
+  });
+  if (member) params.set("member", member);
+  return `/?${params.toString()}`;
 }
 
 function buildTeamNav(config: AdminConfig): TeamNavItem[] {
