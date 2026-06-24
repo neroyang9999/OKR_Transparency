@@ -4,12 +4,22 @@ import type { OkrSnapshot, OkrTreeResponse } from "./types";
 import { parseCsv } from "./csv";
 import { normalizeAndValidate } from "./normalize";
 import { buildOkrTree, getOkrStats } from "./tree";
+import { readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
+import { isFirestoreStorageEnabled } from "../storage/mode";
 
 const dataDir = path.join(process.cwd(), "data");
 const snapshotPath = path.join(dataDir, "okr-snapshot.json");
 const samplePath = path.join(dataDir, "sample-okrs.csv");
+const snapshotDocumentPath = "okrSnapshots/current";
 
 export async function readOkrSnapshot(): Promise<OkrSnapshot> {
+  if (isFirestoreStorageEnabled()) {
+    const snapshot = await readFirestoreDocument<OkrSnapshot>(snapshotDocumentPath);
+    if (snapshot) return snapshot;
+    if (!hasConfiguredSource()) return readSampleSnapshot();
+    return emptyConfiguredSnapshot();
+  }
+
   try {
     const snapshotText = await fs.readFile(snapshotPath, "utf8");
     const snapshot = JSON.parse(snapshotText) as OkrSnapshot;
@@ -48,6 +58,11 @@ async function readSampleSnapshot(): Promise<OkrSnapshot> {
 }
 
 export async function writeOkrSnapshot(snapshot: OkrSnapshot) {
+  if (isFirestoreStorageEnabled()) {
+    await writeFirestoreDocument(snapshotDocumentPath, snapshot);
+    return;
+  }
+
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8");
 }
@@ -59,5 +74,19 @@ export async function getOkrTreeResponse(): Promise<OkrTreeResponse> {
     records: snapshot.records,
     tree: buildOkrTree(snapshot.records),
     stats: getOkrStats(snapshot.records)
+  };
+}
+
+function emptyConfiguredSnapshot(): OkrSnapshot {
+  return {
+    version: 1,
+    meta: {
+      status: "empty",
+      source: "snapshot",
+      lastSyncedAt: new Date().toISOString(),
+      message: "No Firestore OKR snapshot found. Run sync or migrate local JSON data.",
+      rowCount: 0
+    },
+    records: []
   };
 }

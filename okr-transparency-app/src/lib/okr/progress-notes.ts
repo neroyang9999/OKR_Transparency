@@ -1,8 +1,11 @@
 import { promises as fs } from "fs";
 import path from "path";
 import type { ConfidenceLevel } from "./types";
+import { documentIdFromParts } from "../storage/document-ids";
+import { listFirestoreCollection, writeFirestoreDocument } from "../storage/firestore";
+import { isFirestoreStorageEnabled } from "../storage/mode";
 
-const dataDir = path.join(process.cwd(), "data");
+const dataDir = path.join(/* turbopackIgnore: true */ process.cwd(), "data");
 const progressNotesPath = path.join(dataDir, "okr-progress-notes.json");
 
 export type ProgressNote = {
@@ -43,6 +46,10 @@ type ProgressNoteStoreOptions = {
 };
 
 export async function readProgressNotes(options: ProgressNoteStoreOptions = {}) {
+  if (shouldUseFirestore(options)) {
+    return sortProgressNotes(await listFirestoreCollection<ProgressNote>("okrProgressNotes"));
+  }
+
   return sortProgressNotes((await readProgressNoteFile(options)).notes);
 }
 
@@ -52,6 +59,15 @@ export async function readProgressNotesForObjective(
   objectiveId: string,
   options: ProgressNoteStoreOptions = {}
 ) {
+  if (shouldUseFirestore(options)) {
+    const notes = await listFirestoreCollection<ProgressNote>("okrProgressNotes");
+    return sortProgressNotes(notes.filter((note) =>
+      note.team === team &&
+      note.periodId === periodId &&
+      note.objectiveId === objectiveId
+    ));
+  }
+
   const file = await readProgressNoteFile(options);
   return sortProgressNotes(file.notes.filter((note) =>
     note.team === team &&
@@ -77,7 +93,6 @@ export async function writeProgressNote(input: {
   }
 
   const now = options.now ?? new Date();
-  const file = await readProgressNoteFile(options);
   const nextNote: ProgressNote = {
     team: input.team,
     periodId: input.periodId,
@@ -90,6 +105,13 @@ export async function writeProgressNote(input: {
     updatedBy: input.updatedBy?.trim() || "Lead",
     updatedAt: now.toISOString()
   };
+
+  if (shouldUseFirestore(options)) {
+    await writeFirestoreDocument(progressNoteDocumentPath(nextNote), nextNote);
+    return nextNote;
+  }
+
+  const file = await readProgressNoteFile(options);
   const index = file.notes.findIndex((note) =>
     note.team === input.team &&
     note.periodId === input.periodId &&
@@ -101,7 +123,7 @@ export async function writeProgressNote(input: {
     : [...file.notes, nextNote];
 
   const filePath = resolveProgressNotesPath(options);
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.mkdir(resolveProgressNotesDir(options), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify({ version: 2, notes: sortProgressNotes(notes) }, null, 2), "utf8");
   return nextNote;
 }
@@ -183,4 +205,16 @@ function formatDate(date: Date) {
 
 function resolveProgressNotesPath(options: ProgressNoteStoreOptions) {
   return options.filePath ?? progressNotesPath;
+}
+
+function resolveProgressNotesDir(options: ProgressNoteStoreOptions) {
+  return options.filePath ? path.dirname(/* turbopackIgnore: true */ options.filePath) : dataDir;
+}
+
+function shouldUseFirestore(options: ProgressNoteStoreOptions) {
+  return !options.filePath && isFirestoreStorageEnabled();
+}
+
+function progressNoteDocumentPath(note: Pick<ProgressNote, "team" | "periodId" | "objectiveId" | "weekStart">) {
+  return `okrProgressNotes/${documentIdFromParts([note.periodId, note.team, note.objectiveId, note.weekStart])}`;
 }

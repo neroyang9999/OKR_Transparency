@@ -6,7 +6,7 @@ import { timingSafeEqual } from "crypto";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google,
-    Credentials({
+    ...(credentialsLoginEnabled() ? [Credentials({
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" }
@@ -31,8 +31,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         return null;
       }
-    })
+    })] : [])
   ],
+  callbacks: {
+    async signIn({ account, user }) {
+      if (account?.provider !== "google") return true;
+
+      const email = String(user.email ?? "").trim().toLowerCase();
+      const allowed = await isAllowedGoogleUser(email);
+      await logAuthEvent(allowed ? "info" : "warn", "google.sign_in.allowlist", allowed ? "Google login accepted" : "Google login rejected", {
+        email,
+        provider: account.provider
+      });
+      return allowed;
+    }
+  },
   events: {
     async signIn(message) {
       await logAuthEvent("info", "nextauth.sign_in", "NextAuth sign-in event", {
@@ -63,12 +76,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "production" ? undefined : "dev-auth-secret-change-me")
 });
 
+function credentialsLoginEnabled() {
+  return process.env.NODE_ENV !== "production";
+}
+
 function getLocalAdminCredentials() {
-  const username = process.env.OKR_LOCAL_ADMIN_USERNAME ?? (process.env.NODE_ENV === "production" ? "" : "admin");
-  const password = process.env.OKR_LOCAL_ADMIN_PASSWORD ?? (process.env.NODE_ENV === "production" ? "" : "1234");
+  const username = process.env.OKR_LOCAL_ADMIN_USERNAME ?? "admin";
+  const password = process.env.OKR_LOCAL_ADMIN_PASSWORD ?? "1234";
 
   if (!username || !password) return null;
   return { username, password };
+}
+
+async function isAllowedGoogleUser(email: string) {
+  if (!email) return false;
+  if (emailMatchesAllowedDomain(email)) return true;
+
+  try {
+    const { readAdminConfig } = await import("./src/lib/admin/config");
+    const config = await readAdminConfig();
+    return config.users.some((user) => user.enabled && user.email.trim().toLowerCase() === email);
+  } catch (error) {
+    await logAuthEvent("error", "google.sign_in.allowlist.error", "Failed to read login allowlist", {
+      email,
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+    return false;
+  }
+}
+
+function emailMatchesAllowedDomain(email: string) {
+  return getAllowedGoogleDomains().some((domain) => email.endsWith(`@${domain}`));
+}
+
+function getAllowedGoogleDomains() {
+  const raw = process.env.OKR_ALLOWED_GOOGLE_DOMAINS ?? "unitxlabs.com";
+  return raw
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
+    .filter(Boolean);
 }
 
 function safeEquals(left: string, right: string) {

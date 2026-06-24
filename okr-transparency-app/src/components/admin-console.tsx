@@ -28,6 +28,7 @@ export function AdminConsole() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const showEmergencyToken = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_ADMIN_TOKEN_LOGIN === "true";
 
   const loadAdminData = useCallback(async () => {
     const [configResponse, eventsResponse] = await Promise.all([
@@ -156,27 +157,31 @@ export function AdminConsole() {
               当前 Google 账号：{session.user.email}
             </div>
           )}
-          <label className="mt-5 block">
-            <span className="text-xs font-medium text-slate-500">Emergency admin token</span>
-            <input
-              type="password"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void login();
-              }}
-              className="mt-1 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400"
-            />
-          </label>
-          {loginError && <div className="mt-3 text-sm text-rose-600">{loginError}</div>}
-          <button
-            type="button"
-            onClick={login}
-            disabled={busy || !token.trim()}
-            className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-slate-300"
-          >
-            登录
-          </button>
+          {showEmergencyToken && (
+            <>
+              <label className="mt-5 block">
+                <span className="text-xs font-medium text-slate-500">Emergency admin token</span>
+                <input
+                  type="password"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void login();
+                  }}
+                  className="mt-1 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400"
+                />
+              </label>
+              {loginError && <div className="mt-3 text-sm text-rose-600">{loginError}</div>}
+              <button
+                type="button"
+                onClick={login}
+                disabled={busy || !token.trim()}
+                className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-slate-300"
+              >
+                登录
+              </button>
+            </>
+          )}
         </div>
       </AdminFrame>
     );

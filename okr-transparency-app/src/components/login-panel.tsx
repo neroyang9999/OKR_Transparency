@@ -19,6 +19,7 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const showCredentials = process.env.NODE_ENV !== "production";
 
   useEffect(() => {
     const authOrigin = process.env.NEXT_PUBLIC_AUTH_ORIGIN;
@@ -80,41 +81,53 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
           </div>
         </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">{copy.username}</span>
-            <input
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              className="mt-1 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              autoComplete="username"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">{copy.password}</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-1 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              autoComplete="current-password"
-            />
-          </label>
-          {error && <div className="text-sm text-rose-600">{error}</div>}
+        {showCredentials && (
+          <form onSubmit={submit} className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">{copy.username}</span>
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                className="mt-1 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                autoComplete="username"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">{copy.password}</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="mt-1 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                autoComplete="current-password"
+              />
+            </label>
+            {error && <div className="text-sm text-rose-600">{error}</div>}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex h-10 w-full items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            >
+              {submitting ? copy.submitting : copy.submit}
+            </button>
+          </form>
+        )}
+
+        {!showCredentials && (
           <button
-            type="submit"
-            disabled={submitting}
-            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            type="button"
+            onClick={() => void signIn("google")}
+            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
           >
-            {submitting ? copy.submitting : copy.submit}
+            {copy.google}
           </button>
-        </form>
+        )}
 
         <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
           <button
             type="button"
             onClick={() => void signIn("google")}
-            className="text-sm font-medium text-slate-600 hover:text-slate-950"
+            className={cnGoogleButton(showCredentials)}
           >
             {copy.google}
           </button>
@@ -204,4 +217,10 @@ async function signInWithCredentials(username: string, password: string, callbac
 
   const session = await sessionResponse.json() as { user?: { email?: string | null } };
   return Boolean(session.user?.email);
+}
+
+function cnGoogleButton(showCredentials: boolean) {
+  return showCredentials
+    ? "text-sm font-medium text-slate-600 hover:text-slate-950"
+    : "hidden";
 }

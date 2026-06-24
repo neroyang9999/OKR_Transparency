@@ -2,11 +2,15 @@ import { promises as fs } from "fs";
 import path from "path";
 import { readOkrSnapshot, writeOkrSnapshot } from "../okr/store";
 import type { OkrSnapshot } from "../okr/types";
+import { listFirestoreCollection, readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
+import { isFirestoreStorageEnabled } from "../storage/mode";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath = path.join(dataDir, "okr-admin-config.json");
 const eventsPath = path.join(dataDir, "okr-admin-events.json");
 const backupPath = path.join(dataDir, "okr-admin-rollback-snapshot.json");
+const configDocumentPath = "okrAdmin/config";
+const backupDocumentPath = "okrAdmin/rollbackSnapshot";
 
 export type AdminPeriod = {
   id: string;
@@ -75,6 +79,11 @@ type EventFile = {
 };
 
 export async function readAdminConfig(): Promise<AdminConfig> {
+  if (isFirestoreStorageEnabled()) {
+    const config = await readFirestoreDocument<Partial<AdminConfig>>(configDocumentPath);
+    return normalizeAdminConfig(config ?? {});
+  }
+
   try {
     const text = await fs.readFile(configPath, "utf8");
     return normalizeAdminConfig(JSON.parse(text) as Partial<AdminConfig>);
@@ -85,6 +94,17 @@ export async function readAdminConfig(): Promise<AdminConfig> {
 
 export async function writeAdminConfig(config: AdminConfig, actor = "Admin") {
   const nextConfig = normalizeAdminConfig(config);
+  if (isFirestoreStorageEnabled()) {
+    await writeFirestoreDocument(configDocumentPath, nextConfig);
+    await appendAdminEvent({
+      type: "config.update",
+      actor,
+      status: "ok",
+      message: "Updated admin configuration"
+    });
+    return nextConfig;
+  }
+
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(configPath, JSON.stringify(nextConfig, null, 2), "utf8");
   await appendAdminEvent({
@@ -97,6 +117,10 @@ export async function writeAdminConfig(config: AdminConfig, actor = "Admin") {
 }
 
 export async function readAdminEvents() {
+  if (isFirestoreStorageEnabled()) {
+    return listFirestoreCollection<AdminEvent>("okrAdminEvents", 200, "createdAt desc");
+  }
+
   const file = await readEventFile();
   return file.events;
 }
@@ -108,6 +132,12 @@ export async function appendAdminEvent(input: Omit<AdminEvent, "id" | "createdAt
     id: `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString()
   };
+
+  if (isFirestoreStorageEnabled()) {
+    await writeFirestoreDocument(`okrAdminEvents/${event.id}`, event);
+    return event;
+  }
+
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(eventsPath, JSON.stringify({ version: 1, events: [event, ...file.events].slice(0, 200) }, null, 2), "utf8");
   return event;
@@ -115,14 +145,22 @@ export async function appendAdminEvent(input: Omit<AdminEvent, "id" | "createdAt
 
 export async function backupCurrentSnapshot() {
   const snapshot = await readOkrSnapshot();
+  if (isFirestoreStorageEnabled()) {
+    await writeFirestoreDocument(backupDocumentPath, snapshot);
+    return;
+  }
+
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(backupPath, JSON.stringify(snapshot, null, 2), "utf8");
 }
 
 export async function rollbackSnapshot(actor = "Admin") {
   try {
-    const text = await fs.readFile(backupPath, "utf8");
-    const snapshot = JSON.parse(text) as OkrSnapshot;
+    const snapshot = isFirestoreStorageEnabled()
+      ? await readFirestoreDocument<OkrSnapshot>(backupDocumentPath)
+      : JSON.parse(await fs.readFile(backupPath, "utf8")) as OkrSnapshot;
+    if (!snapshot) throw new Error("No rollback snapshot found");
+
     await writeOkrSnapshot({
       ...snapshot,
       meta: {

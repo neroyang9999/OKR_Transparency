@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run --environment node src"
+    "test": "vitest run --environment node src",
+    "migrate:firestore": "node scripts/migrate-json-to-firestore.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

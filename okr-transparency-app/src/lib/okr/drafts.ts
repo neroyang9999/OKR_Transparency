@@ -3,6 +3,9 @@ import path from "path";
 import { draftToRecords, normalizeDraft, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
 import { readOkrSnapshot, writeOkrSnapshot } from "./store";
 import type { OkrSnapshot } from "./types";
+import { documentIdFromParts } from "../storage/document-ids";
+import { readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
+import { isFirestoreStorageEnabled } from "../storage/mode";
 
 const dataDir = path.join(process.cwd(), "data");
 const draftPath = path.join(dataDir, "okr-drafts.json");
@@ -24,6 +27,17 @@ type PeriodSnapshotFile = {
 };
 
 export async function readDraft(team: string, periodId: string): Promise<OkrDraft> {
+  if (isFirestoreStorageEnabled()) {
+    const existing = await readFirestoreDocument<OkrDraft>(draftDocumentPath(team, periodId));
+    if (existing) return existing;
+
+    const periodRecords = await readPeriodRecords(periodId);
+    if (periodRecords) return recordsToDraft(periodRecords, team, periodId);
+
+    const snapshot = await readOkrSnapshot();
+    return recordsToDraft(snapshot.records, team, periodId, periodId === defaultEditablePeriod);
+  }
+
   const file = await readDraftFile();
   const existing = file.drafts.find((draft) => draft.team === team && draft.periodId === periodId);
   if (existing) return existing;
@@ -36,13 +50,19 @@ export async function readDraft(team: string, periodId: string): Promise<OkrDraf
 }
 
 export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwner = true) {
-  const file = await readDraftFile();
   const normalizedDraft = normalizeDraft(draft, teamOwner, forceOwner);
   const nextDraft: OkrDraft = {
     ...normalizedDraft,
     updatedAt: new Date().toISOString(),
     objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "draft" }))
   };
+
+  if (isFirestoreStorageEnabled()) {
+    await writeFirestoreDocument(draftDocumentPath(draft.team, draft.periodId), nextDraft);
+    return nextDraft;
+  }
+
+  const file = await readDraftFile();
   const index = file.drafts.findIndex((item) => item.team === draft.team && item.periodId === draft.periodId);
   const drafts = index >= 0
     ? file.drafts.map((item, itemIndex) => itemIndex === index ? nextDraft : item)
@@ -98,6 +118,11 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
 }
 
 export async function readPeriodRecords(periodId: string) {
+  if (isFirestoreStorageEnabled()) {
+    const period = await readFirestoreDocument<PeriodSnapshotFile["periods"][number]>(periodDocumentPath(periodId));
+    return period?.records ?? null;
+  }
+
   const file = await readPeriodSnapshotFile();
   return file.periods.find((period) => period.periodId === periodId)?.records ?? null;
 }
@@ -123,6 +148,15 @@ async function readPeriodSnapshotFile(): Promise<PeriodSnapshotFile> {
 }
 
 async function writePeriodRecords(periodId: string, records: OkrSnapshot["records"]) {
+  if (isFirestoreStorageEnabled()) {
+    await writeFirestoreDocument(periodDocumentPath(periodId), {
+      periodId,
+      updatedAt: new Date().toISOString(),
+      records
+    });
+    return;
+  }
+
   const file = await readPeriodSnapshotFile();
   const nextPeriod = { periodId, updatedAt: new Date().toISOString(), records };
   const index = file.periods.findIndex((period) => period.periodId === periodId);
@@ -132,4 +166,12 @@ async function writePeriodRecords(periodId: string, records: OkrSnapshot["record
 
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(periodSnapshotPath, JSON.stringify({ version: 1, periods }, null, 2), "utf8");
+}
+
+function draftDocumentPath(team: string, periodId: string) {
+  return `okrDrafts/${documentIdFromParts([periodId, team])}`;
+}
+
+function periodDocumentPath(periodId: string) {
+  return `okrPeriodSnapshots/${documentIdFromParts([periodId])}`;
 }
