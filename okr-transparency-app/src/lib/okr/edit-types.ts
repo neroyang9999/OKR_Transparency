@@ -107,6 +107,19 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
   };
 }
 
+export function filterDraftByOwner(draft: OkrDraft, ownerAliases: string[], fallbackOwner: string): OkrDraft {
+  const aliases = ownerAliases.map(normalizeToken).filter(Boolean);
+  const owner = fallbackOwner.trim() || ownerAliases[0] || draft.team;
+  return normalizeDraft({
+    ...draft,
+    objectives: draft.objectives.filter((objective) => {
+      if (aliases.length === 0) return false;
+      return aliases.includes(normalizeToken(objective.owner)) ||
+        objective.keyResults.some((kr) => aliases.includes(normalizeToken(kr.owner)));
+    })
+  }, owner, true);
+}
+
 export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwner = true): OkrRecord[] {
   const today = new Date().toISOString().slice(0, 10);
   const records: OkrRecord[] = [];
@@ -260,6 +273,10 @@ function makeObjectiveId(team: string, index: number) {
 
 function slug(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "OKR";
+}
+
+function normalizeToken(value: string) {
+  return value.trim().toLowerCase();
 }
 
 function collectText(items: string[]) {

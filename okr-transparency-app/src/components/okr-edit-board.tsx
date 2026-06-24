@@ -18,6 +18,8 @@ type OkrEditBoardProps = {
   alignmentOptions: AlignmentOption[];
   teamOwner: string;
   policy: TeamEditPolicy;
+  ownerEmail?: string;
+  title?: string;
 };
 
 export type AlignmentOption = {
@@ -34,24 +36,27 @@ export type AlignmentOption = {
 const confidenceOptions: ConfidenceLevel[] = ["Green", "Yellow", "Red"];
 const typeOptions: OkrType[] = ["Committed", "Aspirational", "Learning"];
 
-export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy }: OkrEditBoardProps) {
+export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy, ownerEmail, title }: OkrEditBoardProps) {
   const router = useRouter();
-  const defaultOwner = policy.ownerOptions[0] ?? teamOwner;
-  const canEditWholeTeam = policy.canPublish;
-  const [draft, setDraft] = useState(() => normalizeDraft(initialDraft, defaultOwner, false));
+  const fixedOwner = teamOwner.trim() || initialDraft.team;
+  const ownerScoped = Boolean(ownerEmail);
+  const canEditDraft = ownerScoped ? policy.canEdit : policy.canPublish;
+  const canPublishDraft = ownerScoped ? canEditDraft : policy.canPublish;
+  const defaultAlignmentId = ownerScoped ? alignmentOptions[0]?.id : undefined;
+  const [draft, setDraft] = useState(() => withDefaultAlignment(normalizeDraft(initialDraft, fixedOwner, true), defaultAlignmentId));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const copy = lang === "en" ? en : zh;
-  const showAlignment = draft.team !== "Software";
+  const showAlignment = ownerScoped || draft.team !== "Software";
 
   useEffect(() => {
     if (saveState !== "dirty") return;
     const timer = window.setTimeout(() => {
-      void saveDraft(draft, setSaveState, setMessage, copy.saved);
+      void saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [draft, saveState, copy.saved]);
+  }, [draft, fixedOwner, ownerEmail, saveState, copy.saved]);
 
   function changeDraft(updater: (current: OkrDraft) => OkrDraft) {
     setSaveState("dirty");
@@ -84,7 +89,13 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   function addObjective() {
     changeDraft((current) => ({
       ...current,
-      objectives: [...current.objectives, createEmptyObjective(current.team, current.periodId, defaultOwner)]
+      objectives: [
+        ...current.objectives,
+        {
+          ...createEmptyObjective(current.team, current.periodId, fixedOwner),
+          alignedToId: defaultAlignmentId
+        }
+      ]
     }));
   }
 
@@ -102,7 +113,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         if (objective.id !== objectiveId) return objective;
         const nextKrs = [
           ...objective.keyResults,
-          createEmptyKr(objective.id, objective.keyResults.length, defaultOwner, objective.keyResults.length + 1)
+          createEmptyKr(objective.id, objective.keyResults.length, fixedOwner, objective.keyResults.length + 1)
         ];
         return { ...objective, keyResults: redistributeWeights(nextKrs) };
       })
@@ -121,7 +132,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
 
   async function publish() {
     setSaveState("saving");
-    const saved = await saveDraft(draft, setSaveState, setMessage, copy.saved);
+    const saved = await saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved);
     if (!saved) return;
 
     const response = await fetch("/api/okrs/publish", {
@@ -129,7 +140,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify({ team: draft.team, periodId: draft.periodId })
+      body: JSON.stringify({ team: draft.team, periodId: draft.periodId, ownerEmail })
     });
     const body = await response.json() as { errors?: string[]; warnings?: string[]; error?: string };
     if (!response.ok) {
@@ -140,14 +151,14 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
 
     setSaveState("saved");
     setMessage(copy.published);
-    router.push(hrefWithLang(`/?team=${encodeURIComponent(draft.team)}&period=${encodeURIComponent(draft.periodId)}`, lang));
+    router.push(hrefWithLang(overviewHref(draft.team, draft.periodId, ownerEmail), lang));
   }
 
   return (
     <div className="min-w-0">
       <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-950">{draft.team} OKR</h1>
+          <h1 className="text-2xl font-semibold text-slate-950">{title ?? `${draft.team} OKR`}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <Badge tone="blue">{copy.editing}</Badge>
             <span>{draft.periodId.toUpperCase()}</span>
@@ -155,10 +166,10 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <PeriodSwitcher selectedPeriod={draft.periodId} selectedTeam={draft.team} lang={lang} mode="edit" />
+          <PeriodSwitcher selectedPeriod={draft.periodId} selectedTeam={draft.team} selectedMemberEmail={ownerEmail} lang={lang} mode="edit" />
           <StatusPill state={saveState} copy={copy} />
           <Link
-            href={hrefWithLang(`/?team=${encodeURIComponent(draft.team)}&period=${encodeURIComponent(draft.periodId)}`, lang)}
+            href={hrefWithLang(overviewHref(draft.team, draft.periodId, ownerEmail), lang)}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <X className="h-4 w-4" />
@@ -166,7 +177,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           </Link>
           <button
             type="button"
-            onClick={() => saveDraft(draft, setSaveState, setMessage, copy.saved)}
+            onClick={() => saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved)}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <Save className="h-4 w-4" />
@@ -175,7 +186,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           <button
             type="button"
             onClick={publish}
-            disabled={saveState === "saving" || validation.errors.length > 0 || !policy.canPublish}
+            disabled={saveState === "saving" || validation.errors.length > 0 || !canPublishDraft}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send className="h-4 w-4" />
@@ -195,7 +206,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
       <div className="space-y-5">
         {draft.objectives.map((objective, objectiveIndex) => {
           const objectiveProgress = calculateObjectiveProgress(objective.keyResults);
-          const objectiveLocked = !canEditWholeTeam;
+          const objectiveLocked = !canEditDraft;
           return (
           <article key={objective.id} className="overflow-hidden rounded-lg border border-blue-400 bg-white shadow-subtle">
             <div className="grid gap-3 px-5 py-5 lg:grid-cols-[1fr_120px_120px_44px]">
@@ -220,7 +231,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                   />
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
-                  <Select label={copy.owner} value={objective.owner} options={policy.ownerOptions} onChange={(value) => updateObjective(objective.id, { owner: value })} disabled={objectiveLocked} />
+                  <ReadOnlyField label={copy.owner} value={fixedOwner} />
                   <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} />
                   <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} />
                 </div>
@@ -251,20 +262,17 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                             onChange={(value) => updateKr(objective.id, kr.id, { title: value })}
                             placeholder={copy.krPlaceholder}
                             className="font-medium"
-                            disabled={!canEditWholeTeam && !isEditableOwner(kr.owner, policy.editableOwnerAliases)}
+                            disabled={!canEditDraft && !isEditableOwner(kr.owner, policy.editableOwnerAliases)}
                           />
-                          <div className="mt-2 max-w-xs">
-                            <Select label={copy.owner} value={kr.owner} options={policy.ownerOptions} onChange={(value) => updateKr(objective.id, kr.id, { owner: value })} disabled={!canEditWholeTeam} />
-                          </div>
                         </div>
                       </div>
                     </div>
-                    <NumberInput label={copy.progress} value={kr.progress} onChange={(value) => updateKr(objective.id, kr.id, { progress: value })} disabled={!canEditWholeTeam && !isEditableOwner(kr.owner, policy.editableOwnerAliases)} />
-                    <NumberInput label={copy.weight} value={kr.weight} onChange={(value) => updateKr(objective.id, kr.id, { weight: value ?? 0 })} disabled={!canEditWholeTeam} />
+                    <NumberInput label={copy.progress} value={kr.progress} onChange={(value) => updateKr(objective.id, kr.id, { progress: value })} disabled={!canEditDraft && !isEditableOwner(kr.owner, policy.editableOwnerAliases)} />
+                    <NumberInput label={copy.weight} value={kr.weight} onChange={(value) => updateKr(objective.id, kr.id, { weight: value ?? 0 })} disabled={!canEditDraft} />
                     <button
                       type="button"
                       onClick={() => removeKr(objective.id, kr.id)}
-                      disabled={!canEditWholeTeam}
+                      disabled={!canEditDraft}
                       className="mt-7 grid h-9 w-9 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                       aria-label={copy.deleteKr}
                     >
@@ -276,7 +284,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
               <button
                 type="button"
                 onClick={() => addKr(objective.id)}
-                disabled={!canEditWholeTeam}
+                disabled={!canEditDraft}
                 className="inline-flex h-14 items-center gap-2 px-20 text-sm font-semibold text-slate-600 hover:text-blue-700"
               >
                 <Plus className="h-4 w-4" />
@@ -298,7 +306,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         <button
           type="button"
           onClick={addObjective}
-          disabled={!canEditWholeTeam}
+          disabled={!canEditDraft}
           className="flex h-20 w-full items-center gap-4 rounded-lg border border-border bg-white px-7 text-lg font-semibold text-slate-500 shadow-subtle hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
         >
           <span className="grid h-10 w-10 place-items-center rounded-full bg-slate-100">
@@ -338,14 +346,14 @@ function AlignmentPicker({
     : options;
 
   return (
-    <div className="mb-3 max-w-3xl">
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-        <span className="inline-flex items-center gap-1 font-medium text-slate-500">
+    <div className="relative mb-3 max-w-3xl rounded-md border border-dashed border-blue-200 bg-blue-50/40 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-blue-500">
           <Link2 className="h-4 w-4" />
           {copy.addAlignment}
         </span>
         {selected ? (
-          <span className="group relative inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-700">
+          <span className="group relative inline-flex min-w-0 items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-blue-700 shadow-sm">
             <span>{selected.team}</span>
             <span className="text-blue-300">/</span>
             <span>{selected.owner}</span>
@@ -362,25 +370,33 @@ function AlignmentPicker({
             <AlignmentCard option={selected} copy={copy} />
           </span>
         ) : (
-          <span className="text-slate-400">{copy.noAlignment}</span>
+          <span className="text-slate-500">{copy.noAlignment}</span>
         )}
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          disabled={disabled}
+          className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-blue-100 bg-white px-2 text-xs font-medium text-blue-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300"
+        >
+          <Search className="h-3.5 w-3.5" />
+          {selected ? copy.changeAlignment : copy.chooseAlignment}
+        </button>
       </div>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-        <input
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          disabled={disabled}
-          placeholder={copy.searchAlignment}
-          className="h-10 w-full rounded-md border border-border bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400"
-        />
-        {open && (
-          <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-md border border-border bg-white p-1 shadow-lg">
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-md border border-border bg-white p-2 shadow-lg">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              autoFocus
+              disabled={disabled}
+              placeholder={copy.searchAlignment}
+              className="h-10 w-full rounded-md border border-border bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+            />
+          </div>
+          <div className="mt-2 max-h-64 overflow-auto">
             <button
               type="button"
               onMouseDown={(event) => event.preventDefault()}
@@ -418,8 +434,8 @@ function AlignmentPicker({
               ))
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -452,6 +468,8 @@ function AlignmentCard({ option, copy, compact = false }: { option: AlignmentOpt
 
 async function saveDraft(
   draft: OkrDraft,
+  fixedOwner: string,
+  ownerEmail: string | undefined,
   setSaveState: (state: "saved" | "saving" | "dirty" | "error") => void,
   setMessage: (message: string) => void,
   savedMessage: string
@@ -462,7 +480,10 @@ async function saveDraft(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify(draft)
+    body: JSON.stringify({
+      ...normalizeDraft(draft, fixedOwner, true),
+      ownerEmail
+    })
   });
 
   if (!response.ok) {
@@ -477,6 +498,12 @@ async function saveDraft(
   return true;
 }
 
+function overviewHref(team: string, periodId: string, ownerEmail?: string) {
+  const params = new URLSearchParams({ team, period: periodId });
+  if (ownerEmail) params.set("member", ownerEmail);
+  return `/?${params.toString()}`;
+}
+
 function redistributeWeights(keyResults: EditableKr[]) {
   if (keyResults.length === 0) return [];
   const base = Math.floor((100 / keyResults.length) * 10) / 10;
@@ -484,6 +511,17 @@ function redistributeWeights(keyResults: EditableKr[]) {
     ...kr,
     weight: index === keyResults.length - 1 ? Math.round((100 - base * (keyResults.length - 1)) * 10) / 10 : base
   }));
+}
+
+function withDefaultAlignment(draft: OkrDraft, defaultAlignmentId?: string): OkrDraft {
+  if (!defaultAlignmentId) return draft;
+  return {
+    ...draft,
+    objectives: draft.objectives.map((objective) => ({
+      ...objective,
+      alignedToId: objective.alignedToId ?? defaultAlignmentId
+    }))
+  };
 }
 
 function StatusPill({ state, copy }: { state: "saved" | "saving" | "dirty" | "error"; copy: typeof zh }) {
@@ -586,6 +624,8 @@ const zh = {
   save: "保存",
   publish: "发布",
   addAlignment: "添加对齐",
+  chooseAlignment: "选择",
+  changeAlignment: "更换",
   noAlignment: "不对齐上级 OKR",
   clearAlignment: "清除对齐",
   searchAlignment: "搜索上级团队的 Objective 或 KR",
@@ -621,6 +661,8 @@ const en: typeof zh = {
   save: "Save",
   publish: "Publish",
   addAlignment: "Add alignment",
+  chooseAlignment: "Choose",
+  changeAlignment: "Change",
   noAlignment: "No upper-level alignment",
   clearAlignment: "Clear alignment",
   searchAlignment: "Search upper-level Objective or KR",

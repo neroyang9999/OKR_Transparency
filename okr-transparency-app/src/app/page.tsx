@@ -17,6 +17,7 @@ import { type AdminConfig, type AdminUser } from "@/lib/admin/config";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
+import { filterDraftByOwner } from "@/lib/okr/edit-types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
@@ -43,6 +44,8 @@ export default async function HomePage({
   const teamNav = buildTeamNav(adminConfig);
   const selectedMember = normalizeMember(member, selectedTeam, adminConfig);
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
+  const selectedOwner = selectedMember ? ownerForUser(selectedMember) : selectedTeamOwner;
+  const selectedOwnerAliases = selectedMember ? ownerAliasesForUser(selectedMember) : [selectedTeamOwner];
 
   if (!access) {
     return (
@@ -57,23 +60,31 @@ export default async function HomePage({
     readProgressNotes()
   ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
-  const draft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
+  const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
+  const draft = baseDraft && selectedMember ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner) : baseDraft;
   const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
   const selectedRecords = selectedMember
     ? buildOwnerScopedRecords(teamRecords, ownerAliasesForUser(selectedMember))
     : teamRecords;
+  const displayRecordCount = selectedMember
+    ? selectedRecords.filter((record) => ownerMatches(record.owner, selectedOwnerAliases)).length
+    : selectedRecords.length;
   const recordById = new Map(periodRecords.map((record) => [record.okr_id, record]));
-  const rootObjectives = selectedRecords.filter((record) => {
-    const parent = record.parent_id ? recordById.get(record.parent_id) : null;
-    return !parent || parent.team !== selectedTeam;
-  });
+  const rootObjectives = selectedMember
+    ? selectedRecords.filter((record) => !record.kr && ownerMatches(record.owner, selectedOwnerAliases))
+    : selectedRecords.filter((record) => {
+        const parent = record.parent_id ? recordById.get(record.parent_id) : null;
+        return !parent || parent.team !== selectedTeam;
+      });
   const selectedNavItem = teamNav.find((item) => item.name === selectedTeam);
   const childTeamNames = new Set(selectedNavItem?.children.map((child) => child.name) ?? []);
   const childTeams = !selectedMember && childTeamNames.size > 0
     ? periodRecords.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
     : [];
-  const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
+  const alignmentOptions = selectedMember
+    ? getAlignmentOptions(periodRecords, selectedTeam, adminConfig, { targetTeam: selectedTeam, ownerAliases: [selectedTeamOwner, selectedTeam] })
+    : getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
   const detailHref = (okrId: string) => hrefWithLang(
     buildOverviewHref({
       team: selectedTeam,
@@ -91,7 +102,15 @@ export default async function HomePage({
 
         <section className="min-w-0">
           {draft ? (
-            <OkrEditBoard initialDraft={draft} lang={lang} alignmentOptions={alignmentOptions} teamOwner={selectedTeamOwner} policy={editPolicy} />
+            <OkrEditBoard
+              initialDraft={draft}
+              lang={lang}
+              alignmentOptions={alignmentOptions}
+              teamOwner={selectedOwner}
+              policy={editPolicy}
+              ownerEmail={selectedMember?.email}
+              title={selectedMember ? `${selectedMember.displayName} OKR` : `${selectedTeam} OKR`}
+            />
           ) : (
             <>
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">
@@ -108,7 +127,7 @@ export default async function HomePage({
                   )}
                   <span>{selectedPeriodLabel}</span>
                   <span>·</span>
-                  <span>{selectedRecords.length} {t(lang, "records")}</span>
+                  <span>{displayRecordCount} {t(lang, "records")}</span>
                   <span>·</span>
                   <span>{data.meta.source} {t(lang, "source")}</span>
                 </div>
@@ -118,7 +137,13 @@ export default async function HomePage({
               <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} selectedMemberEmail={selectedMember?.email} lang={lang} periodsOverride={periods} />
               {adminConfig.settings.showEditLinks && editPolicy.canEdit && (
                 <Link
-                  href={hrefWithLang(`/?team=${encodeURIComponent(selectedTeam)}&period=${encodeURIComponent(selectedPeriod)}&mode=edit`, lang)}
+                  href={hrefWithLang(buildOverviewHref({
+                    team: selectedTeam,
+                    period: selectedPeriod,
+                    member: selectedMember?.email,
+                    detail: "",
+                    mode: "edit"
+                  }), lang)}
                   className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
                 >
                   {t(lang, "editOkrs")}
@@ -137,6 +162,7 @@ export default async function HomePage({
                   index={index}
                   objective={objective}
                   records={selectedRecords}
+                  alignmentRecords={periodRecords}
                   selectedPeriod={selectedPeriod}
                   progressNotes={progressNotes}
                   showProgressNotes={adminConfig.settings.allowProgressNotes}
@@ -191,6 +217,7 @@ function ObjectiveBlock({
   index,
   objective,
   records,
+  alignmentRecords,
   selectedPeriod,
   progressNotes,
   showProgressNotes,
@@ -200,6 +227,7 @@ function ObjectiveBlock({
   index: number;
   objective: OkrRecord;
   records: OkrRecord[];
+  alignmentRecords: OkrRecord[];
   selectedPeriod: string;
   progressNotes: ProgressNote[];
   showProgressNotes: boolean;
@@ -208,8 +236,7 @@ function ObjectiveBlock({
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
   const progress = objective.score === null ? 0 : Math.round(objective.score * 100);
-  const alignedRecord = objective.parent_id ? records.find((record) => record.okr_id === objective.parent_id) : null;
-  const alignedParent = alignedRecord?.parent_id ? records.find((record) => record.okr_id === alignedRecord.parent_id) : null;
+  const alignmentChain = buildAlignmentChain(objective, alignmentRecords);
   const objectiveProgressNotes = progressNotes.filter((note) =>
     note.team === objective.team &&
     note.periodId === selectedPeriod &&
@@ -238,7 +265,7 @@ function ObjectiveBlock({
           >
             {t(lang, "targetPrefix")}{translateText(objective.objective, lang)}
           </OkrDetailLink>
-          {alignedRecord && <AlignmentPill record={alignedRecord} parent={alignedParent} lang={lang} />}
+          {alignmentChain.length > 0 && <AlignmentPill chain={alignmentChain} lang={lang} />}
           <div className="mt-3 h-2 max-w-3xl overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
           </div>
@@ -297,48 +324,92 @@ function KRRow({ kr, detailHref, lang }: { kr: OkrRecord; detailHref: string; la
   );
 }
 
-function AlignmentPill({
-  record,
-  parent,
-  lang
-}: {
-  record: OkrRecord;
-  parent?: OkrRecord | null;
-  lang: Lang;
-}) {
-  const progress = record.score === null ? null : Math.round(record.score * 100);
-  const title = record.kr || record.objective;
-  const kind = record.kr ? "KR" : "O";
+function AlignmentPill({ chain, lang }: { chain: OkrRecord[]; lang: Lang }) {
+  const primary = chain[0];
+  const primaryKind = primary.kr ? "KR" : "O";
 
   return (
-    <span className="group relative mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+    <span className="group relative mt-2 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
       <Link2 className="h-3.5 w-3.5 shrink-0" />
       <span>{lang === "en" ? "Aligned to" : "对齐"}</span>
-      <span>{record.team}</span>
+      <span>{primary.team}</span>
       <span className="text-blue-300">/</span>
-      <span>{record.owner}</span>
-      <span className="rounded bg-white px-1">{kind}</span>
-      <span className="max-w-[520px] truncate">{translateText(title, lang)}</span>
-      <span className="pointer-events-none absolute left-4 top-full z-40 hidden w-[420px] rounded-lg border border-border bg-white p-4 text-left text-slate-700 shadow-xl group-hover:block">
-        <span className="flex items-center justify-between gap-3">
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold text-slate-950">{record.team} / {record.owner}</span>
-            <span className="mt-1 block text-xs text-slate-500">{record.okr_id} · {kind}</span>
+      <span>{primary.owner}</span>
+      <span className="rounded bg-white px-1">{primaryKind}</span>
+      <span className="max-w-[360px] truncate">{translateText(primary.kr || primary.objective, lang)}</span>
+      {chain.slice(1).map((record) => {
+        const kind = record.kr ? "KR" : "O";
+        return (
+          <span key={record.okr_id} className="inline-flex min-w-0 items-center gap-1.5">
+            <span className="text-blue-300">→</span>
+            <span>{record.team}</span>
+            <span className="text-blue-300">/</span>
+            <span>{record.owner}</span>
+            <span className="rounded bg-white px-1">{kind}</span>
+            <span className="max-w-[260px] truncate">{translateText(record.kr || record.objective, lang)}</span>
           </span>
-          <ConfidenceBadge value={record.confidence} />
+        );
+      })}
+      <span className="pointer-events-none absolute left-4 top-full z-40 hidden w-[520px] rounded-lg border border-border bg-white p-4 text-left text-slate-700 shadow-xl group-hover:block">
+        <span className="block text-xs font-semibold uppercase tracking-wide text-blue-500">
+          {lang === "en" ? "Alignment Path" : "对齐路径"}
         </span>
-        <span className="mt-3 block text-sm font-semibold leading-6 text-slate-900">{translateText(title, lang)}</span>
-        {parent && (
-          <span className="mt-2 block rounded bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-            {lang === "en" ? "Parent Objective" : "所属 Objective"}：{translateText(parent.objective, lang)}
-          </span>
-        )}
-        <span className="mt-3 block text-xs text-slate-500">
-          {lang === "en" ? "Progress" : "进度"}：{progress === null ? "N/A" : `${progress}%`}
+        <span className="mt-3 block space-y-3">
+          {chain.map((record, index) => {
+            const progress = record.score === null ? null : Math.round(record.score * 100);
+            const kind = record.kr ? "KR" : "O";
+            const parent = record.kr && record.parent_id ? chain.find((item) => item.okr_id === record.parent_id) : null;
+            return (
+              <span key={record.okr_id} className="block rounded-md bg-slate-50 px-3 py-2">
+                <span className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-950">
+                      {index + 1}. {record.team} / {record.owner}
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">{record.okr_id} · {kind}</span>
+                  </span>
+                  <ConfidenceBadge value={record.confidence} />
+                </span>
+                <span className="mt-2 block text-sm font-semibold leading-6 text-slate-900">{translateText(record.kr || record.objective, lang)}</span>
+                {parent && (
+                  <span className="mt-2 block text-xs leading-5 text-slate-500">
+                    {lang === "en" ? "Parent Objective" : "所属 Objective"}：{translateText(parent.objective, lang)}
+                  </span>
+                )}
+                <span className="mt-2 block text-xs text-slate-500">
+                  {lang === "en" ? "Progress" : "进度"}：{progress === null ? "N/A" : `${progress}%`}
+                </span>
+              </span>
+            );
+          })}
         </span>
       </span>
     </span>
   );
+}
+
+function buildAlignmentChain(objective: OkrRecord, records: OkrRecord[]) {
+  const recordById = new Map(records.map((record) => [record.okr_id, record]));
+  const chain: OkrRecord[] = [];
+  const visited = new Set<string>();
+  let currentId = objective.parent_id;
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const current = recordById.get(currentId);
+    if (!current) break;
+
+    chain.push(current);
+    if (!current.kr) {
+      currentId = current.parent_id;
+      continue;
+    }
+
+    const parentObjective = current.parent_id ? recordById.get(current.parent_id) : null;
+    currentId = parentObjective?.parent_id ?? "";
+  }
+
+  return chain;
 }
 
 function TeamAvatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg" }) {
@@ -403,6 +474,11 @@ function buildOwnerScopedRecords(teamRecords: OkrRecord[], ownerAliases: string[
   return teamRecords.filter((record) => visibleIds.has(record.okr_id));
 }
 
+function ownerMatches(owner: string, aliases: string[]) {
+  const normalizedOwner = normalizeToken(owner);
+  return Boolean(normalizedOwner) && aliases.some((alias) => normalizeToken(alias) === normalizedOwner);
+}
+
 function isTeamRoot(record: OkrRecord, recordById: Map<string, OkrRecord>) {
   const parent = record.parent_id ? recordById.get(record.parent_id) : null;
   return !parent || parent.team !== record.team;
@@ -417,13 +493,21 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function getAlignmentOptions(records: OkrRecord[], team: string, config: AdminConfig): AlignmentOption[] {
-  const parentTeam = parentTeamFor(team, config);
-  if (!parentTeam) return [];
+function getAlignmentOptions(
+  records: OkrRecord[],
+  team: string,
+  config: AdminConfig,
+  scope?: { targetTeam?: string; ownerAliases?: string[] }
+): AlignmentOption[] {
+  const targetTeam = scope?.targetTeam ?? parentTeamFor(team, config);
+  if (!targetTeam) return [];
+  const ownerAliases = (scope?.ownerAliases ?? []).map(normalizeToken).filter(Boolean);
 
   const recordById = new Map(records.map((record) => [record.okr_id, record]));
   return records
-    .filter((record) => record.team === parentTeam)
+    .filter((record) => record.team === targetTeam)
+    .filter((record) => ownerAliases.length === 0 || ownerAliases.includes(normalizeToken(record.owner)))
+    .sort((left, right) => Number(Boolean(left.kr)) - Number(Boolean(right.kr)))
     .map((record) => {
       const parent = record.parent_id ? recordById.get(record.parent_id) : null;
       return {
@@ -455,19 +539,22 @@ function buildOverviewHref({
   team,
   period,
   member,
-  detail
+  detail,
+  mode
 }: {
   team: string;
   period: string;
   member?: string;
-  detail: string;
+  detail?: string;
+  mode?: string;
 }) {
   const params = new URLSearchParams({
     team,
-    period,
-    detail
+    period
   });
+  if (detail) params.set("detail", detail);
   if (member) params.set("member", member);
+  if (mode) params.set("mode", mode);
   return `/?${params.toString()}`;
 }
 
@@ -511,6 +598,10 @@ function ownerAliasesForUser(user: AdminUser) {
     user.displayName,
     user.email
   ].map((value) => value.trim()).filter(Boolean)));
+}
+
+function ownerForUser(user: AdminUser) {
+  return user.displayName || user.ownerAliases[0] || user.email;
 }
 
 function normalizeToken(value: string) {
