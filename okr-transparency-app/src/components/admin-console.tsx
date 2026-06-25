@@ -6,14 +6,14 @@ import { Activity, Check, Pencil, Search, Lock, LogOut, RotateCcw, Save, Setting
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { cn } from "@/lib/utils";
 
-type TabId = "overview" | "periods" | "teams" | "users" | "sync" | "settings";
+type TabId = "overview" | "periods" | "teams" | "users" | "rollback" | "settings";
 
 const tabs: Array<{ id: TabId; label: string; icon: typeof Activity }> = [
   { id: "overview", label: "系统概览", icon: Activity },
   { id: "periods", label: "周期管理", icon: SlidersHorizontal },
   { id: "teams", label: "团队管理", icon: Users },
   { id: "users", label: "用户与角色", icon: Shield },
-  { id: "sync", label: "同步与发布", icon: RotateCcw },
+  { id: "rollback", label: "发布与回滚", icon: RotateCcw },
   { id: "settings", label: "系统设置", icon: Settings }
 ];
 
@@ -99,15 +99,6 @@ export function AdminConsole() {
     const body = await response.json() as { config: AdminConfig };
     setConfig(body.config);
     setMessage("配置已保存");
-    await loadAdminData();
-  }
-
-  async function runSync() {
-    setBusy(true);
-    const response = await fetch("/api/admin/sync", { method: "POST" });
-    const body = await response.json().catch(() => ({})) as { error?: string; records?: unknown[] };
-    setBusy(false);
-    setMessage(response.ok ? `同步完成：${body.records?.length ?? 0} 条记录` : `同步失败：${body.error ?? "未知错误"}`);
     await loadAdminData();
   }
 
@@ -247,7 +238,7 @@ export function AdminConsole() {
           {activeTab === "periods" && <PeriodConfig config={config} setConfig={setConfig} />}
           {activeTab === "teams" && <TeamConfig config={config} setConfig={setConfig} />}
           {activeTab === "users" && <UserRoleConfig config={config} setConfig={setConfig} />}
-          {activeTab === "sync" && <SyncPanel events={events} busy={busy} onSync={runSync} onRollback={rollback} />}
+          {activeTab === "rollback" && <RollbackPanel events={events} busy={busy} onRollback={rollback} />}
           {activeTab === "settings" && <SettingsPanel config={config} setConfig={setConfig} />}
         </main>
       </div>
@@ -260,16 +251,16 @@ function AdminFrame({ children }: { children: React.ReactNode }) {
 }
 
 function Overview({ config, events, completeness }: { config: AdminConfig; events: AdminEvent[]; completeness: number }) {
-  const lastSync = events.find((event) => event.type === "sync");
   const lastPublish = events.find((event) => event.type === "publish");
+  const lastRollback = events.find((event) => event.type === "rollback");
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Metric title="配置完整度" value={`${completeness}%`} />
       <Metric title="启用团队" value={String(config.teams.filter((team) => team.enabled).length)} />
       <Metric title="开放周期" value={String(config.periods.filter((period) => period.editable && !period.locked).length)} />
       <Metric title="授权用户" value={String(config.users.filter((user) => user.enabled).length)} />
-      <EventList title="最近同步" event={lastSync} />
       <EventList title="最近发布" event={lastPublish} />
+      <EventList title="最近回滚" event={lastRollback} />
     </div>
   );
 }
@@ -629,11 +620,10 @@ function ChevronTiny({ open }: { open: boolean }) {
   );
 }
 
-function SyncPanel({ events, busy, onSync, onRollback }: { events: AdminEvent[]; busy: boolean; onSync: () => void; onRollback: () => void }) {
+function RollbackPanel({ events, busy, onRollback }: { events: AdminEvent[]; busy: boolean; onRollback: () => void }) {
   return (
     <Panel>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={onSync} disabled={busy} className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-slate-300">手动同步</button>
         <button type="button" onClick={onRollback} disabled={busy} className="inline-flex h-9 items-center rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:text-slate-300">回滚上一版</button>
       </div>
       <div className="overflow-hidden rounded-md border border-border">

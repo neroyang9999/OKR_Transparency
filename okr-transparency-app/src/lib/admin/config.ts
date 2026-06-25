@@ -66,7 +66,7 @@ export type AdminConfig = {
 
 export type AdminEvent = {
   id: string;
-  type: "login" | "config.update" | "sync" | "publish" | "rollback";
+  type: "login" | "config.update" | "publish" | "rollback";
   actor: string;
   message: string;
   createdAt: string;

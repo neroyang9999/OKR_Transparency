@@ -87,17 +87,31 @@ describe("role-based OKR permissions", () => {
     expect(getAccessForSessionUser(config, { email: "disabled@company.com", name: "Disabled" })).toBeNull();
   });
 
-  it("allows super admins to edit and publish every team", () => {
+  it("allows admin accounts to edit and publish every team", () => {
     const access = getAccessForSessionUser(config, { email: "admin@company.com", name: "Admin" });
     expect(getTeamEditPolicy(config, "Hardware", access)).toMatchObject({ canEdit: true, canPublish: true });
+    expect(authorizeDraftChange(config, access, draft, changeKrProgress(draft, "SW-O1-KR1", 80))).toMatchObject({ ok: true });
     expect(authorizePublish(config, access, "Hardware", "2026-q3")).toMatchObject({ ok: true });
   });
 
-  it("allows team leaders to publish their team and child teams but not unrelated teams", () => {
+  it("allows teamlead accounts to edit and publish their team and child teams but not unrelated teams", () => {
     const access = getAccessForSessionUser(config, { email: "lead@company.com", name: "Software Lead" });
+    expect(getTeamEditPolicy(config, "Software", access)).toMatchObject({ canEdit: true, canPublish: true });
+    expect(getTeamEditPolicy(config, "Application Team", access)).toMatchObject({ canEdit: true, canPublish: true });
+    expect(getTeamEditPolicy(config, "Hardware", access)).toMatchObject({ canEdit: false, canPublish: false });
+
     expect(authorizePublish(config, access, "Software", "2026-q3")).toMatchObject({ ok: true });
     expect(authorizePublish(config, access, "Application Team", "2026-q3")).toMatchObject({ ok: true });
     expect(authorizePublish(config, access, "Hardware", "2026-q3")).toMatchObject({ ok: false });
+  });
+
+  it("allows teamlead accounts to modify their team members' OKRs", () => {
+    const access = getAccessForSessionUser(config, { email: "lead@company.com", name: "Software Lead" });
+    const memberChange = changeKrProgress(draft, "SW-O1-KR1", 80);
+    const leadChange = changeKrProgress(draft, "SW-O1-KR2", 90);
+
+    expect(authorizeDraftChange(config, access, draft, memberChange)).toMatchObject({ ok: true });
+    expect(authorizeDraftChange(config, access, draft, leadChange)).toMatchObject({ ok: true });
   });
 
   it("prevents every role from editing locked periods", () => {
@@ -105,29 +119,50 @@ describe("role-based OKR permissions", () => {
     expect(authorizePublish(config, access, "Software", "2026-q2")).toMatchObject({ ok: false, error: "Period is locked" });
   });
 
-  it("allows users to edit only KR records matching their owner aliases", () => {
+  it("allows personal OKR accounts to edit only KR records matching their owner aliases", () => {
     const access = getAccessForSessionUser(config, { email: "user@company.com", name: "Member" });
-    const allowedDraft = {
-      ...draft,
-      objectives: draft.objectives.map((objective) => ({
-        ...objective,
-        keyResults: objective.keyResults.map((kr) =>
-          kr.owner === "Member" ? { ...kr, progress: 80 } : kr
-        )
-      }))
-    };
-    const deniedDraft = {
-      ...draft,
-      objectives: draft.objectives.map((objective) => ({
-        ...objective,
-        keyResults: objective.keyResults.map((kr) =>
-          kr.owner === "Software Lead" ? { ...kr, progress: 80 } : kr
-        )
-      }))
-    };
+    const allowedDraft = changeKrProgress(draft, "SW-O1-KR1", 80);
+    const deniedDraft = changeKrProgress(draft, "SW-O1-KR2", 80);
 
     expect(authorizeDraftChange(config, access, draft, allowedDraft)).toMatchObject({ ok: true });
     expect(authorizeDraftChange(config, access, draft, deniedDraft)).toMatchObject({ ok: false });
+  });
+
+  it("prevents personal OKR accounts from publishing, changing objective metadata, or adding KRs", () => {
+    const access = getAccessForSessionUser(config, { email: "user@company.com", name: "Member" });
+    const objectiveChange = {
+      ...draft,
+      objectives: draft.objectives.map((objective) => ({
+        ...objective,
+        title: "Changed objective title"
+      }))
+    };
+    const addedKr = {
+      ...draft,
+      objectives: draft.objectives.map((objective) => ({
+        ...objective,
+        keyResults: [
+          ...objective.keyResults,
+          {
+            id: "SW-O1-KR3",
+            title: "New member KR",
+            owner: "Member",
+            baseline: "",
+            target: "",
+            actual: "",
+            progress: 10,
+            confidence: "Yellow" as const,
+            weight: 0,
+            risks: "",
+            decisionsNeeded: ""
+          }
+        ]
+      }))
+    };
+
+    expect(authorizePublish(config, access, "Software", "2026-q3")).toMatchObject({ ok: false });
+    expect(authorizeDraftChange(config, access, draft, objectiveChange)).toMatchObject({ ok: false });
+    expect(authorizeDraftChange(config, access, draft, addedKr)).toMatchObject({ ok: false });
   });
 
   it("does not grant ordinary users team edit access when their team list is empty", () => {
@@ -135,3 +170,15 @@ describe("role-based OKR permissions", () => {
     expect(getTeamEditPolicy(config, "Software", access)).toMatchObject({ canEdit: false, canPublish: false });
   });
 });
+
+function changeKrProgress(input: OkrDraft, krId: string, progress: number): OkrDraft {
+  return {
+    ...input,
+    objectives: input.objectives.map((objective) => ({
+      ...objective,
+      keyResults: objective.keyResults.map((kr) =>
+        kr.id === krId ? { ...kr, progress } : kr
+      )
+    }))
+  };
+}

@@ -34,7 +34,7 @@ export type OkrNode = OkrRecord & {
 
 export type SyncStatus = {
   status: "ok" | "error" | "empty";
-  source: "sample" | "csv" | "csv-url" | "google-doc" | "snapshot";
+  source: "snapshot";
   lastSyncedAt: string;
   message: string;
   rowCount: number;
@@ -71,26 +71,3 @@ export type ValidationResult = {
   errors: string[];
   warnings: string[];
 };
-
-export const requiredHeaders = [
-  "okr_id",
-  "parent_id",
-  "level",
-  "team",
-  "objective",
-  "kr",
-  "type",
-  "owner",
-  "baseline",
-  "target",
-  "actual",
-  "score",
-  "confidence",
-  "dependencies",
-  "risks",
-  "decisions_needed",
-  "source_doc_url",
-  "last_update"
-] as const;
-
-export type OkrHeader = (typeof requiredHeaders)[number];
