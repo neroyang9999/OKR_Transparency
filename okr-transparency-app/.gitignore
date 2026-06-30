@@ -8,3 +8,8 @@ data/okr-snapshot.json
 data/okr-drafts.json
 data/okr-period-snapshots.json
 coverage
+deploy/terraform/.terraform
+deploy/terraform/.terraform.lock.hcl
+deploy/terraform/terraform.tfvars
+deploy/terraform/terraform.tfstate
+deploy/terraform/terraform.tfstate.backup

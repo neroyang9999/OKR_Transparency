@@ -15,7 +15,7 @@ export type UserAccess = {
   role: AdminRole;
   teams: string[];
   ownerAliases: string[];
-  source: "google" | "admin-token";
+  source: "google" | "iap" | "admin-token";
 };
 
 export type TeamEditPolicy = {
@@ -38,6 +38,10 @@ export async function resolveRequestAccess(request: NextRequest, config: AdminCo
     };
   }
 
+  const iapUser = getIapSessionUser(request.headers);
+  const iapAccess = getAccessForSessionUser(config, iapUser, "iap");
+  if (iapAccess) return iapAccess;
+
   const session = await getAuthSession();
   return getAccessForSessionUser(config, {
     email: session?.user?.email ?? "",
@@ -47,6 +51,9 @@ export async function resolveRequestAccess(request: NextRequest, config: AdminCo
 }
 
 export async function getCurrentSessionUser(): Promise<SessionUser | null> {
+  const iapUser = await getCurrentIapSessionUser();
+  if (iapUser) return iapUser;
+
   const session = await getAuthSession();
   const email = normalizeToken(session?.user?.email ?? "");
   if (!email) return null;
@@ -57,17 +64,17 @@ export async function getCurrentSessionUser(): Promise<SessionUser | null> {
   };
 }
 
-export function getAccessForSessionUser(config: AdminConfig, user: SessionUser | null): UserAccess | null {
+export function getAccessForSessionUser(config: AdminConfig, user: SessionUser | null, source: "google" | "iap" = "google"): UserAccess | null {
   const email = normalizeToken(user?.email ?? "");
   if (!email) return null;
 
   const configured = config.users.find((item) => normalizeToken(item.email) === email && item.enabled);
   if (!configured) return null;
 
-  return accessFromAdminUser(configured, user?.name ?? configured.displayName);
+  return accessFromAdminUser(configured, user?.name ?? configured.displayName, source);
 }
 
-export function accessFromAdminUser(user: AdminUser, sessionName = ""): UserAccess {
+export function accessFromAdminUser(user: AdminUser, sessionName = "", source: "google" | "iap" = "google"): UserAccess {
   const email = normalizeToken(user.email);
   const aliases = uniqueTokens([
     ...user.ownerAliases,
@@ -82,7 +89,7 @@ export function accessFromAdminUser(user: AdminUser, sessionName = ""): UserAcce
     role: user.role,
     teams: user.teams,
     ownerAliases: aliases,
-    source: "google"
+    source
   };
 }
 
@@ -260,4 +267,27 @@ async function getAuthSession() {
   } catch {
     return null;
   }
+}
+
+function getIapSessionUser(headers: Headers): SessionUser | null {
+  const email = extractIapEmail(headers);
+  if (!email) return null;
+  return {
+    email,
+    name: email
+  };
+}
+
+async function getCurrentIapSessionUser(): Promise<SessionUser | null> {
+  try {
+    const { headers } = await import("next/headers");
+    return getIapSessionUser(await headers());
+  } catch {
+    return null;
+  }
+}
+
+function extractIapEmail(headers: Headers) {
+  const rawEmail = headers.get("x-goog-authenticated-user-email") ?? "";
+  return normalizeToken(rawEmail.replace(/^accounts\.google\.com:/i, ""));
 }

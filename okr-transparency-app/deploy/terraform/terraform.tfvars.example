@@ -1,0 +1,21 @@
+project_id = "gen-lang-client-0913302758"
+region     = "us-west1"
+
+# Push first with:
+#   powershell -ExecutionPolicy Bypass -File ..\scripts\push-image.ps1 -Tag staging
+image_tag = "staging"
+
+allowed_google_domains = "unitxlabs.com"
+firestore_database_id  = "(default)"
+
+# Start broad for the internal domain, or replace with:
+#   group:eng@unitxlabs.com
+#   user:your.name@unitxlabs.com
+iap_enabled       = true
+iap_principal     = "domain:unitxlabs.com"
+invoker_principal = "domain:unitxlabs.com"
+
+min_instances = 0
+max_instances = 3
+
+enable_admin_token_login = false

@@ -44,6 +44,8 @@ Google sign-in is accepted when the email matches `OKR_ALLOWED_GOOGLE_DOMAINS` o
 
 `OKR_ADMIN_TOKEN` remains available as a break-glass fallback for API calls. In production, keep it in Secret Manager and leave the token UI hidden unless `NEXT_PUBLIC_ENABLE_ADMIN_TOKEN_LOGIN=true` is intentionally set.
 
+For the Cloud Run deployment, Identity-Aware Proxy (IAP) protects the whole app first. The app also accepts the IAP-injected `X-Goog-Authenticated-User-Email` header as a production identity source and maps that email to the same admin-role config used by Google OAuth.
+
 ## Storage
 
 `OKR_STORAGE` controls persistence:
@@ -77,3 +79,30 @@ Authorized users can add `mode=edit` to the overview page to edit OKRs directly 
 OKRs are created and maintained directly in the browser page editor. The app no longer imports OKRs from Google Docs or CSV files.
 
 Drafts are saved first. Publishing a draft writes normalized OKR records into the current snapshot and the selected period snapshot. Rollback restores the previous snapshot backup.
+
+## Cloud Run Deployment
+
+The production deployment target is the `nero` GCP project:
+
+- Project ID: `gen-lang-client-0913302758`
+- Runtime: Cloud Run
+- Image registry: Artifact Registry `unitx-internal`
+- Auth boundary: IAP, default `domain:unitxlabs.com`
+- Storage: Firestore
+
+Build and push an image:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\scripts\push-image.ps1 -Tag staging
+```
+
+Apply infrastructure:
+
+```powershell
+cd .\deploy\terraform
+copy terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
+```
+
+See `deploy/terraform/README.md` for the full setup and cutover checklist.

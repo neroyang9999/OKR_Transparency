@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
 import type { AdminConfig } from "./config";
-import { authorizeDraftChange, authorizePublish, getAccessForSessionUser, getTeamEditPolicy } from "./permissions";
+import { authorizeDraftChange, authorizePublish, getAccessForSessionUser, getTeamEditPolicy, resolveRequestAccess } from "./permissions";
 import type { OkrDraft } from "../okr/edit-types";
 
 const config: AdminConfig = {
@@ -85,6 +86,29 @@ describe("role-based OKR permissions", () => {
   it("resolves configured Google users case-insensitively and rejects disabled users", () => {
     expect(getAccessForSessionUser(config, { email: "ADMIN@COMPANY.COM", name: "Admin" })?.role).toBe("super_admin");
     expect(getAccessForSessionUser(config, { email: "disabled@company.com", name: "Disabled" })).toBeNull();
+  });
+
+  it("can resolve the same configured users from IAP identity", () => {
+    const access = getAccessForSessionUser(config, { email: "lead@company.com", name: "lead@company.com" }, "iap");
+    expect(access).toMatchObject({
+      email: "lead@company.com",
+      role: "team_leader",
+      source: "iap"
+    });
+  });
+
+  it("resolves route access from the IAP email header", async () => {
+    const request = new NextRequest("https://okr.example.com/api/admin/session", {
+      headers: {
+        "x-goog-authenticated-user-email": "accounts.google.com:lead@company.com"
+      }
+    });
+
+    await expect(resolveRequestAccess(request, config)).resolves.toMatchObject({
+      email: "lead@company.com",
+      role: "team_leader",
+      source: "iap"
+    });
   });
 
   it("allows admin accounts to edit and publish every team", () => {
