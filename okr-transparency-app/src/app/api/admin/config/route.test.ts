@@ -19,7 +19,7 @@ vi.mock("@/lib/admin/permissions", () => {
 });
 
 vi.mock("@/lib/storage/mode", () => ({ getStorageMode: vi.fn(() => "file") }));
-vi.mock("@/lib/app-version", () => ({ APP_VERSION: "0.5.0" }));
+vi.mock("@/lib/app-version", () => ({ APP_VERSION: "0.6.0" }));
 
 const baseConfig: AdminConfig = {
   version: 2,
@@ -94,7 +94,7 @@ describe("/api/admin/config account management permissions", () => {
           expect.objectContaining({ email: "member@company.com", role: "user" })
         ])
       }),
-      system: { appVersion: "0.5.0", storageMode: "file" }
+      system: { appVersion: "0.6.0", storageMode: "file" }
     });
   });
 

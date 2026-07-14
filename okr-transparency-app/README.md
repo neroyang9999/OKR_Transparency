@@ -29,7 +29,7 @@ Every user-facing change must first be added under `Unreleased` in `CHANGELOG.md
 2. Update `package.json` and `package-lock.json` to the same version.
 3. Move the relevant `Unreleased` entries into a dated `vX.Y.Z` section.
 4. Run `npm test`, `npm run lint`, and `npm run build` before merging into `main`.
-5. Use a release commit such as `Release v0.5.0`; create and push a matching Git tag only when the release is deployed.
+5. Use a release commit such as `Release vX.Y.Z`; create and push a matching Git tag only when the release is deployed.
 
 ## Authentication and Permissions
 
