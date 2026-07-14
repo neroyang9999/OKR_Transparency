@@ -4,7 +4,11 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
-- Add user-facing changes here before merging them into `main`.
+- Redesign the admin area as an OKR operating console with four task-oriented sections: runtime status, periods, organization and access, and audit and recovery.
+- Replace passive configuration counts with actionable operational attention items and published-team/data-quality status.
+- Add AdminConfig v2 read-time migration, a single period state, stable team IDs, configuration revisions, conflict rejection, and domain-specific audit summaries.
+- Replace raw parent/color/role fields with structured controls, effective-access previews, account deactivation, and guarded permanent deletion.
+- Add version impact previews before team-and-period rollback and expose storage/version information as read-only system context.
 
 ## v0.5.0 - 2026-07-14
 

@@ -149,7 +149,7 @@ export function canEditOwner(access: UserAccess | null, owner: string) {
 export function validateEditablePeriod(config: AdminConfig, periodId: string) {
   const period = config.periods.find((item) => item.id === periodId);
   if (!period) return { ok: false, error: "Period is not configured" };
-  if (!period.editable || period.locked) return { ok: false, error: "Period is locked" };
+  if (period.status !== "active") return { ok: false, error: "Period is locked" };
   return { ok: true, error: "" };
 }
 

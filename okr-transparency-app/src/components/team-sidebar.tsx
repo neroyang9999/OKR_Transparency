@@ -261,14 +261,22 @@ function TeamAvatar({ name, color, selected }: { name: string; color?: string; s
 
 function teamColor(color?: string) {
   switch (color) {
+    case "emerald":
     case "bg-emerald-500":
       return "#10b981";
+    case "violet":
     case "bg-violet-500":
       return "#8b5cf6";
+    case "amber":
     case "bg-amber-500":
       return "#f59e0b";
+    case "rose":
+    case "bg-rose-500":
+      return "#f43f5e";
+    case "slate":
     case "bg-slate-500":
       return "#64748b";
+    case "blue":
     case "bg-blue-500":
     default:
       return "#3b82f6";

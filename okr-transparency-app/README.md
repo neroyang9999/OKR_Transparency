@@ -58,6 +58,17 @@ Google sign-in is accepted when the email matches `OKR_ALLOWED_GOOGLE_DOMAINS` o
 
 For the Cloud Run deployment, Identity-Aware Proxy (IAP) protects the whole app first. The app also accepts the IAP-injected `X-Goog-Authenticated-User-Email` header as a production identity source and maps that email to the same admin-role config used by Google OAuth.
 
+## Admin Operating Console
+
+`/admin` is organized around four administrator jobs:
+
+- Runtime status: current period, publish coverage, data quality, and actionable attention items.
+- Periods: create a planned period, activate one current period, and lock historical periods.
+- Organization and access: maintain the team hierarchy, account roles, team scope, and effective permissions.
+- Audit and recovery: filter events, compare a saved team version with current records, roll back a scoped version, and export a full backup.
+
+Admin configuration is normalized to v2 when read. Legacy JSON remains readable and is only rewritten after an administrator explicitly saves. v2 uses one period state (`planned`, `active`, or `locked`), removes the unused legacy permission list, and adds a revision number so stale admin saves are rejected instead of silently overwriting newer configuration.
+
 ## Storage
 
 `OKR_STORAGE` controls persistence:

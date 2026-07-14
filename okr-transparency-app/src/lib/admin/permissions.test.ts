@@ -5,19 +5,19 @@ import { authorizeDraftChange, authorizePublish, getAccessForSessionUser, getTea
 import type { OkrDraft } from "../okr/edit-types";
 
 const config: AdminConfig = {
-  version: 1,
+  version: 2,
+  revision: 1,
   defaultPeriodId: "2026-q3",
   periods: [
-    { id: "2026-q3", label: "Q3", labelEn: "Q3", shortLabel: "Q3", editable: true, locked: false },
-    { id: "2026-q2", label: "Q2", labelEn: "Q2", shortLabel: "Q2", editable: false, locked: true }
+    { id: "2026-q3", label: "Q3", labelEn: "Q3", shortLabel: "Q3", status: "active" },
+    { id: "2026-q2", label: "Q2", labelEn: "Q2", shortLabel: "Q2", status: "locked" }
   ],
   defaultTeam: "Software",
   teams: [
-    { name: "Software", owner: "Software Lead", parentTeam: "", color: "bg-blue-500", enabled: true },
-    { name: "Application Team", owner: "Application Lead", parentTeam: "Software", color: "bg-blue-500", enabled: true },
-    { name: "Hardware", owner: "Hardware Lead", parentTeam: "", color: "bg-green-500", enabled: true }
+    { id: "software", name: "Software", owner: "Software Lead", parentTeam: "", color: "blue", enabled: true },
+    { id: "application", name: "Application Team", owner: "Application Lead", parentTeam: "Software", color: "blue", enabled: true },
+    { id: "hardware", name: "Hardware", owner: "Hardware Lead", parentTeam: "", color: "emerald", enabled: true }
   ],
-  permissions: [],
   users: [
     { email: "admin@company.com", displayName: "Admin", role: "super_admin", teams: [], ownerAliases: ["Admin"], enabled: true },
     { email: "lead@company.com", displayName: "Software Lead", role: "team_leader", teams: ["Software"], ownerAliases: ["Software Lead"], enabled: true },

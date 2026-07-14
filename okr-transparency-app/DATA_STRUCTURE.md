@@ -34,7 +34,7 @@ Page editor
 | `okr-drafts.json` | 页面编辑草稿 | 1 份 draft |
 | `okr-progress-notes.json` | 每周进度备注 | 3 条 note |
 | `okr-snapshot-versions.json` | 按团队/周期保存发布前版本 | 首次新发布后生成 |
-| `okr-admin-config.json` | period、team、权限、用户、设置 | 2 个 period，10 个 team，42 个 user |
+| `okr-admin-config.json` | period、team、用户、权限和设置 | 旧版 v1 可直接读取，管理员保存后写为 v2 |
 | `okr-admin-events.json` | 管理操作审计事件 | 记录 login/config/publish/rollback |
 | `okr-admin-rollback-snapshot.json` | 旧版全局 rollback 备份 | 仅兼容保留，新回滚不再读取 |
 | `app-events.log` | 应用日志 | 存在 |
@@ -265,12 +265,12 @@ Firestore：
 
 ```ts
 type AdminConfig = {
-  version: 1;
+  version: 2;
+  revision: number;
   defaultPeriodId: string;
   periods: AdminPeriod[];
   defaultTeam: string;
   teams: AdminTeam[];
-  permissions: AdminPermission[];
   users: AdminUser[];
   settings: {
     defaultLanguage: "zh" | "en";
@@ -285,10 +285,16 @@ type AdminConfig = {
 
 | 结构 | 关键字段 | 用途 |
 | --- | --- | --- |
-| `AdminPeriod` | `id`, `label`, `editable`, `locked` | 控制季度/period 可编辑性 |
-| `AdminTeam` | `name`, `owner`, `parentTeam`, `color`, `enabled` | 控制团队列表、负责人、层级和显示 |
-| `AdminPermission` | `team`, `accounts`, `canEdit`, `canPublish` | 旧式权限配置，仍保留 |
+| `AdminPeriod` | `id`, `label`, `status` | `planned` / `active` / `locked`，同时只允许一个 active period |
+| `AdminTeam` | `id`, `name`, `owner`, `parentTeam`, `color`, `enabled` | 控制团队列表、负责人、层级和显示；`id` 不在 UI 中编辑 |
 | `AdminUser` | `email`, `displayName`, `role`, `teams`, `ownerAliases`, `enabled` | Google OAuth 后的主要权限来源 |
+
+兼容与并发规则：
+
+- 读取 v1 时会把 `editable/locked` 迁移成单一 `status`，把旧 Tailwind color class 迁移成颜色 token，并忽略已不参与授权的 legacy `permissions`。
+- 兼容迁移只发生在内存中；管理员明确保存后才会写入 v2。
+- `revision` 每次成功保存加 1；PUT 请求携带 `expectedRevision`，过期 revision 返回 `409 CONFIG_CONFLICT`。
+- 用户的姓名和邮箱会自动加入 owner alias，历史别名仍可在高级设置补充。
 
 角色：
 
@@ -298,7 +304,7 @@ type AdminConfig = {
 
 当前本地配置：
 
-- period：`2026-q3` 可编辑，`2026-q2` locked。
+- period：默认周期为 active，历史周期为 locked，新周期先进入 planned。
 - team：10 个 enabled team。
 - user：42 个 enabled user。
 
@@ -320,6 +326,7 @@ type AdminEvent = {
   message: string;
   createdAt: string;
   status: "ok" | "error";
+  details?: string[];
 };
 ```
 
@@ -339,6 +346,7 @@ type AdminEvent = {
 | `/api/admin/events` | GET | `AdminEvent[]` | 读取管理事件 |
 | `/api/admin/rollback` | POST | `SnapshotVersion` | 按 versionId 回滚指定团队和周期 |
 | `/api/admin/versions` | GET | `SnapshotVersion[]` | 查看团队/周期版本历史 |
+| `/api/admin/versions/[id]` | GET | version + diff | 比较目标版本与当前团队/周期记录 |
 | `/api/admin/backup` | GET | JSON backup | 导出配置、快照、草稿、进度和版本 |
 
 ## 11. 对接建议
@@ -382,7 +390,7 @@ okrAdminEvents/{eventId}
 
 ## 12. 当前对接注意事项
 
-- `AdminTeam.name`、`OkrRecord.team`、用户 `teams` 仍需保持一致；后台保存会校验引用，后续可在独立迁移中引入稳定 `team_id`。
+- `AdminTeam.id` 已作为后台稳定标识；`OkrRecord.team` 和用户 `teams` 仍以名称对接，因此现有团队名称不允许在后台直接重命名，新团队在首次保存前可调整名称。
 - `score` 和 `progress` 单位不同：snapshot 是 0-1，draft/UI/周进展是 0-100。
 - File 模式下多个 JSON 文件是应用状态，不是源文档；批量修复应使用 `repair:okr-graph` / `migrate:alignment-edges`，常规更新走页面/API。
 - 每次发布和 KR 状态更新都会写入 `okrSnapshotVersions`，回滚按团队和周期合并，不覆盖其他团队。

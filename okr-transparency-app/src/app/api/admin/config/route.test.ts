@@ -18,19 +18,20 @@ vi.mock("@/lib/admin/permissions", () => {
   };
 });
 
+vi.mock("@/lib/storage/mode", () => ({ getStorageMode: vi.fn(() => "file") }));
+vi.mock("@/lib/app-version", () => ({ APP_VERSION: "0.5.0" }));
+
 const baseConfig: AdminConfig = {
-  version: 1,
+  version: 2,
+  revision: 3,
   defaultPeriodId: "2026-q3",
   periods: [
-    { id: "2026-q3", label: "Q3", labelEn: "Q3", shortLabel: "Q3", editable: true, locked: false }
+    { id: "2026-q3", label: "Q3", labelEn: "Q3", shortLabel: "Q3", status: "active" }
   ],
   defaultTeam: "Software",
   teams: [
-    { name: "Software", owner: "Software Lead", parentTeam: "", color: "bg-blue-500", enabled: true },
-    { name: "Application Team", owner: "Application Lead", parentTeam: "Software", color: "bg-blue-500", enabled: true }
-  ],
-  permissions: [
-    { team: "Software", accounts: "lead@company.com", canEdit: true, canPublish: true, notes: "" }
+    { id: "software", name: "Software", owner: "Software Lead", parentTeam: "", color: "blue", enabled: true },
+    { id: "application", name: "Application Team", owner: "Application Lead", parentTeam: "Software", color: "blue", enabled: true }
   ],
   users: [
     { email: "admin@company.com", displayName: "Admin", role: "super_admin", teams: [], ownerAliases: ["Admin"], enabled: true },
@@ -92,7 +93,8 @@ describe("/api/admin/config account management permissions", () => {
           expect.objectContaining({ email: "lead@company.com", role: "team_leader" }),
           expect.objectContaining({ email: "member@company.com", role: "user" })
         ])
-      })
+      }),
+      system: { appVersion: "0.5.0", storageMode: "file" }
     });
   });
 
@@ -129,7 +131,7 @@ describe("/api/admin/config account management permissions", () => {
     const response = await PUT(new NextRequest("http://localhost/api/admin/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(nextConfig)
+      body: JSON.stringify({ config: nextConfig, expectedRevision: baseConfig.revision })
     }));
 
     expect(response.status).toBe(200);
@@ -172,7 +174,7 @@ describe("/api/admin/config account management permissions", () => {
     const response = await PUT(new NextRequest("http://localhost/api/admin/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(nextConfig)
+      body: JSON.stringify({ config: nextConfig, expectedRevision: baseConfig.revision })
     }));
 
     expect(response.status).toBe(200);
@@ -208,14 +210,14 @@ describe("/api/admin/config account management permissions", () => {
     const teamleadResponse = await PUT(new NextRequest("http://localhost/api/admin/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(nextConfig)
+      body: JSON.stringify({ config: nextConfig, expectedRevision: baseConfig.revision })
     }));
 
     vi.mocked(resolveRequestAccess).mockResolvedValueOnce(userAccess);
     const userResponse = await PUT(new NextRequest("http://localhost/api/admin/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(nextConfig)
+      body: JSON.stringify({ config: nextConfig, expectedRevision: baseConfig.revision })
     }));
 
     expect(teamleadResponse.status).toBe(401);
@@ -231,9 +233,21 @@ describe("/api/admin/config account management permissions", () => {
     const response = await PUT(new NextRequest("http://localhost/api/admin/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(baseConfig)
+      body: JSON.stringify({ config: baseConfig, expectedRevision: baseConfig.revision })
     }));
     expect(response.status).toBe(422);
+    expect(writeAdminConfig).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale configuration revisions", async () => {
+    vi.mocked(resolveRequestAccess).mockResolvedValueOnce(adminAccess);
+    const response = await PUT(new NextRequest("http://localhost/api/admin/config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ config: baseConfig, expectedRevision: 2 })
+    }));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: "CONFIG_CONFLICT", currentRevision: 3 });
     expect(writeAdminConfig).not.toHaveBeenCalled();
   });
 });
