@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { isAuthorized } from "../admin-auth";
+import { isIapAuthenticationRequired, verifyIapJwt } from "../iap-auth";
 import type { AdminConfig, AdminRole, AdminUser } from "./config";
 import type { EditableObjective, OkrDraft } from "../okr/edit-types";
 
@@ -27,6 +28,10 @@ export type TeamEditPolicy = {
 };
 
 export async function resolveRequestAccess(request: NextRequest, config: AdminConfig): Promise<UserAccess | null> {
+  const iapRequired = isIapAuthenticationRequired();
+  const iapUser = await getIapSessionUser(request.headers);
+  if (iapRequired && !iapUser) return null;
+
   if (isAuthorized(request)) {
     return {
       email: "admin-token",
@@ -38,9 +43,9 @@ export async function resolveRequestAccess(request: NextRequest, config: AdminCo
     };
   }
 
-  const iapUser = getIapSessionUser(request.headers);
   const iapAccess = getAccessForSessionUser(config, iapUser, "iap");
   if (iapAccess) return iapAccess;
+  if (iapRequired) return null;
 
   const session = await getAuthSession();
   return getAccessForSessionUser(config, {
@@ -53,6 +58,7 @@ export async function resolveRequestAccess(request: NextRequest, config: AdminCo
 export async function getCurrentSessionUser(): Promise<SessionUser | null> {
   const iapUser = await getCurrentIapSessionUser();
   if (iapUser) return iapUser;
+  if (isIapAuthenticationRequired()) return null;
 
   const session = await getAuthSession();
   const email = normalizeToken(session?.user?.email ?? "");
@@ -142,8 +148,14 @@ export function canManageTeam(config: AdminConfig, team: string, access: UserAcc
 
 export function canEditOwner(access: UserAccess | null, owner: string) {
   if (!access) return false;
-  if (access.role === "super_admin" || access.role === "team_leader") return true;
+  if (access.role === "super_admin") return true;
   return tokenMatches(access.ownerAliases, owner);
+}
+
+export function canEditTeamOwner(config: AdminConfig, team: string, access: UserAccess | null, owner: string) {
+  const policy = getTeamEditPolicy(config, team, access);
+  if (!policy.canEdit) return false;
+  return access?.role === "super_admin" || access?.role === "team_leader" || canEditOwner(access, owner);
 }
 
 export function validateEditablePeriod(config: AdminConfig, periodId: string) {
@@ -269,25 +281,21 @@ async function getAuthSession() {
   }
 }
 
-function getIapSessionUser(headers: Headers): SessionUser | null {
-  const email = extractIapEmail(headers);
-  if (!email) return null;
+async function getIapSessionUser(headers: Headers): Promise<SessionUser | null> {
+  const token = headers.get("x-goog-iap-jwt-assertion") ?? "";
+  const identity = await verifyIapJwt(token);
+  if (!identity) return null;
   return {
-    email,
-    name: email
+    email: identity.email,
+    name: identity.email
   };
 }
 
 async function getCurrentIapSessionUser(): Promise<SessionUser | null> {
   try {
     const { headers } = await import("next/headers");
-    return getIapSessionUser(await headers());
+    return await getIapSessionUser(await headers());
   } catch {
     return null;
   }
-}
-
-function extractIapEmail(headers: Headers) {
-  const rawEmail = headers.get("x-goog-authenticated-user-email") ?? "";
-  return normalizeToken(rawEmail.replace(/^accounts\.google\.com:/i, ""));
 }

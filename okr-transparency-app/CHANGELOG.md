@@ -6,6 +6,18 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 - Add user-facing changes here before the next release.
 
+## v0.6.2 - 2026-07-14
+
+- Enforce team scope when team leaders or contributors update owner-scoped drafts and progress records.
+- Verify signed IAP JWT identity claims and configure Cloud Run to fail closed when IAP authentication is enabled.
+- Require two enabled system administrators and prevent administrators from deleting, disabling, or demoting themselves.
+
+## v0.6.1 - 2026-07-14
+
+- Add a persistent feedback entry point across user pages with bilingual submission UI and automatic page context.
+- Store authenticated user feedback in local JSON or Firestore and restrict the feedback list to system administrators.
+- Add a searchable user-feedback section to the admin console and include feedback in full backup exports.
+
 ## v0.6.0 - 2026-07-14
 
 - Redesign the admin area as an OKR operating console with four task-oriented sections: runtime status, periods, organization and access, and audit and recovery.

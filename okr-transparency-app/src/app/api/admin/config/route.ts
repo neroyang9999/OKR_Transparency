@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { readAdminConfig, validateAdminConfig, writeAdminConfig, type AdminConfig } from "@/lib/admin/config";
+import { readAdminConfig, validateAdminConfigUpdate, writeAdminConfig, type AdminConfig } from "@/lib/admin/config";
 import { canManageAdmin, resolveRequestAccess } from "@/lib/admin/permissions";
 import { APP_VERSION } from "@/lib/app-version";
 import { getStorageMode } from "@/lib/storage/mode";
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
       currentRevision: currentConfig.revision
     }, { status: 409 });
   }
-  const errors = validateAdminConfig(config);
+  const errors = validateAdminConfigUpdate(config, access?.email ?? "");
   if (errors.length > 0) return NextResponse.json({ error: errors[0], errors }, { status: 422 });
   const savedConfig = await writeAdminConfig(config, access?.displayName ?? "Admin");
   return NextResponse.json({ config: savedConfig });

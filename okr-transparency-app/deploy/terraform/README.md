@@ -40,11 +40,10 @@ terraform init
 terraform apply
 ```
 
-If Cloud Run direct IAP is not enabled by the provider in your environment, run:
-
-```powershell
-gcloud run services update okr-transparency-app --region=us-west1 --iap
-```
+Terraform enables Cloud Run direct IAP, grants `roles/run.invoker` only to the
+IAP service agent, and injects the exact expected JWT audience into the app.
+Do not remove `IAP_EXPECTED_AUDIENCE`; the app fails closed when a signed IAP
+JWT is missing or invalid.
 
 ## Migrate data
 

@@ -13,6 +13,7 @@ import {
   History,
   Lock,
   LogOut,
+  MessageSquareText,
   Plus,
   RotateCcw,
   Save,
@@ -25,11 +26,12 @@ import {
 } from "lucide-react";
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { getAdminRuntimeSummary, type VersionRecordChange } from "@/lib/admin/dashboard";
+import type { UserFeedback } from "@/lib/feedback";
 import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import type { OkrRecord, OkrTreeResponse } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
 
-type TabId = "status" | "periods" | "organization" | "recovery";
+type TabId = "status" | "periods" | "organization" | "feedback" | "recovery";
 type SystemInfo = { appVersion: string; storageMode: "file" | "firestore" };
 type VersionDiff = {
   changes: VersionRecordChange[];
@@ -42,6 +44,7 @@ const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof 
   { id: "status", label: "运行状态", description: "查看当前周期和待处理事项", icon: Activity },
   { id: "periods", label: "周期管理", description: "创建、启用和锁定周期", icon: CalendarRange },
   { id: "organization", label: "组织与权限", description: "维护团队、成员和有效权限", icon: Users },
+  { id: "feedback", label: "用户反馈", description: "查看用户提交的问题和建议", icon: MessageSquareText },
   { id: "recovery", label: "审计与恢复", description: "追踪变更、比较版本和回滚", icon: History }
 ];
 
@@ -57,6 +60,7 @@ export function AdminConsole() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [versions, setVersions] = useState<SnapshotVersion[]>([]);
   const [records, setRecords] = useState<OkrRecord[]>([]);
+  const [feedback, setFeedback] = useState<UserFeedback[]>([]);
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,11 +69,12 @@ export function AdminConsole() {
   const dirty = Boolean(config && savedConfig && JSON.stringify(config) !== JSON.stringify(savedConfig));
 
   const loadAdminData = useCallback(async () => {
-    const [configResponse, eventsResponse, versionsResponse, okrsResponse] = await Promise.all([
+    const [configResponse, eventsResponse, versionsResponse, okrsResponse, feedbackResponse] = await Promise.all([
       fetch("/api/admin/config"),
       fetch("/api/admin/events"),
       fetch("/api/admin/versions"),
-      fetch("/api/okrs")
+      fetch("/api/okrs"),
+      fetch("/api/admin/feedback")
     ]);
     if (configResponse.ok) {
       const body = await configResponse.json() as { config: AdminConfig; system: SystemInfo };
@@ -88,6 +93,10 @@ export function AdminConsole() {
     if (okrsResponse.ok) {
       const body = await okrsResponse.json() as OkrTreeResponse;
       setRecords(body.records);
+    }
+    if (feedbackResponse.ok) {
+      const body = await feedbackResponse.json() as { feedback: UserFeedback[] };
+      setFeedback(body.feedback);
     }
   }, []);
 
@@ -139,6 +148,7 @@ export function AdminConsole() {
     setEvents([]);
     setVersions([]);
     setRecords([]);
+    setFeedback([]);
   }
 
   async function saveConfig() {
@@ -247,6 +257,7 @@ export function AdminConsole() {
             {activeTab === "status" && <RuntimeStatus config={config} events={events} versions={versions} records={records} onNavigate={setActiveTab} />}
             {activeTab === "periods" && <PeriodManagement config={config} setConfig={setConfig} />}
             {activeTab === "organization" && <OrganizationAccess config={config} setConfig={setConfig} />}
+            {activeTab === "feedback" && <FeedbackReview feedback={feedback} />}
             {activeTab === "recovery" && <RecoveryAudit config={config} events={events} versions={versions} busy={busy} onRollback={rollback} />}
           </main>
         </div>
@@ -254,6 +265,53 @@ export function AdminConsole() {
 
       {settingsOpen && <SettingsDrawer config={config} setConfig={setConfig} system={system} onClose={() => setSettingsOpen(false)} />}
     </AdminFrame>
+  );
+}
+
+function FeedbackReview({ feedback }: { feedback: UserFeedback[] }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleFeedback = feedback.filter((item) => !normalizedQuery || [item.message, item.userName, item.userEmail, item.page]
+    .some((value) => value.toLowerCase().includes(normalizedQuery)));
+
+  return (
+    <Panel>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-slate-950">反馈记录</h3>
+          <p className="mt-1 text-sm text-muted-foreground">共 {feedback.length} 条，按提交时间从新到旧排列。</p>
+        </div>
+        <label className="relative block w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索内容、用户或页面" className="h-9 w-full rounded-md border border-border pl-9 pr-3 text-sm outline-none focus:border-blue-400" />
+        </label>
+      </div>
+
+      <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
+        {visibleFeedback.map((item) => {
+          const pageIsSafe = item.page.startsWith("/") && !item.page.startsWith("//");
+          return (
+            <article key={item.id} className="px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <UserAvatar name={item.userName || item.userEmail} enabled />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-900">{item.userName || item.userEmail}</div>
+                    <div className="truncate text-xs text-slate-500">{item.userEmail}</div>
+                  </div>
+                </div>
+                <time className="text-xs text-slate-500" dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">{item.message}</p>
+              <div className="mt-3 text-xs text-slate-500">
+                来源页面：{pageIsSafe ? <a href={item.page} className="text-blue-700 hover:underline">{item.page}</a> : item.page}
+              </div>
+            </article>
+          );
+        })}
+        {visibleFeedback.length === 0 && <EmptyState text={feedback.length === 0 ? "还没有用户反馈" : "没有匹配的反馈"} />}
+      </div>
+    </Panel>
   );
 }
 

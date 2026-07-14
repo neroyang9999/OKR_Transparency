@@ -36,6 +36,7 @@ Page editor
 | `okr-snapshot-versions.json` | 按团队/周期保存发布前版本 | 首次新发布后生成 |
 | `okr-admin-config.json` | period、team、用户、权限和设置 | 旧版 v1 可直接读取，管理员保存后写为 v2 |
 | `okr-admin-events.json` | 管理操作审计事件 | 记录 login/config/publish/rollback |
+| `okr-feedback.json` | 用户从页面提交的问题和建议 | 首次反馈后生成，最多保留最近 500 条 |
 | `okr-admin-rollback-snapshot.json` | 旧版全局 rollback 备份 | 仅兼容保留，新回滚不再读取 |
 | `app-events.log` | 应用日志 | 存在 |
 
@@ -332,7 +333,30 @@ type AdminEvent = {
 
 本地 file 模式最多保留最近 200 条事件。
 
-## 10. 主要 API 和数据读写
+## 10. 用户反馈：`UserFeedback`
+
+本地文件：`data/okr-feedback.json`
+
+Firestore：
+
+- `okrFeedback/{feedbackId}`
+
+结构：
+
+```ts
+type UserFeedback = {
+  id: string;
+  message: string;
+  page: string;
+  userEmail: string;
+  userName: string;
+  createdAt: string;
+};
+```
+
+只有已登录且已配置的用户可以提交；只有 `super_admin` 可以读取反馈列表。页面上下文由客户端自动带入，反馈正文最多 2000 字符。
+
+## 11. 主要 API 和数据读写
 
 | API | 方法 | 主要数据 | 说明 |
 | --- | --- | --- | --- |
@@ -342,14 +366,16 @@ type AdminEvent = {
 | `/api/okrs/draft` | GET/POST | `OkrDraft` | 读写团队草稿 |
 | `/api/okrs/publish` | POST | `OkrSnapshot` | 发布草稿到 period/current snapshot |
 | `/api/progress-notes` | GET/POST | `ProgressNote` | 读写每周进展备注 |
+| `/api/feedback` | POST | `UserFeedback` | 当前用户提交反馈 |
+| `/api/admin/feedback` | GET | `UserFeedback[]` | 系统管理员查看反馈 |
 | `/api/admin/config` | GET/PUT | `AdminConfig` | 读写管理配置 |
 | `/api/admin/events` | GET | `AdminEvent[]` | 读取管理事件 |
 | `/api/admin/rollback` | POST | `SnapshotVersion` | 按 versionId 回滚指定团队和周期 |
 | `/api/admin/versions` | GET | `SnapshotVersion[]` | 查看团队/周期版本历史 |
 | `/api/admin/versions/[id]` | GET | version + diff | 比较目标版本与当前团队/周期记录 |
-| `/api/admin/backup` | GET | JSON backup | 导出配置、快照、草稿、进度和版本 |
+| `/api/admin/backup` | GET | JSON backup | 导出配置、快照、草稿、进度、反馈和版本 |
 
-## 11. 对接建议
+## 12. 对接建议
 
 ### 如果同事要提供 OKR 数据
 
@@ -367,6 +393,7 @@ okrPeriodSnapshots/{periodId}
 okrDrafts/{periodId_team}
 okrProgressNotes/{periodId_team_objectiveId_weekStart}
 okrAdminEvents/{eventId}
+okrFeedback/{feedbackId}
 ```
 
 注意 `okrDrafts` 和 `okrProgressNotes` 的 document id 不是业务字段本身直接拼接，而是通过 `documentIdFromParts` 生成。
@@ -388,7 +415,7 @@ okrAdminEvents/{eventId}
 - 普通成员用 `role=user`，配置 `ownerAliases`。
 - `ownerAliases` 要和 OKR 数据里的 `owner` 能匹配，否则 owner-scoped edit/publish 会找不到对应记录。
 
-## 12. 当前对接注意事项
+## 13. 当前对接注意事项
 
 - `AdminTeam.id` 已作为后台稳定标识；`OkrRecord.team` 和用户 `teams` 仍以名称对接，因此现有团队名称不允许在后台直接重命名，新团队在首次保存前可调整名称。
 - `score` 和 `progress` 单位不同：snapshot 是 0-1，draft/UI/周进展是 0-100。

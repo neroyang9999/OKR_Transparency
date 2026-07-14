@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAdminConfig, summarizeAdminConfigChanges, validateAdminConfig } from "./config";
+import { normalizeAdminConfig, summarizeAdminConfigChanges, validateAdminConfig, validateAdminConfigUpdate } from "./config";
 
 describe("admin config v2", () => {
   it("migrates legacy period flags, colors, permissions, and aliases without writing files", () => {
@@ -24,7 +24,7 @@ describe("admin config v2", () => {
     expect(config).not.toHaveProperty("permissions");
   });
 
-  it("rejects ambiguous active periods and removal of the last administrator", () => {
+  it("rejects ambiguous active periods and fewer than two valid administrators", () => {
     const config = normalizeAdminConfig({});
     const invalid = {
       ...config,
@@ -33,8 +33,24 @@ describe("admin config v2", () => {
     };
     expect(validateAdminConfig(invalid)).toEqual(expect.arrayContaining([
       "Exactly one active period is required",
-      "At least one enabled system administrator is required"
+      "At least two enabled system administrators with valid email addresses are required"
     ]));
+  });
+
+  it("prevents the current administrator from removing or demoting their own account", () => {
+    const config = normalizeAdminConfig({});
+    const next = {
+      ...config,
+      users: [
+        ...config.users.map((user) => user.email === "admin@company.com" ? { ...user, role: "user" as const } : user),
+        { email: "admin2@company.com", displayName: "Admin 2", role: "super_admin" as const, teams: [], ownerAliases: ["Admin 2"], enabled: true },
+        { email: "admin3@company.com", displayName: "Admin 3", role: "super_admin" as const, teams: [], ownerAliases: ["Admin 3"], enabled: true }
+      ]
+    };
+
+    expect(validateAdminConfigUpdate(next, "admin@company.com")).toContain(
+      "You cannot remove, disable, or demote your own system administrator account"
+    );
   });
 
   it("summarizes only the configuration domains that changed", () => {

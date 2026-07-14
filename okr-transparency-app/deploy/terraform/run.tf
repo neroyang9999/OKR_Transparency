@@ -1,11 +1,20 @@
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 locals {
-  image_url = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.internal.repository_id}/okr-transparency-app:${var.image_tag}"
+  service_name = "okr-transparency-app"
+  image_url    = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.internal.repository_id}/${local.service_name}:${var.image_tag}"
+  iap_audience = "/projects/${data.google_project.current.number}/locations/${var.region}/services/${local.service_name}"
 }
 
 resource "google_cloud_run_v2_service" "api" {
-  name     = "okr-transparency-app"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  provider     = google-beta
+  name         = local.service_name
+  location     = var.region
+  ingress      = "INGRESS_TRAFFIC_ALL"
+  launch_stage = "BETA"
+  iap_enabled  = var.iap_enabled
 
   template {
     service_account = google_service_account.api.email
@@ -50,6 +59,14 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "NEXT_PUBLIC_ENABLE_ADMIN_TOKEN_LOGIN"
         value = tostring(var.enable_admin_token_login)
+      }
+
+      dynamic "env" {
+        for_each = var.iap_enabled ? [1] : []
+        content {
+          name  = "IAP_EXPECTED_AUDIENCE"
+          value = local.iap_audience
+        }
       }
 
       env {
@@ -104,5 +121,5 @@ resource "google_cloud_run_v2_service_iam_member" "invoker" {
   name     = google_cloud_run_v2_service.api.name
   location = google_cloud_run_v2_service.api.location
   role     = "roles/run.invoker"
-  member   = var.invoker_principal
+  member   = var.iap_enabled ? "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com" : var.invoker_principal
 }

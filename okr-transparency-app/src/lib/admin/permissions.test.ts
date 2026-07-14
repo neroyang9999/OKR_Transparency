@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type { AdminConfig } from "./config";
-import { authorizeDraftChange, authorizePublish, getAccessForSessionUser, getTeamEditPolicy, resolveRequestAccess } from "./permissions";
+import { isIapAuthenticationRequired, verifyIapJwt } from "../iap-auth";
+import { authorizeDraftChange, authorizePublish, canEditTeamOwner, getAccessForSessionUser, getTeamEditPolicy, resolveRequestAccess } from "./permissions";
 import type { OkrDraft } from "../okr/edit-types";
+
+vi.mock("../iap-auth", () => ({
+  isIapAuthenticationRequired: vi.fn(() => false),
+  verifyIapJwt: vi.fn(async () => null)
+}));
 
 const config: AdminConfig = {
   version: 2,
@@ -83,6 +89,11 @@ const draft: OkrDraft = {
 };
 
 describe("role-based OKR permissions", () => {
+  beforeEach(() => {
+    vi.mocked(isIapAuthenticationRequired).mockReturnValue(false);
+    vi.mocked(verifyIapJwt).mockResolvedValue(null);
+  });
+
   it("resolves configured Google users case-insensitively and rejects disabled users", () => {
     expect(getAccessForSessionUser(config, { email: "ADMIN@COMPANY.COM", name: "Admin" })?.role).toBe("super_admin");
     expect(getAccessForSessionUser(config, { email: "disabled@company.com", name: "Disabled" })).toBeNull();
@@ -97,10 +108,15 @@ describe("role-based OKR permissions", () => {
     });
   });
 
-  it("resolves route access from the IAP email header", async () => {
+  it("resolves route access only from a verified IAP JWT", async () => {
+    vi.mocked(isIapAuthenticationRequired).mockReturnValue(true);
+    vi.mocked(verifyIapJwt).mockResolvedValue({
+      email: "lead@company.com",
+      subject: "accounts.google.com:123456"
+    });
     const request = new NextRequest("https://okr.example.com/api/admin/session", {
       headers: {
-        "x-goog-authenticated-user-email": "accounts.google.com:lead@company.com"
+        "x-goog-iap-jwt-assertion": "signed.jwt.value"
       }
     });
 
@@ -109,6 +125,17 @@ describe("role-based OKR permissions", () => {
       role: "team_leader",
       source: "iap"
     });
+  });
+
+  it("rejects an unsigned IAP email header when IAP authentication is required", async () => {
+    vi.mocked(isIapAuthenticationRequired).mockReturnValue(true);
+    const request = new NextRequest("https://okr.example.com/api/admin/session", {
+      headers: {
+        "x-goog-authenticated-user-email": "accounts.google.com:admin@company.com"
+      }
+    });
+
+    await expect(resolveRequestAccess(request, config)).resolves.toBeNull();
   });
 
   it("allows admin accounts to edit and publish every team", () => {
@@ -127,6 +154,8 @@ describe("role-based OKR permissions", () => {
     expect(authorizePublish(config, access, "Software", "2026-q3")).toMatchObject({ ok: true });
     expect(authorizePublish(config, access, "Application Team", "2026-q3")).toMatchObject({ ok: true });
     expect(authorizePublish(config, access, "Hardware", "2026-q3")).toMatchObject({ ok: false });
+    expect(canEditTeamOwner(config, "Software", access, "Member")).toBe(true);
+    expect(canEditTeamOwner(config, "Hardware", access, "Hardware Lead")).toBe(false);
   });
 
   it("allows teamlead accounts to modify their team members' OKRs", () => {

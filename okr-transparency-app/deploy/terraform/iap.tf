@@ -4,9 +4,7 @@
 #   Configure the OAuth consent screen / brand in the nero GCP project.
 #   Use Internal user type for unitxlabs.com.
 #
-# After terraform apply, enable IAP on the service if the provider does not
-# expose Cloud Run direct IAP in this environment:
-#   gcloud run services update okr-transparency-app --region=us-west1 --iap
+# Cloud Run direct IAP is enabled by google_cloud_run_v2_service.iap_enabled.
 
 resource "google_iap_web_cloud_run_service_iam_member" "domain_access" {
   count = var.iap_enabled ? 1 : 0

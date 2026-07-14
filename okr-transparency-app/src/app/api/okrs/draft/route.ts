@@ -3,7 +3,7 @@ import { requireApiAccess } from "@/lib/admin/api-access";
 import { readAdminConfig, type AdminConfig } from "@/lib/admin/config";
 import { readDraft, writeDraft, writeOwnerScopedDraft } from "@/lib/okr/drafts";
 import { filterDraftByOwner, normalizeDraft, validateDraft, type OkrDraft } from "@/lib/okr/edit-types";
-import { authorizeDraftChange, canEditOwner, resolveRequestAccess } from "@/lib/admin/permissions";
+import { authorizeDraftChange, canEditTeamOwner, resolveRequestAccess } from "@/lib/admin/permissions";
 
 export async function GET(request: NextRequest) {
   const authorization = await requireApiAccess(request);
@@ -81,7 +81,7 @@ function authorizeOwnerScopedDraftChange(
 ) {
   const authorization = authorizeDraftChange(config, access, previous, next);
   if (authorization.ok) return authorization;
-  if (!ownerAliases.some((owner) => canEditOwner(access, owner))) return authorization;
+  if (!ownerAliases.some((owner) => canEditTeamOwner(config, next.team, access, owner))) return authorization;
   if (!next.objectives.every((objective) => draftObjectiveMatchesOwner(objective, ownerAliases))) return authorization;
   return { ok: true, error: "" };
 }

@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminConfig } from "@/lib/admin/config";
-import { readAdminConfig, validateAdminConfig, writeAdminConfig } from "@/lib/admin/config";
+import { readAdminConfig, validateAdminConfigUpdate, writeAdminConfig } from "@/lib/admin/config";
 import { resolveRequestAccess } from "@/lib/admin/permissions";
 import { GET, PUT } from "./route";
 
 vi.mock("@/lib/admin/config", () => ({
   readAdminConfig: vi.fn(),
-  validateAdminConfig: vi.fn(() => []),
+  validateAdminConfigUpdate: vi.fn(() => []),
   writeAdminConfig: vi.fn(async (config: AdminConfig) => config)
 }));
 
@@ -35,6 +35,7 @@ const baseConfig: AdminConfig = {
   ],
   users: [
     { email: "admin@company.com", displayName: "Admin", role: "super_admin", teams: [], ownerAliases: ["Admin"], enabled: true },
+    { email: "admin2@company.com", displayName: "Admin 2", role: "super_admin", teams: [], ownerAliases: ["Admin 2"], enabled: true },
     { email: "lead@company.com", displayName: "Software Lead", role: "team_leader", teams: ["Software"], ownerAliases: ["Software Lead"], enabled: true },
     { email: "member@company.com", displayName: "Member", role: "user", teams: ["Software"], ownerAliases: ["Member"], enabled: true }
   ],
@@ -76,6 +77,7 @@ const userAccess = {
 describe("/api/admin/config account management permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(validateAdminConfigUpdate).mockReturnValue([]);
     vi.mocked(readAdminConfig).mockResolvedValue(structuredClone(baseConfig));
     vi.mocked(writeAdminConfig).mockImplementation(async (config: AdminConfig) => config);
   });
@@ -229,7 +231,7 @@ describe("/api/admin/config account management permissions", () => {
 
   it("rejects invalid team references before saving", async () => {
     vi.mocked(resolveRequestAccess).mockResolvedValueOnce(adminAccess);
-    vi.mocked(validateAdminConfig).mockReturnValueOnce(["missing team"]);
+    vi.mocked(validateAdminConfigUpdate).mockReturnValueOnce(["missing team"]);
     const response = await PUT(new NextRequest("http://localhost/api/admin/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },

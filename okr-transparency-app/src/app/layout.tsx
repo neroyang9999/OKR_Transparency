@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { AuthProvider } from "@/components/auth-provider";
+import { FeedbackWidget } from "@/components/feedback-widget";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,7 +25,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body><AuthProvider>{children}</AuthProvider></body>
+      <body>
+        <AuthProvider>
+          {children}
+          <Suspense fallback={null}><FeedbackWidget /></Suspense>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

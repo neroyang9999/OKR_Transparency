@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiAccess } from "../../../lib/admin/api-access";
 import { readAdminConfig } from "../../../lib/admin/config";
-import { canEditOwner, canManageTeam, resolveRequestAccess, validateEditablePeriod } from "../../../lib/admin/permissions";
+import { canEditTeamOwner, resolveRequestAccess, validateEditablePeriod } from "../../../lib/admin/permissions";
 import { readPeriodRecords, updatePublishedRecordProgress } from "../../../lib/okr/drafts";
 import { readProgressNotesForObjective, writeProgressNote } from "../../../lib/okr/progress-notes";
 import { readOkrSnapshot } from "../../../lib/okr/store";
@@ -54,7 +54,7 @@ export async function PUT(request: NextRequest) {
     const periodRecords = await readPeriodRecords(body.periodId) ?? (await readOkrSnapshot()).records;
     const objective = periodRecords.find((record) => record.team === body.team && record.okr_id === body.objectiveId);
     if (!objective) return NextResponse.json({ error: "Published OKR record not found" }, { status: 404 });
-    if (!canManageTeam(config, body.team, access) && !canEditOwner(access, objective?.owner ?? "")) {
+    if (!canEditTeamOwner(config, body.team, access, objective.owner ?? "")) {
       return NextResponse.json({ error: "No progress note permission for this team" }, { status: 403 });
     }
 

@@ -165,17 +165,34 @@ export function validateAdminConfig(config: AdminConfig) {
 
   config.users.forEach((user) => {
     if (!user.email.trim()) errors.push("User email is required");
+    if (user.email.trim() && !isValidEmail(user.email)) errors.push(`${user.email}: valid email is required`);
     if (!user.displayName.trim()) errors.push(`${user.email || "User"}: display name is required`);
     user.teams.forEach((team) => {
       if (!teamSet.has(team)) errors.push(`${user.email}: assigned team ${team} does not exist`);
     });
   });
-  if (!config.users.some((user) => user.enabled && user.role === "super_admin")) {
-    errors.push("At least one enabled system administrator is required");
+  if (config.users.filter((user) => user.enabled && user.role === "super_admin" && isValidEmail(user.email)).length < 2) {
+    errors.push("At least two enabled system administrators with valid email addresses are required");
   }
   if (!teamSet.has(config.defaultTeam)) errors.push(`Default team ${config.defaultTeam} does not exist`);
   if (!periodIds.includes(config.defaultPeriodId)) errors.push(`Default period ${config.defaultPeriodId} does not exist`);
   return Array.from(new Set(errors));
+}
+
+export function validateAdminConfigUpdate(config: AdminConfig, actorEmail: string) {
+  const errors = validateAdminConfig(config);
+  const normalizedActorEmail = actorEmail.trim().toLowerCase();
+  if (normalizedActorEmail && normalizedActorEmail !== "admin-token") {
+    const actorRemainsAdmin = config.users.some((user) =>
+      user.email.trim().toLowerCase() === normalizedActorEmail && user.enabled && user.role === "super_admin"
+    );
+    if (!actorRemainsAdmin) errors.push("You cannot remove, disable, or demote your own system administrator account");
+  }
+  return Array.from(new Set(errors));
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 export function normalizeAdminConfig(input: AdminConfigInput): AdminConfig {

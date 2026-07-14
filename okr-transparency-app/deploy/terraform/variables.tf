@@ -28,7 +28,7 @@ variable "firestore_database_id" {
 }
 
 variable "iap_enabled" {
-  description = "Create IAP access binding. Enable IAP on the Cloud Run service after OAuth consent is configured."
+  description = "Enable Cloud Run direct IAP, signed JWT verification, and the IAP access binding."
   type        = bool
   default     = true
 }
@@ -40,7 +40,7 @@ variable "iap_principal" {
 }
 
 variable "invoker_principal" {
-  description = "Cloud Run invoker principal for pre-IAP validation or proxy access."
+  description = "Cloud Run invoker principal used only when IAP is disabled."
   type        = string
   default     = "domain:unitxlabs.com"
 }
