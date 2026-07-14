@@ -72,6 +72,17 @@ Admin configuration must retain at least two enabled system administrators with 
 
 Admin configuration is normalized to v2 when read. Legacy JSON remains readable and is only rewritten after an administrator explicitly saves. v2 uses one period state (`planned`, `active`, or `locked`), removes the unused legacy permission list, and adds a revision number so stale admin saves are rejected instead of silently overwriting newer configuration.
 
+## My Action Center
+
+`/my` is the signed-in user's focused operating view for the active period. It derives four lists from existing OKR, progress-note, draft, owner, and permission data:
+
+- My KRs: published KRs whose owner matches the user's configured aliases.
+- Update due: owned KRs with no record or parent-Objective progress activity for more than seven days.
+- Risks and decisions: owned KRs that are Yellow/Red or contain risk or decision-needed context.
+- Review queue: unpublished team drafts inside a team leader's or system administrator's publish scope.
+
+The action center does not maintain a second task model. Its links open the existing member-scoped editor, team draft editor, and OKR detail pages.
+
 ## Storage
 
 `OKR_STORAGE` controls persistence:

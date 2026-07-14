@@ -6,6 +6,12 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 - Add user-facing changes here before the next release.
 
+## v0.7.0 - 2026-07-14
+
+- Add a bilingual My Action Center that collects the signed-in user's owned KRs, updates overdue by more than seven days, and open risk or decision context.
+- Add a team-scoped review queue for team leaders and system administrators with direct links to existing draft and progress editing flows.
+- Preserve per-Objective draft and published status so review items clear after publishing and owner-scoped edits do not mark unrelated Objectives as draft.
+
 ## v0.6.2 - 2026-07-14
 
 - Enforce team scope when team leaders or contributors update owner-scoped drafts and progress records.

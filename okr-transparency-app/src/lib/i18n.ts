@@ -16,6 +16,7 @@ export function hrefWithLang(href: string, lang: Lang) {
 const ui = {
   en: {
     overview: "Overview",
+    myActions: "My Actions",
     okrMap: "Alignment",
     teams: "Teams",
     search: "Search",
@@ -74,6 +75,7 @@ const ui = {
   },
   zh: {
     overview: "概览",
+    myActions: "我的行动",
     okrMap: "对齐视图",
     teams: "团队",
     search: "搜索",

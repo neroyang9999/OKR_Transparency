@@ -4,13 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { BarChart3, GitBranch, Search, Users } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, GitBranch, Search, Users } from "lucide-react";
 import { APP_VERSION } from "@/lib/app-version";
 import { hrefWithLang, normalizeLang, t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", id: "overview", labelKey: "overview", icon: BarChart3 },
+  { href: "/my", id: "myActions", labelKey: "myActions", icon: BriefcaseBusiness },
   { href: "/map", id: "okrMap", labelKey: "okrMap", icon: GitBranch },
   { href: "/teams", id: "teams", labelKey: "teams", icon: Users },
   { href: "/search", id: "search", labelKey: "search", icon: Search }
@@ -72,7 +73,7 @@ export function AppShell({
                       title={label}
                     >
                       <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">{label}</span>
+                      <span className="hidden lg:inline">{label}</span>
                     </Link>
                   );
                 })}
@@ -80,7 +81,7 @@ export function AppShell({
                   <button
                     type="button"
                     onClick={() => void signOut()}
-                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
+                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 xl:inline-flex"
                     title={session.user.email}
                   >
                     <span className="truncate">{session.user.email}</span>

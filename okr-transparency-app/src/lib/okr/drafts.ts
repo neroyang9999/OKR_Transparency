@@ -51,12 +51,14 @@ export async function readDraft(team: string, periodId: string): Promise<OkrDraf
   return recordsToDraft(snapshot.records, team, periodId, periodId === await getDefaultPeriodId());
 }
 
-export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwner = true) {
+export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwner = true, preserveStatus = false) {
   const normalizedDraft = normalizeDraft(draft, teamOwner, forceOwner);
   const nextDraft: OkrDraft = {
     ...normalizedDraft,
     updatedAt: new Date().toISOString(),
-    objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "draft" }))
+    objectives: preserveStatus
+      ? normalizedDraft.objectives
+      : normalizedDraft.objectives.map((objective) => ({ ...objective, status: "draft" }))
   };
 
   if (isFirestoreStorageEnabled()) {
@@ -87,7 +89,7 @@ export async function writeOwnerScopedDraft(draft: OkrDraft, owner: string, owne
     ]
   };
 
-  return writeDraft(nextDraft, owner, false);
+  return writeDraft(nextDraft, owner, false, true);
 }
 
 export async function publishDraft(team: string, periodId: string, teamOwner = team, ownerScope?: { owner: string; aliases: string[] }, actor = teamOwner): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
@@ -159,7 +161,7 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
       ...(ownerScope ? draft.objectives.filter((objective) => !draftObjectiveMatchesOwner(objective, ownerScope.aliases)) : []),
       ...normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
     ]
-  }, ownerScope?.owner ?? teamOwner, false);
+  }, ownerScope?.owner ?? teamOwner, false, true);
 
   return { snapshot, ...validation };
 }

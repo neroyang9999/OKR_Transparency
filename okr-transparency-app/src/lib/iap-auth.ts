@@ -1,9 +1,9 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, jwtVerify, type CryptoKey, type JWK, type JWTVerifyGetKey, type KeyObject } from "jose";
 
 const IAP_ISSUER = "https://cloud.google.com/iap";
 const IAP_JWKS = createRemoteJWKSet(new URL("https://www.gstatic.com/iap/verify/public_key-jwk"));
 
-type VerificationKey = Parameters<typeof jwtVerify>[1];
+type VerificationKey = CryptoKey | KeyObject | JWK | Uint8Array | JWTVerifyGetKey;
 
 export type IapIdentity = {
   email: string;
@@ -22,11 +22,14 @@ export async function verifyIapJwt(
   if (!token || !audience) return null;
 
   try {
-    const { payload } = await jwtVerify(token, verificationKey, {
+    const options = {
       algorithms: ["ES256"],
       audience,
       issuer: IAP_ISSUER
-    });
+    };
+    const { payload } = typeof verificationKey === "function"
+      ? await jwtVerify(token, verificationKey, options)
+      : await jwtVerify(token, verificationKey, options);
     const email = normalizeIapEmail(payload.email);
     const subject = typeof payload.sub === "string" ? payload.sub.trim() : "";
     return email && subject ? { email, subject } : null;

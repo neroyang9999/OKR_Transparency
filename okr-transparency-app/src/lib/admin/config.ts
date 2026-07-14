@@ -76,7 +76,7 @@ type LegacyPeriod = Partial<AdminPeriod> & {
 
 type LegacyTeam = Partial<AdminTeam>;
 
-type AdminConfigInput = Partial<Omit<AdminConfig, "periods" | "teams">> & {
+type AdminConfigInput = Partial<Omit<AdminConfig, "version" | "periods" | "teams">> & {
   version?: 1 | 2;
   periods?: LegacyPeriod[];
   teams?: LegacyTeam[];
