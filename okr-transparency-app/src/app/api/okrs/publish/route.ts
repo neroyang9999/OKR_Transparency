@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { appendAdminEvent, backupCurrentSnapshot, readAdminConfig, type AdminConfig } from "@/lib/admin/config";
+import { appendAdminEvent, readAdminConfig, type AdminConfig } from "@/lib/admin/config";
 import { publishDraft } from "@/lib/okr/drafts";
+import { SnapshotConflictError } from "@/lib/okr/store";
 import { authorizePublish, getTeamEditPolicy, resolveRequestAccess, validateEditablePeriod, type UserAccess } from "@/lib/admin/permissions";
 
 export async function POST(request: NextRequest) {
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json() as { team?: string; periodId?: string; ownerEmail?: string };
     const team = body.team ?? "Software";
-    const periodId = body.periodId ?? "2026-Q3";
+    const periodId = body.periodId ?? config.defaultPeriodId;
     const ownerScope = resolveOwnerScope(config, team, body.ownerEmail);
     if (body.ownerEmail && !ownerScope) {
       return NextResponse.json({ error: "Member is not configured for this team" }, { status: 403 });
@@ -21,8 +22,7 @@ export async function POST(request: NextRequest) {
       : authorizePublish(config, access, team, periodId);
     if (!authorization.ok) return NextResponse.json({ error: authorization.error }, { status: 403 });
 
-    await backupCurrentSnapshot();
-    const result = await publishDraft(team, periodId, await getTeamOwner(team), ownerScope ?? undefined);
+    const result = await publishDraft(team, periodId, await getTeamOwner(team), ownerScope ?? undefined, access.displayName);
     if (result.errors.length > 0) {
       await appendAdminEvent({
         type: "publish",
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown publish error" },
-      { status: 422 }
+      { status: error instanceof SnapshotConflictError ? 409 : 422 }
     );
   }
 }

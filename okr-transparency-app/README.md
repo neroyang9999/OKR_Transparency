@@ -1,6 +1,6 @@
-# Engineering OKR Transparency App
+# Engineering OKR Operating App
 
-Internal read-only OKR page for Engineering and team-level OKRs.
+Internal Engineering OKR operating system for drafting, publishing, alignment, weekly progress, attention review, and safe team-scoped rollback.
 
 ## Local Development
 
@@ -18,6 +18,18 @@ For the local page-editing prototype on Windows, you can also run:
 ```
 
 Then open `http://127.0.0.1:3001/?mode=edit&team=Software`.
+
+## Version and Change Management
+
+The project follows Semantic Versioning (`major.minor.patch`). `package.json` is the single source of truth for the application version; the UI reads the version from it directly, and `package-lock.json` must stay synchronized.
+
+Every user-facing change must first be added under `Unreleased` in `CHANGELOG.md`. For a release:
+
+1. Choose the SemVer increment: patch for compatible fixes, minor for compatible features, major for breaking changes.
+2. Update `package.json` and `package-lock.json` to the same version.
+3. Move the relevant `Unreleased` entries into a dated `vX.Y.Z` section.
+4. Run `npm test`, `npm run lint`, and `npm run build` before merging into `main`.
+5. Use a release commit such as `Release v0.5.0`; create and push a matching Git tag only when the release is deployed.
 
 ## Authentication and Permissions
 
@@ -78,7 +90,22 @@ Authorized users can add `mode=edit` to the overview page to edit OKRs directly 
 
 OKRs are created and maintained directly in the browser page editor. The app no longer imports OKRs from Google Docs or CSV files.
 
-Drafts are saved first. Publishing a draft writes normalized OKR records into the current snapshot and the selected period snapshot. Rollback restores the previous snapshot backup.
+Drafts are saved first. Publishing writes normalized OKR records into the selected period and, for the configured default period, the current snapshot. Rollback restores a selected team-and-period version without changing other teams.
+
+Publishing validates the complete candidate graph before any public data changes. Structural Objective/KR relationships use `parent_id`; cross-team alignment uses `aligned_to_id`. Every publish stores a team-and-period version, and concurrent updates to the current Firestore snapshot are rejected instead of silently overwriting newer data.
+
+KR publishing requires an owner, baseline, target, and risk/decision context for Yellow or Red status. Weekly KR updates can change actual value, progress, confidence, risk, next steps, and an evidence link in one action.
+
+Local data repair and migration commands:
+
+```powershell
+npm run repair:okr-graph
+npm run repair:okr-graph -- --write
+npm run migrate:alignment-edges
+npm run migrate:alignment-edges -- --write
+```
+
+Both write modes preserve the previous JSON files under `data/repair-backups/`.
 
 ## Cloud Run Deployment
 

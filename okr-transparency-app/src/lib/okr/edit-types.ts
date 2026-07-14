@@ -64,10 +64,8 @@ export function normalizeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwn
 
 export function recordsToDraft(records: OkrRecord[], team: string, periodId: string, initializeFromRecords = true): OkrDraft {
   const teamRecords = records.filter((record) => record.team === team);
-  const recordById = new Map(records.map((record) => [record.okr_id, record]));
   const rootObjectives = teamRecords.filter((record) => {
-    const parent = record.parent_id ? recordById.get(record.parent_id) : null;
-    return !parent || parent.team !== team;
+    return !record.kr;
   });
 
   return {
@@ -87,7 +85,7 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
         confidence: objective.confidence,
         weight: 100,
         progress: objective.score === null ? calculateProgress(children) : toPercent(objective.score),
-        alignedToId: objective.parent_id || undefined,
+        alignedToId: objective.aligned_to_id || undefined,
         status: "published",
         keyResults: children.map((kr, krIndex) => ({
           id: kr.okr_id || `${objective.okr_id}-KR${krIndex + 1}`,
@@ -129,7 +127,7 @@ export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwn
     const objectiveProgress = calculateObjectiveProgress(objective.keyResults);
     records.push({
       okr_id: objective.id,
-      parent_id: objective.alignedToId ?? "",
+      parent_id: "",
       level: "Team",
       team: normalizedDraft.team,
       objective: objective.title,
@@ -145,7 +143,8 @@ export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwn
       risks: collectText(objective.keyResults.map((kr) => kr.risks)),
       decisions_needed: collectText(objective.keyResults.map((kr) => kr.decisionsNeeded)),
       source_doc_url: "page-edit",
-      last_update: today
+      last_update: today,
+      aligned_to_id: objective.alignedToId
     });
 
     objective.keyResults.forEach((kr) => {
@@ -194,13 +193,19 @@ export function validateDraft(draft: OkrDraft): DraftValidation {
       errors.push(`${label}: KR weights must add up to 100%`);
     }
 
-    if (draft.team !== "Software" && !objective.alignedToId) {
-      warnings.push(`${label}: no upper-level alignment selected`);
+    if (!topLevelTeams.has(draft.team) && !objective.alignedToId) {
+      errors.push(`${label}: upper-level alignment is required`);
     }
 
     objective.keyResults.forEach((kr, krIndex) => {
       const krLabel = `${label}-KR${krIndex + 1}`;
       if (!kr.title.trim()) errors.push(`${krLabel}: KR title is required`);
+      if (!kr.owner.trim()) errors.push(`${krLabel}: owner is required`);
+      if (!kr.baseline.trim()) errors.push(`${krLabel}: baseline is required`);
+      if (!kr.target.trim()) errors.push(`${krLabel}: target is required`);
+      if (kr.confidence !== "Green" && !kr.risks.trim() && !kr.decisionsNeeded.trim()) {
+        errors.push(`${krLabel}: Yellow/Red KR requires a risk or decision needed`);
+      }
       if (kr.progress !== null && !isPercent(kr.progress)) {
         errors.push(`${krLabel}: progress must be between 0 and 100`);
       }
@@ -255,6 +260,8 @@ export function calculateObjectiveProgress(keyResults: EditableKr[]) {
   if (scored.length === 0) return null;
   return normalizePercent(Math.round(scored.reduce((sum, kr) => sum + ((kr.progress ?? 0) * kr.weight) / 100, 0)), 0);
 }
+
+const topLevelTeams = new Set(["Software", "Hardware", "Advanced Technology", "AP OPS"]);
 
 function toPercent(score: number) {
   return normalizePercent(Math.round(score * 100), 0);

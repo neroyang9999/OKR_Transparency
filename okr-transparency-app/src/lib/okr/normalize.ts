@@ -58,13 +58,8 @@ export function normalizeAndValidate(rows: RawOkrRecord[]): ValidationResult {
     if (!lastUpdate) errors.push(`${rowLabel}: last_update is required`);
 
     const parentId = value(row.parent_id);
+    const alignedToId = value(row.aligned_to_id);
     const kr = value(row.kr);
-    if (level === "Team" && !parentId) {
-      errors.push(`${rowLabel}: Team records must have parent_id`);
-    }
-    if (level === "Team" && !kr) {
-      warnings.push(`${rowLabel}: Team record has no KR text`);
-    }
     if (confidence !== "Green" && !value(row.risks) && !value(row.decisions_needed)) {
       warnings.push(`${rowLabel}: Yellow/Red records should include risks or decisions_needed`);
     }
@@ -87,7 +82,8 @@ export function normalizeAndValidate(rows: RawOkrRecord[]): ValidationResult {
       risks: value(row.risks),
       decisions_needed: value(row.decisions_needed),
       source_doc_url: source,
-      last_update: lastUpdate
+      last_update: lastUpdate,
+      aligned_to_id: alignedToId || undefined
     });
   });
 
@@ -96,8 +92,11 @@ export function normalizeAndValidate(rows: RawOkrRecord[]): ValidationResult {
     if (record.parent_id && !ids.has(record.parent_id)) {
       errors.push(`${record.okr_id}: parent_id "${record.parent_id}" does not exist`);
     }
-    if (record.level === "Engineering" && record.parent_id) {
-      const parent = records.find((item) => item.okr_id === record.parent_id);
+    if (record.aligned_to_id && !ids.has(record.aligned_to_id)) {
+      errors.push(`${record.okr_id}: aligned_to_id "${record.aligned_to_id}" does not exist`);
+    }
+    if (record.level === "Engineering" && record.aligned_to_id) {
+      const parent = records.find((item) => item.okr_id === record.aligned_to_id);
       if (parent?.level !== "Engineering") {
         errors.push(`${record.okr_id}: Engineering records can only align to Engineering parents`);
       }

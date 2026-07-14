@@ -3,6 +3,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readProgressNotesForObjective, writeProgressNote } from "../../../lib/okr/progress-notes";
 import { GET, PUT } from "./route";
 
+vi.mock("../../../lib/okr/drafts", () => ({
+  readPeriodRecords: vi.fn(async () => [{
+    okr_id: "SW-O1",
+    parent_id: "",
+    level: "Team",
+    team: "Software",
+    objective: "Objective",
+    kr: "",
+    type: "Committed",
+    owner: "Admin Token",
+    baseline: "",
+    target: "",
+    actual: "",
+    score: null,
+    confidence: "Green",
+    dependencies: "",
+    risks: "",
+    decisions_needed: "",
+    source_doc_url: "page-edit",
+    last_update: "2026-06-17"
+  }]),
+  updatePublishedRecordProgress: vi.fn()
+}));
+
 vi.mock("../../../lib/okr/progress-notes", () => ({
   readProgressNotesForObjective: vi.fn(async () => []),
   writeProgressNote: vi.fn(async (input) => ({
@@ -14,6 +38,9 @@ vi.mock("../../../lib/okr/progress-notes", () => ({
     status: input.status ?? "Yellow",
     risks: input.risks ?? "",
     nextSteps: input.nextSteps ?? "",
+    actual: input.actual ?? "",
+    progress: input.progress ?? null,
+    evidenceUrl: input.evidenceUrl ?? "",
     updatedBy: input.updatedBy ?? "Lead",
     updatedAt: "2026-06-17T08:00:00.000Z"
   }))
@@ -51,6 +78,9 @@ describe("/api/progress-notes", () => {
         status: "Yellow",
         risks: "",
         nextSteps: "",
+        actual: "",
+        progress: null,
+        evidenceUrl: "",
         updatedBy: "Lead",
         updatedAt: "2026-06-17T08:00:00.000Z"
       }

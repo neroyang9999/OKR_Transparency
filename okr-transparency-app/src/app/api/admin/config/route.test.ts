@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminConfig } from "@/lib/admin/config";
-import { readAdminConfig, writeAdminConfig } from "@/lib/admin/config";
+import { readAdminConfig, validateAdminConfig, writeAdminConfig } from "@/lib/admin/config";
 import { resolveRequestAccess } from "@/lib/admin/permissions";
 import { GET, PUT } from "./route";
 
 vi.mock("@/lib/admin/config", () => ({
   readAdminConfig: vi.fn(),
+  validateAdminConfig: vi.fn(() => []),
   writeAdminConfig: vi.fn(async (config: AdminConfig) => config)
 }));
 
@@ -221,6 +222,18 @@ describe("/api/admin/config account management permissions", () => {
     await expect(teamleadResponse.json()).resolves.toEqual({ error: "Admin session required" });
     expect(userResponse.status).toBe(401);
     await expect(userResponse.json()).resolves.toEqual({ error: "Admin session required" });
+    expect(writeAdminConfig).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid team references before saving", async () => {
+    vi.mocked(resolveRequestAccess).mockResolvedValueOnce(adminAccess);
+    vi.mocked(validateAdminConfig).mockReturnValueOnce(["missing team"]);
+    const response = await PUT(new NextRequest("http://localhost/api/admin/config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(baseConfig)
+    }));
+    expect(response.status).toBe(422);
     expect(writeAdminConfig).not.toHaveBeenCalled();
   });
 });

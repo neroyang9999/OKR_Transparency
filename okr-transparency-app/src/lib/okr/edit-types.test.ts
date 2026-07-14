@@ -47,7 +47,7 @@ describe("OKR edit draft helpers", () => {
   it("converts nested draft data to flat OKR records", () => {
     const records = draftToRecords(draft);
     expect(records).toHaveLength(2);
-    expect(records[0]).toMatchObject({ okr_id: "SW-O1", kr: "", score: 0.5 });
+    expect(records[0]).toMatchObject({ okr_id: "SW-O1", parent_id: "", aligned_to_id: "ENG-O1", kr: "", score: 0.5 });
     expect(records[1]).toMatchObject({ okr_id: "SW-O1-KR1", parent_id: "SW-O1", score: 0.5 });
     expect(records[1]).not.toHaveProperty("aligned_to_id");
   });
@@ -128,12 +128,28 @@ describe("OKR edit draft helpers", () => {
     expect(result.warnings.some((warning) => warning.includes("alignment"))).toBe(false);
   });
 
-  it("warns when child-team objectives are not aligned upward", () => {
+  it("rejects child-team objectives that are not aligned upward", () => {
     const result = validateDraft({
       ...draft,
       team: "QA Team",
       objectives: draft.objectives.map((objective) => ({ ...objective, team: "QA Team", alignedToId: undefined }))
     });
-    expect(result.warnings.some((warning) => warning.includes("alignment"))).toBe(true);
+    expect(result.errors.some((error) => error.includes("alignment"))).toBe(true);
+  });
+
+  it("requires measurable and actionable KRs", () => {
+    const result = validateDraft({
+      ...draft,
+      objectives: draft.objectives.map((objective) => ({
+        ...objective,
+        keyResults: objective.keyResults.map((kr) => ({ ...kr, owner: "", baseline: "", target: "", risks: "", decisionsNeeded: "" }))
+      }))
+    });
+    expect(result.errors).toEqual(expect.arrayContaining([
+      "O1-KR1: owner is required",
+      "O1-KR1: baseline is required",
+      "O1-KR1: target is required",
+      "O1-KR1: Yellow/Red KR requires a risk or decision needed"
+    ]));
   });
 });

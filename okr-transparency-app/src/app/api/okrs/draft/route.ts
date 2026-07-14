@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const team = searchParams.get("team") ?? "Software";
-  const periodId = searchParams.get("period") ?? "2026-Q3";
+  const periodId = searchParams.get("period") ?? (await readAdminConfig()).defaultPeriodId;
   const draft = await readDraft(team, periodId);
   return NextResponse.json({ draft, validation: validateDraft(draft) });
 }

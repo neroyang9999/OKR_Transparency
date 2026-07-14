@@ -12,25 +12,54 @@ type FirestoreValue =
 type FirestoreDocument = {
   name?: string;
   fields?: Record<string, FirestoreValue>;
+  updateTime?: string;
+};
+
+type FirestoreWriteOptions = {
+  updateTime?: string;
+  exists?: boolean;
 };
 
 const firestoreScope = "https://www.googleapis.com/auth/datastore";
 
 export async function readFirestoreDocument<T>(documentPath: string): Promise<T | null> {
+  return (await readFirestoreDocumentWithMetadata<T>(documentPath))?.value ?? null;
+}
+
+export async function readFirestoreDocumentWithMetadata<T>(documentPath: string): Promise<{ value: T; updateTime: string } | null> {
   const response = await firestoreFetch(documentPath);
   if (response.status === 404) return null;
   await assertOk(response, `read ${documentPath}`);
 
   const document = await response.json() as FirestoreDocument;
-  return decodeFirestoreFields(document.fields ?? {}) as T;
+  return {
+    value: decodeFirestoreFields(document.fields ?? {}) as T,
+    updateTime: document.updateTime ?? ""
+  };
 }
 
-export async function writeFirestoreDocument(documentPath: string, value: Record<string, unknown>) {
-  const response = await firestoreFetch(documentPath, {
+export async function writeFirestoreDocument(documentPath: string, value: Record<string, unknown>, options: FirestoreWriteOptions = {}) {
+  const params = new URLSearchParams();
+  if (options.updateTime) params.set("currentDocument.updateTime", options.updateTime);
+  if (options.exists !== undefined) params.set("currentDocument.exists", String(options.exists));
+  const query = params.toString();
+  const response = await firestoreFetch(`${documentPath}${query ? `?${query}` : ""}`, {
     method: "PATCH",
     body: JSON.stringify({ fields: encodeFirestoreFields(value) })
   });
+  if ((response.status === 409 || response.status === 412) && (options.updateTime || options.exists !== undefined)) {
+    throw new FirestorePreconditionError();
+  }
   await assertOk(response, `write ${documentPath}`);
+  const document = await response.json() as FirestoreDocument;
+  return document.updateTime ?? "";
+}
+
+export class FirestorePreconditionError extends Error {
+  constructor() {
+    super("Firestore document changed before write");
+    this.name = "FirestorePreconditionError";
+  }
 }
 
 export async function listFirestoreCollection<T>(collectionPath: string, pageSize = 200, orderBy?: string): Promise<T[]> {

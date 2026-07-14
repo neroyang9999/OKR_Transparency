@@ -5,7 +5,7 @@ import { getPageAccess } from "@/lib/admin/page-access";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readOkrSnapshot } from "@/lib/okr/store";
 import { hrefWithLang, normalizeLang, t, type Lang } from "@/lib/i18n";
-import { normalizePeriod, periodLabel, periods } from "@/lib/periods";
+import { normalizePeriod, periodLabel } from "@/lib/periods";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { buildAlignmentViewModel } from "@/lib/okr/alignment-view";
@@ -25,9 +25,10 @@ export default async function MapPage({
   }
 
   const lang = normalizeLang(params.lang);
-  const selectedPeriod = normalizePeriod(params.period);
+  const configuredPeriods = pageAccess.adminConfig.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
+  const selectedPeriod = normalizePeriod(params.period, configuredPeriods, pageAccess.adminConfig.defaultPeriodId);
   const snapshot = await readOkrSnapshot();
-  const periodRecords = selectedPeriod === "2026-q3"
+  const periodRecords = selectedPeriod === pageAccess.adminConfig.defaultPeriodId
     ? snapshot.records
     : await readPeriodRecords(selectedPeriod) ?? [];
   const teams = buildAlignmentViewModel(periodRecords).teams;
@@ -43,7 +44,7 @@ export default async function MapPage({
           </p>
         </div>
         <div className="flex h-10 items-center rounded-md border border-border bg-white shadow-subtle">
-          {periods.map((period) => (
+          {configuredPeriods.map((period) => (
             <Link
               key={period.id}
               href={mapHref({ period: period.id, team: selectedTeam, lang })}
@@ -88,6 +89,7 @@ export default async function MapPage({
     </AppShell>
   );
 }
+
 
 function mapHref({ period, team, lang }: { period: string; team?: string; lang: Lang }) {
   const teamQuery = team ? `&team=${encodeURIComponent(team)}` : "";

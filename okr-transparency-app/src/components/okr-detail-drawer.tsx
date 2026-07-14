@@ -11,6 +11,7 @@ import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
 import type { ProgressNote } from "@/lib/okr/progress-notes";
 import type { ConfidenceLevel, OkrRecord } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
+import { ProgressNoteCard } from "@/components/progress-note-card";
 
 type OkrDetailDrawerProps = {
   records: OkrRecord[];
@@ -49,7 +50,7 @@ export function OkrDetailDrawer({
 
   const parent = record.parent_id ? recordById.get(record.parent_id) : null;
   const children = records.filter((item) => item.parent_id === record.okr_id);
-  const noteTarget = record.kr && parent ? parent : record;
+  const noteTarget = record;
   const notes = progressNotes.filter((note) =>
     note.team === noteTarget.team &&
     note.periodId === selectedPeriod &&
@@ -133,6 +134,21 @@ export function OkrDetailDrawer({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {record.kr && (
+            <ProgressNoteCard
+              team={record.team}
+              periodId={selectedPeriod}
+              objectiveId={record.okr_id}
+              progressNotes={notes}
+              fallbackNote={record.risks || (lang === "en" ? "Add this week's progress." : "填写本周进展。")}
+              defaultStatus={record.confidence}
+              fullHistoryHref={fullHref}
+              lang={lang}
+              currentActual={record.actual}
+              currentProgress={record.score === null ? null : Math.round(record.score * 100)}
+              syncPublishedState
+            />
+          )}
           <SectionTitle
             title={record.kr && parent ? copy.parentWeeklyHistory : copy.weeklyHistory}
             count={notes.length}

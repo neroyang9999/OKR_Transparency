@@ -17,6 +17,10 @@ type ProgressNoteCardProps = {
   defaultStatus: ConfidenceLevel;
   fullHistoryHref: string;
   lang: Lang;
+  currentActual?: string;
+  currentProgress?: number | null;
+  currentEvidenceUrl?: string;
+  syncPublishedState?: boolean;
 };
 
 const recentHistoryLimit = 4;
@@ -29,7 +33,11 @@ export function ProgressNoteCard({
   fallbackNote,
   defaultStatus,
   fullHistoryHref,
-  lang
+  lang,
+  currentActual = "",
+  currentProgress = null,
+  currentEvidenceUrl = "",
+  syncPublishedState = false
 }: ProgressNoteCardProps) {
   const copy = lang === "en" ? en : zh;
   const [open, setOpen] = useState(false);
@@ -42,6 +50,9 @@ export function ProgressNoteCard({
   const [draftStatus, setDraftStatus] = useState<ConfidenceLevel>(currentNote?.status ?? defaultStatus);
   const [draftRisks, setDraftRisks] = useState(currentNote?.risks ?? "");
   const [draftNextSteps, setDraftNextSteps] = useState(currentNote?.nextSteps ?? "");
+  const [draftActual, setDraftActual] = useState(currentNote?.actual ?? currentActual);
+  const [draftProgress, setDraftProgress] = useState<number | null>(currentNote?.progress ?? currentProgress);
+  const [draftEvidenceUrl, setDraftEvidenceUrl] = useState(currentNote?.evidenceUrl ?? currentEvidenceUrl);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const displayNote = latestNote?.summary || fallbackNote;
 
@@ -51,11 +62,14 @@ export function ProgressNoteCard({
     setDraftStatus(nextCurrentNote?.status ?? defaultStatus);
     setDraftRisks(nextCurrentNote?.risks ?? "");
     setDraftNextSteps(nextCurrentNote?.nextSteps ?? "");
+    setDraftActual(nextCurrentNote?.actual ?? currentActual);
+    setDraftProgress(nextCurrentNote?.progress ?? currentProgress);
+    setDraftEvidenceUrl(nextCurrentNote?.evidenceUrl ?? currentEvidenceUrl);
     setSaveState("idle");
   }
 
   async function saveNote() {
-    if (!draftSummary.trim()) {
+    if (!draftSummary.trim() || (draftStatus !== "Green" && !draftRisks.trim() && !draftNextSteps.trim())) {
       setSaveState("error");
       return;
     }
@@ -74,7 +88,8 @@ export function ProgressNoteCard({
         summary: draftSummary,
         status: draftStatus,
         risks: draftRisks,
-        nextSteps: draftNextSteps
+        nextSteps: draftNextSteps,
+        ...(syncPublishedState ? { actual: draftActual, progress: draftProgress, evidenceUrl: draftEvidenceUrl } : {})
       })
     });
 
@@ -184,6 +199,23 @@ export function ProgressNoteCard({
             </label>
           </div>
 
+          {syncPublishedState && (
+            <div className="mt-3 grid gap-3 md:grid-cols-[1fr_140px_1fr]">
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">{copy.actualLabel}</span>
+                <input value={draftActual} onChange={(event) => setDraftActual(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">{copy.progressLabel}</span>
+                <input type="number" min="0" max="100" value={draftProgress ?? ""} onChange={(event) => setDraftProgress(event.target.value === "" ? null : Number(event.target.value))} className="mt-1 h-9 w-full rounded-md border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">{copy.evidenceLabel}</span>
+                <input type="url" value={draftEvidenceUrl} onChange={(event) => setDraftEvidenceUrl(event.target.value)} placeholder="https://" className="mt-1 h-9 w-full rounded-md border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400" />
+              </label>
+            </div>
+          )}
+
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <div className={cn(
               "text-xs",
@@ -209,7 +241,7 @@ export function ProgressNoteCard({
               <button
                 type="button"
                 onClick={saveNote}
-                disabled={saveState === "saving" || !draftSummary.trim()}
+                disabled={saveState === "saving" || !draftSummary.trim() || (draftStatus !== "Green" && !draftRisks.trim() && !draftNextSteps.trim())}
                 className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-slate-300"
               >
                 {saveState === "saved" ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
@@ -232,6 +264,13 @@ export function ProgressNoteCard({
                       <StatusPill status={note.status} lang={lang} />
                     </div>
                     <div className="mt-1 text-sm leading-5 text-slate-700">{note.summary}</div>
+                    {(note.actual || note.progress !== null || note.evidenceUrl) && (
+                      <div className="mt-2 text-xs text-slate-500">
+                        {note.actual && <span className="mr-3">{copy.actualLabel}: {note.actual}</span>}
+                        {note.progress !== null && <span className="mr-3">{copy.progressLabel}: {note.progress}%</span>}
+                        {note.evidenceUrl && <a href={note.evidenceUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{copy.evidenceLabel}</a>}
+                      </div>
+                    )}
                     {(note.risks || note.nextSteps) && (
                       <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-500 md:grid-cols-2">
                         {note.risks && <HistoryField icon="risk" label={copy.risksLabel} value={note.risks} />}
@@ -341,13 +380,16 @@ const zh = {
   risksPlaceholder: "填写当前风险、阻塞或需要升级的问题。",
   nextStepsLabel: "下周计划",
   nextStepsPlaceholder: "填写下一步动作、owner 或需要决策的事项。",
+  actualLabel: "当前实际值",
+  progressLabel: "进度 %",
+  evidenceLabel: "证据链接",
   recentHistoryTitle: "最近周记录",
   viewFullHistory: "查看全部历史",
   save: "保存本周",
   cancel: "取消",
   saving: "保存中...",
   saved: "已保存",
-  saveError: "请填写本周进展，或稍后重试。",
+  saveError: "请填写本周进展；Yellow/Red 还需要风险或下一步。",
   defaultLead: "Lead",
   green: "正常",
   yellow: "关注",
@@ -365,13 +407,16 @@ const en: typeof zh = {
   risksPlaceholder: "Capture active risks, blockers, or escalations.",
   nextStepsLabel: "Next steps",
   nextStepsPlaceholder: "Capture next actions, owners, or decisions needed.",
+  actualLabel: "Current actual",
+  progressLabel: "Progress %",
+  evidenceLabel: "Evidence link",
   recentHistoryTitle: "Recent weeks",
   viewFullHistory: "View full history",
   save: "Save week",
   cancel: "Cancel",
   saving: "Saving...",
   saved: "Saved",
-  saveError: "Add a weekly update, or try again later.",
+  saveError: "Add a weekly update; Yellow/Red also requires a risk or next step.",
   defaultLead: "Lead",
   green: "Green",
   yellow: "Yellow",

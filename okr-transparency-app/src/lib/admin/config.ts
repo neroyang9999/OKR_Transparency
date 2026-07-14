@@ -1,16 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { readOkrSnapshot, writeOkrSnapshot } from "../okr/store";
-import type { OkrSnapshot } from "../okr/types";
 import { listFirestoreCollection, readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath = path.join(dataDir, "okr-admin-config.json");
 const eventsPath = path.join(dataDir, "okr-admin-events.json");
-const backupPath = path.join(dataDir, "okr-admin-rollback-snapshot.json");
 const configDocumentPath = "okrAdmin/config";
-const backupDocumentPath = "okrAdmin/rollbackSnapshot";
 
 export type AdminPeriod = {
   id: string;
@@ -116,6 +112,47 @@ export async function writeAdminConfig(config: AdminConfig, actor = "Admin") {
   return nextConfig;
 }
 
+export function validateAdminConfig(config: AdminConfig) {
+  const errors: string[] = [];
+  const periodIds = config.periods.map((period) => period.id.trim()).filter(Boolean);
+  const teamNames = config.teams.map((team) => team.name.trim()).filter(Boolean);
+  const emails = config.users.map((user) => user.email.trim().toLowerCase()).filter(Boolean);
+  addDuplicateErrors(periodIds, "period", errors);
+  addDuplicateErrors(teamNames, "team", errors);
+  addDuplicateErrors(emails, "user email", errors);
+
+  const teamSet = new Set(teamNames);
+  const parentByTeam = new Map(config.teams.map((team) => [team.name, team.parentTeam]));
+  config.teams.forEach((team) => {
+    if (team.parentTeam && !teamSet.has(team.parentTeam)) errors.push(`${team.name}: parent team ${team.parentTeam} does not exist`);
+    const visited = new Set<string>();
+    let cursor: string | undefined = team.name;
+    while (cursor) {
+      if (visited.has(cursor)) {
+        errors.push(`${team.name}: team hierarchy cycle detected`);
+        break;
+      }
+      visited.add(cursor);
+      cursor = parentByTeam.get(cursor) || undefined;
+    }
+  });
+  config.users.forEach((user) => user.teams.forEach((team) => {
+    if (!teamSet.has(team)) errors.push(`${user.email}: assigned team ${team} does not exist`);
+  }));
+  if (!teamSet.has(config.defaultTeam)) errors.push(`Default team ${config.defaultTeam} does not exist`);
+  if (!periodIds.includes(config.defaultPeriodId)) errors.push(`Default period ${config.defaultPeriodId} does not exist`);
+  return Array.from(new Set(errors));
+}
+
+function addDuplicateErrors(values: string[], label: string, errors: string[]) {
+  const seen = new Set<string>();
+  values.forEach((value) => {
+    const normalized = value.toLowerCase();
+    if (seen.has(normalized)) errors.push(`Duplicate ${label}: ${value}`);
+    seen.add(normalized);
+  });
+}
+
 export async function readAdminEvents() {
   if (isFirestoreStorageEnabled()) {
     return listFirestoreCollection<AdminEvent>("okrAdminEvents", 200, "createdAt desc");
@@ -141,50 +178,6 @@ export async function appendAdminEvent(input: Omit<AdminEvent, "id" | "createdAt
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(eventsPath, JSON.stringify({ version: 1, events: [event, ...file.events].slice(0, 200) }, null, 2), "utf8");
   return event;
-}
-
-export async function backupCurrentSnapshot() {
-  const snapshot = await readOkrSnapshot();
-  if (isFirestoreStorageEnabled()) {
-    await writeFirestoreDocument(backupDocumentPath, snapshot);
-    return;
-  }
-
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(backupPath, JSON.stringify(snapshot, null, 2), "utf8");
-}
-
-export async function rollbackSnapshot(actor = "Admin") {
-  try {
-    const snapshot = isFirestoreStorageEnabled()
-      ? await readFirestoreDocument<OkrSnapshot>(backupDocumentPath)
-      : JSON.parse(await fs.readFile(backupPath, "utf8")) as OkrSnapshot;
-    if (!snapshot) throw new Error("No rollback snapshot found");
-
-    await writeOkrSnapshot({
-      ...snapshot,
-      meta: {
-        ...snapshot.meta,
-        lastSyncedAt: new Date().toISOString(),
-        message: `Rolled back by ${actor}`
-      }
-    });
-    await appendAdminEvent({
-      type: "rollback",
-      actor,
-      status: "ok",
-      message: "Rolled back to previous snapshot"
-    });
-    return snapshot;
-  } catch (error) {
-    await appendAdminEvent({
-      type: "rollback",
-      actor,
-      status: "error",
-      message: error instanceof Error ? error.message : "Rollback failed"
-    });
-    throw error;
-  }
 }
 
 function normalizeAdminConfig(input: Partial<AdminConfig>): AdminConfig {

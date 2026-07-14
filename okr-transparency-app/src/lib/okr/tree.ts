@@ -6,8 +6,9 @@ export function buildOkrTree(records: OkrRecord[]): OkrNode[] {
 
   const roots: OkrNode[] = [];
   byId.forEach((node) => {
-    if (node.parent_id) {
-      byId.get(node.parent_id)?.children.push(node);
+    const parent = node.parent_id ? byId.get(node.parent_id) : undefined;
+    if (parent && !createsCycle(node.okr_id, parent.okr_id, byId)) {
+      parent.children.push(node);
       return;
     }
     roots.push(node);
@@ -20,6 +21,17 @@ export function buildOkrTree(records: OkrRecord[]): OkrNode[] {
   sortNodes(roots);
 
   return roots;
+}
+
+function createsCycle(nodeId: string, parentId: string, byId: Map<string, OkrNode>) {
+  const visited = new Set<string>();
+  let cursor: OkrNode | undefined = byId.get(parentId);
+  while (cursor) {
+    if (cursor.okr_id === nodeId || visited.has(cursor.okr_id)) return true;
+    visited.add(cursor.okr_id);
+    cursor = cursor.parent_id ? byId.get(cursor.parent_id) : undefined;
+  }
+  return false;
 }
 
 export function getOkrStats(records: OkrRecord[]): OkrStats {

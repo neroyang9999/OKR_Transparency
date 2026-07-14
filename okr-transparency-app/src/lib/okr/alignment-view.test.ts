@@ -30,7 +30,7 @@ describe("alignment view model", () => {
     const model = buildAlignmentViewModel([
       record({ okr_id: "SW-O1", parent_id: "", team: "Software", objective: "Software objective" }),
       record({ okr_id: "SW-O1-KR1", parent_id: "SW-O1", team: "Software", objective: "Software objective", kr: "Software KR" }),
-      record({ okr_id: "APP-O1", parent_id: "SW-O1-KR1", team: "Application Team", objective: "Application objective" }),
+      record({ okr_id: "APP-O1", parent_id: "", aligned_to_id: "SW-O1-KR1", team: "Application Team", objective: "Application objective" }),
       record({ okr_id: "APP-O1-KR1", parent_id: "APP-O1", team: "Application Team", objective: "Application objective", kr: "Application KR" })
     ]);
 
@@ -44,9 +44,9 @@ describe("alignment view model", () => {
     const model = buildAlignmentViewModel([
       record({ okr_id: "SW-TOP-O1", parent_id: "", team: "Software", objective: "Software top objective" }),
       record({ okr_id: "SW-TOP-O1-KR1", parent_id: "SW-TOP-O1", team: "Software", objective: "Software top objective", kr: "Software top KR" }),
-      record({ okr_id: "SW-O1", parent_id: "SW-TOP-O1-KR1", team: "Software", objective: "Software objective" }),
+      record({ okr_id: "SW-O1", parent_id: "", aligned_to_id: "SW-TOP-O1-KR1", team: "Software", objective: "Software objective" }),
       record({ okr_id: "SW-O1-KR1", parent_id: "SW-O1", team: "Software", objective: "Software objective", kr: "Software KR" }),
-      record({ okr_id: "APP-O1", parent_id: "SW-O1-KR1", team: "Application Team", objective: "Application objective" })
+      record({ okr_id: "APP-O1", parent_id: "", aligned_to_id: "SW-O1-KR1", team: "Application Team", objective: "Application objective" })
     ]);
 
     expect(model.roots[0].objective.okr_id).toBe("SW-TOP-O1");
@@ -67,8 +67,8 @@ describe("alignment view model", () => {
   it("filters the tree to a selected team while preserving ancestors", () => {
     const records = [
       record({ okr_id: "SW-O1", parent_id: "", team: "Software", objective: "Software objective" }),
-      record({ okr_id: "APP-O1", parent_id: "SW-O1", team: "Application Team", objective: "Application objective" }),
-      record({ okr_id: "QA-O1", parent_id: "SW-O1", team: "QA Team", objective: "QA objective" }),
+      record({ okr_id: "APP-O1", parent_id: "", aligned_to_id: "SW-O1", team: "Application Team", objective: "Application objective" }),
+      record({ okr_id: "QA-O1", parent_id: "", aligned_to_id: "SW-O1", team: "QA Team", objective: "QA objective" }),
       record({ okr_id: "TPM-O1", parent_id: "", team: "TPM Team", objective: "Unaligned objective" })
     ];
 

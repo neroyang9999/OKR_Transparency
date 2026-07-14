@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { readAdminConfig, rollbackSnapshot } from "@/lib/admin/config";
+import { appendAdminEvent, readAdminConfig } from "@/lib/admin/config";
 import { canManageAdmin, resolveRequestAccess } from "@/lib/admin/permissions";
+import { rollbackTeamVersion } from "@/lib/okr/drafts";
 
 export async function POST(request: NextRequest) {
   const config = await readAdminConfig();
@@ -10,11 +11,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const snapshot = await rollbackSnapshot(access?.displayName ?? "Admin");
-    return NextResponse.json({ snapshot });
+    const body = await request.json() as { versionId?: string };
+    if (!body.versionId) return NextResponse.json({ error: "versionId is required" }, { status: 400 });
+    const version = await rollbackTeamVersion(body.versionId);
+    await appendAdminEvent({
+      type: "rollback",
+      actor: access?.displayName ?? "Admin",
+      status: "ok",
+      message: `Rolled back ${version.team} ${version.periodId} to ${version.createdAt}`
+    });
+    return NextResponse.json({ version });
   } catch (error) {
+    await appendAdminEvent({
+      type: "rollback",
+      actor: access?.displayName ?? "Admin",
+      status: "error",
+      message: error instanceof Error ? error.message : "Rollback failed"
+    });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "No rollback snapshot is available" },
+      { error: error instanceof Error ? error.message : "Rollback failed" },
       { status: 422 }
     );
   }

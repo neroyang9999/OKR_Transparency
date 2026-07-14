@@ -12,8 +12,8 @@ export const periods: Period[] = [
   { id: "2026-q2", label: "2026 年 4 月 - 6 月", labelEn: "Apr - Jun 2026", shortLabel: "2026 Q2" }
 ];
 
-export function normalizePeriod(period?: string): string {
-  return periods.some((item) => item.id === period) ? period! : "2026-q3";
+export function normalizePeriod(period?: string, availablePeriods: Period[] = periods, defaultPeriodId = availablePeriods[0]?.id ?? ""): string {
+  return availablePeriods.some((item) => item.id === period) ? period! : defaultPeriodId;
 }
 
 export function periodHref(period: string, team: string, lang: Lang = "zh", mode?: string, memberEmail?: string) {

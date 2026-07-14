@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { Activity, Check, Pencil, Search, Lock, LogOut, RotateCcw, Save, Settings, Shield, SlidersHorizontal, Trash2, UserPlus, Users, X } from "lucide-react";
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
+import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import { cn } from "@/lib/utils";
 
 type TabId = "overview" | "periods" | "teams" | "users" | "rollback" | "settings";
@@ -26,14 +27,16 @@ export function AdminConsole() {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [events, setEvents] = useState<AdminEvent[]>([]);
+  const [versions, setVersions] = useState<SnapshotVersion[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const showEmergencyToken = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_ADMIN_TOKEN_LOGIN === "true";
 
   const loadAdminData = useCallback(async () => {
-    const [configResponse, eventsResponse] = await Promise.all([
+    const [configResponse, eventsResponse, versionsResponse] = await Promise.all([
       fetch("/api/admin/config"),
-      fetch("/api/admin/events")
+      fetch("/api/admin/events"),
+      fetch("/api/admin/versions")
     ]);
     if (configResponse.ok) {
       const body = await configResponse.json() as { config: AdminConfig };
@@ -42,6 +45,10 @@ export function AdminConsole() {
     if (eventsResponse.ok) {
       const body = await eventsResponse.json() as { events: AdminEvent[] };
       setEvents(body.events);
+    }
+    if (versionsResponse.ok) {
+      const body = await versionsResponse.json() as { versions: SnapshotVersion[] };
+      setVersions(body.versions);
     }
   }, []);
 
@@ -102,12 +109,17 @@ export function AdminConsole() {
     await loadAdminData();
   }
 
-  async function rollback() {
+  async function rollback(version: SnapshotVersion) {
+    if (!window.confirm(`确认将 ${version.team} / ${version.periodId} 回滚到 ${version.createdAt.slice(0, 16)}？其他团队不会受影响。`)) return;
     setBusy(true);
-    const response = await fetch("/api/admin/rollback", { method: "POST" });
+    const response = await fetch("/api/admin/rollback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ versionId: version.id })
+    });
     const body = await response.json().catch(() => ({})) as { error?: string };
     setBusy(false);
-    setMessage(response.ok ? "已回滚到上一版快照" : `回滚失败：${body.error ?? "没有可用备份"}`);
+    setMessage(response.ok ? `已回滚 ${version.team} / ${version.periodId}` : `回滚失败：${body.error ?? "没有可用版本"}`);
     await loadAdminData();
   }
 
@@ -219,7 +231,7 @@ export function AdminConsole() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle">
             <div>
               <h1 className="text-2xl font-semibold text-slate-950">{tabs.find((tab) => tab.id === activeTab)?.label}</h1>
-              <div className="mt-1 text-sm text-muted-foreground">配置会写入本地 JSON；密钥仍由环境变量管理。</div>
+              <div className="mt-1 text-sm text-muted-foreground">配置按运行环境写入本地 JSON 或 Firestore；密钥仍由环境变量管理。</div>
             </div>
             <button
               type="button"
@@ -238,7 +250,7 @@ export function AdminConsole() {
           {activeTab === "periods" && <PeriodConfig config={config} setConfig={setConfig} />}
           {activeTab === "teams" && <TeamConfig config={config} setConfig={setConfig} />}
           {activeTab === "users" && <UserRoleConfig config={config} setConfig={setConfig} />}
-          {activeTab === "rollback" && <RollbackPanel events={events} busy={busy} onRollback={rollback} />}
+          {activeTab === "rollback" && <RollbackPanel events={events} versions={versions} busy={busy} onRollback={rollback} />}
           {activeTab === "settings" && <SettingsPanel config={config} setConfig={setConfig} />}
         </main>
       </div>
@@ -620,12 +632,26 @@ function ChevronTiny({ open }: { open: boolean }) {
   );
 }
 
-function RollbackPanel({ events, busy, onRollback }: { events: AdminEvent[]; busy: boolean; onRollback: () => void }) {
+function RollbackPanel({ events, versions, busy, onRollback }: { events: AdminEvent[]; versions: SnapshotVersion[]; busy: boolean; onRollback: (version: SnapshotVersion) => void }) {
   return (
     <Panel>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={onRollback} disabled={busy} className="inline-flex h-9 items-center rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:text-slate-300">回滚上一版</button>
+      <div>
+        <h2 className="text-sm font-semibold text-slate-950">团队版本历史</h2>
+        <p className="mt-1 text-xs text-muted-foreground">每次发布前自动保存该团队版本；回滚只影响对应团队和周期。</p>
       </div>
+      <div className="overflow-hidden rounded-md border border-border">
+        {versions.length === 0 ? (
+          <div className="p-4 text-sm text-muted-foreground">暂无可回滚版本。下一次发布前会自动创建。</div>
+        ) : versions.slice(0, 20).map((version) => (
+          <div key={version.id} className="grid items-center gap-2 border-t border-border px-4 py-3 text-sm first:border-t-0 md:grid-cols-[150px_160px_1fr_auto]">
+            <span className="text-slate-500">{version.createdAt.slice(0, 16)}</span>
+            <span className="font-medium text-slate-800">{version.team}</span>
+            <span className="text-slate-500">{version.periodId} · {version.records.length} records · {version.actor}</span>
+            <button type="button" onClick={() => onRollback(version)} disabled={busy} className="inline-flex h-8 items-center rounded-md border border-border bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:text-slate-300">回滚此版本</button>
+          </div>
+        ))}
+      </div>
+      <h2 className="pt-2 text-sm font-semibold text-slate-950">操作事件</h2>
       <div className="overflow-hidden rounded-md border border-border">
         {events.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">暂无事件</div>
@@ -648,6 +674,11 @@ function SettingsPanel({ config, setConfig }: AdminSectionProps) {
       <Checkbox label="公开页显示编辑入口" checked={config.settings.showEditLinks} onChange={(showEditLinks) => setConfig({ ...config, settings: { ...config.settings, showEditLinks } })} />
       <Checkbox label="允许进度记录" checked={config.settings.allowProgressNotes} onChange={(allowProgressNotes) => setConfig({ ...config, settings: { ...config.settings, allowProgressNotes } })} />
       <Checkbox label="允许备份导出" checked={config.settings.backupExportEnabled} onChange={(backupExportEnabled) => setConfig({ ...config, settings: { ...config.settings, backupExportEnabled } })} />
+      {config.settings.backupExportEnabled && (
+        <a href="/api/admin/backup" className="inline-flex h-9 items-center rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          导出完整 JSON 备份
+        </a>
+      )}
     </Panel>
   );
 }

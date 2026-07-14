@@ -20,6 +20,16 @@ describe("OKR tree helpers", () => {
     expect(lineage?.ancestors.map((item) => item.okr_id)).toEqual(["ENG-O1", "ENG-O1-KR1"]);
   });
 
+  it("keeps orphaned and cyclic records visible as roots", () => {
+    const tree = buildOkrTree([
+      record("ORPHAN", "MISSING", "Team", "QA"),
+      record("CYCLE-A", "CYCLE-B", "Team", "QA"),
+      record("CYCLE-B", "CYCLE-A", "Team", "QA")
+    ]);
+
+    expect(tree.map((item) => item.okr_id).sort()).toEqual(["CYCLE-A", "CYCLE-B", "ORPHAN"]);
+  });
+
   it("computes stats", () => {
     const stats = getOkrStats(records);
     expect(stats.totalRecords).toBe(3);

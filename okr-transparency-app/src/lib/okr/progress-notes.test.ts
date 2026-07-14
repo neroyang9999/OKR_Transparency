@@ -50,7 +50,8 @@ describe("progress note helpers", () => {
       team: "Software",
       periodId: "2026-q3",
       objectiveId: "SW-O1",
-      summary: "First update"
+      summary: "First update",
+      status: "Green"
     }, { filePath, now: new Date("2026-06-17T08:00:00") });
     await writeProgressNote({
       team: "Software",
@@ -75,13 +76,15 @@ describe("progress note helpers", () => {
       team: "Software",
       periodId: "2026-q3",
       objectiveId: "SW-O1",
-      summary: "This week"
+      summary: "This week",
+      status: "Green"
     }, { filePath, now: new Date("2026-06-17T08:00:00") });
     await writeProgressNote({
       team: "Software",
       periodId: "2026-q3",
       objectiveId: "SW-O1",
-      summary: "Next week"
+      summary: "Next week",
+      status: "Green"
     }, { filePath, now: new Date("2026-06-24T08:00:00") });
 
     const notes = await readProgressNotesForObjective("Software", "2026-q3", "SW-O1", { filePath });
@@ -94,13 +97,15 @@ describe("progress note helpers", () => {
       team: "Software",
       periodId: "2026-q3",
       objectiveId: "SW-O1",
-      summary: "Objective one"
+      summary: "Objective one",
+      status: "Green"
     }, { filePath, now: new Date("2026-06-17T08:00:00") });
     await writeProgressNote({
       team: "Software",
       periodId: "2026-q3",
       objectiveId: "SW-O2",
-      summary: "Objective two"
+      summary: "Objective two",
+      status: "Green"
     }, { filePath, now: new Date("2026-06-17T08:00:00") });
 
     await expect(readProgressNotes({ filePath })).resolves.toHaveLength(2);

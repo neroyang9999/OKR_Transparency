@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, Search, UserRound } from "lucide-react";
 import { hrefWithLang, t, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,8 @@ export function TeamSidebar({
     .map((item) => item.name);
   const [openTeams, setOpenTeams] = useOpenTeams(initialOpen);
   const [openMemberGroups, setOpenMemberGroups] = useOpenTeams(selectedMemberEmail ? [selectedTeam] : []);
+  const [query, setQuery] = useState("");
+  const visibleItems = useMemo(() => filterTeamItems(items, query), [items, query]);
 
   return (
     <aside className="rounded-lg border border-border bg-white p-4 shadow-subtle">
@@ -55,6 +57,8 @@ export function TeamSidebar({
         <input
           aria-label={t(lang, "searchTeam")}
           placeholder={t(lang, "searchTeam")}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
           className="h-10 w-full rounded-md border border-border bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white"
         />
       </div>
@@ -62,7 +66,7 @@ export function TeamSidebar({
       <div className="mt-5">
         <div className="px-2 text-sm font-medium text-slate-500">{t(lang, "teamOkrs")}</div>
         <div className="mt-2 space-y-1">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const selected = selectedTeam === item.name;
             const expanded = openTeams.has(item.name);
             const hasNestedItems = item.children.length > 0 || item.members.length > 0;
@@ -178,6 +182,27 @@ export function TeamSidebar({
       </div>
     </aside>
   );
+}
+
+function filterTeamItems(items: TeamNavItem[], query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return items;
+  const matches = (value: string) => value.toLowerCase().includes(normalizedQuery);
+
+  return items.flatMap((item) => {
+    const parentMatches = matches(item.name) || matches(item.owner);
+    const members = parentMatches
+      ? item.members
+      : item.members.filter((member) => matches(member.displayName) || matches(member.email));
+    const children = item.children.flatMap((child) => {
+      const childMatches = matches(child.name) || matches(child.owner);
+      const childMembers = childMatches
+        ? child.members
+        : child.members.filter((member) => matches(member.displayName) || matches(member.email));
+      return parentMatches || childMatches || childMembers.length > 0 ? [{ ...child, members: childMembers }] : [];
+    });
+    return parentMatches || members.length > 0 || children.length > 0 ? [{ ...item, members, children }] : [];
+  });
 }
 
 function useOpenTeams(initialOpen: string[]) {

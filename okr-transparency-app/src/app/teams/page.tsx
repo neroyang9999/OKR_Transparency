@@ -9,7 +9,7 @@ import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import type { OkrRecord } from "@/lib/okr/types";
-import { periodLabel, periods } from "@/lib/periods";
+import { periodLabel, type Period } from "@/lib/periods";
 
 export default async function TeamsPage({
   searchParams
@@ -31,7 +31,8 @@ export default async function TeamsPage({
   const selectedTeam = team ?? allLabel;
   const currentRecords = team ? data.records.filter((record) => record.team === team) : data.records;
   const teams = team ? [team] : data.stats.teams;
-  const periodRows = await getPeriodRows(team, data.records, lang);
+  const configuredPeriods = pageAccess.adminConfig.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
+  const periodRows = await getPeriodRows(team, data.records, lang, configuredPeriods, pageAccess.adminConfig.defaultPeriodId);
   const attentionRecords = currentRecords
     .filter((record) => record.confidence !== "Green" || record.risks || record.decisions_needed)
     .slice(0, 6);
@@ -305,9 +306,9 @@ function TeamAvatar({ name }: { name: string }) {
   );
 }
 
-async function getPeriodRows(team: string | undefined, currentRecords: OkrRecord[], lang: Lang): Promise<PeriodRow[]> {
-  return Promise.all(periods.map(async (period) => {
-    const records = period.id === "2026-q3" ? currentRecords : await readPeriodRecords(period.id) ?? [];
+async function getPeriodRows(team: string | undefined, currentRecords: OkrRecord[], lang: Lang, configuredPeriods: Period[], defaultPeriodId: string): Promise<PeriodRow[]> {
+  return Promise.all(configuredPeriods.map(async (period) => {
+    const records = period.id === defaultPeriodId ? currentRecords : await readPeriodRecords(period.id) ?? [];
     const scopedRecords = team ? records.filter((record) => record.team === team) : records;
     return {
       periodId: period.id,

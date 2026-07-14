@@ -17,6 +17,9 @@ export type ProgressNote = {
   status: ConfidenceLevel;
   risks: string;
   nextSteps: string;
+  actual: string;
+  progress: number | null;
+  evidenceUrl: string;
   updatedBy: string;
   updatedAt: string;
 };
@@ -84,12 +87,26 @@ export async function writeProgressNote(input: {
   summary: string;
   status?: ConfidenceLevel;
   risks?: string;
-  nextSteps?: string;
+    nextSteps?: string;
+  actual?: string;
+  progress?: number | null;
+  evidenceUrl?: string;
   updatedBy?: string;
 }, options: ProgressNoteStoreOptions = {}) {
   const summary = input.summary.trim();
   if (!summary) {
     throw new Error("summary is required");
+  }
+  const status = input.status ?? "Yellow";
+  if (status !== "Green" && !input.risks?.trim() && !input.nextSteps?.trim()) {
+    throw new Error("Yellow/Red progress requires a risk or next step");
+  }
+  if (input.evidenceUrl?.trim()) {
+    try {
+      new URL(input.evidenceUrl.trim());
+    } catch {
+      throw new Error("evidenceUrl must be a valid URL");
+    }
   }
 
   const now = options.now ?? new Date();
@@ -99,9 +116,12 @@ export async function writeProgressNote(input: {
     objectiveId: input.objectiveId,
     weekStart: input.weekStart ?? getWeekStart(now),
     summary,
-    status: input.status ?? "Yellow",
+    status,
     risks: input.risks?.trim() ?? "",
     nextSteps: input.nextSteps?.trim() ?? "",
+    actual: input.actual?.trim() ?? "",
+    progress: normalizeProgress(input.progress),
+    evidenceUrl: input.evidenceUrl?.trim() ?? "",
     updatedBy: input.updatedBy?.trim() || "Lead",
     updatedAt: now.toISOString()
   };
@@ -123,8 +143,8 @@ export async function writeProgressNote(input: {
     : [...file.notes, nextNote];
 
   const filePath = resolveProgressNotesPath(options);
-  await fs.mkdir(resolveProgressNotesDir(options), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify({ version: 2, notes: sortProgressNotes(notes) }, null, 2), "utf8");
+  await fs.mkdir(/* turbopackIgnore: true */ resolveProgressNotesDir(options), { recursive: true });
+  await fs.writeFile(/* turbopackIgnore: true */ filePath, JSON.stringify({ version: 2, notes: sortProgressNotes(notes) }, null, 2), "utf8");
   return nextNote;
 }
 
@@ -143,7 +163,7 @@ export function getWeekStart(input: Date | string) {
 
 async function readProgressNoteFile(options: ProgressNoteStoreOptions): Promise<ProgressNoteFileV2> {
   try {
-    const text = await fs.readFile(resolveProgressNotesPath(options), "utf8");
+    const text = await fs.readFile(/* turbopackIgnore: true */ resolveProgressNotesPath(options), "utf8");
     const parsed = JSON.parse(text) as Partial<ProgressNoteFileV1 | ProgressNoteFileV2>;
     if (!Array.isArray(parsed.notes)) return { version: 2, notes: [] };
     if (parsed.version === 1) return migrateLegacyNotes(parsed as ProgressNoteFileV1);
@@ -165,6 +185,9 @@ function migrateLegacyNotes(file: ProgressNoteFileV1): ProgressNoteFileV2 {
       status: "Yellow",
       risks: "",
       nextSteps: "",
+      actual: "",
+      progress: null,
+      evidenceUrl: "",
       updatedBy: note.updatedBy || "Lead",
       updatedAt: note.updatedAt || new Date().toISOString()
     })).filter((note) => note.summary)
@@ -181,6 +204,9 @@ function normalizeProgressNotes(notes: Partial<ProgressNote>[]) {
     status: normalizeStatus(note.status),
     risks: note.risks?.trim() ?? "",
     nextSteps: note.nextSteps?.trim() ?? "",
+    actual: note.actual?.trim() ?? "",
+    progress: normalizeProgress(note.progress),
+    evidenceUrl: note.evidenceUrl?.trim() ?? "",
     updatedBy: note.updatedBy?.trim() || "Lead",
     updatedAt: note.updatedAt ?? new Date().toISOString()
   })).filter((note) => note.team && note.periodId && note.objectiveId && note.summary);
@@ -205,6 +231,13 @@ function formatDate(date: Date) {
 
 function resolveProgressNotesPath(options: ProgressNoteStoreOptions) {
   return options.filePath ?? progressNotesPath;
+}
+
+function normalizeProgress(progress: unknown) {
+  if (progress === null || progress === undefined || progress === "") return null;
+  const value = Number(progress);
+  if (!Number.isFinite(value) || value < 0 || value > 100) return null;
+  return value;
 }
 
 function resolveProgressNotesDir(options: ProgressNoteStoreOptions) {

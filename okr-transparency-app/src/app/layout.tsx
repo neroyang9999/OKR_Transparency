@@ -3,7 +3,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Team OKR Transparency",
+  title: "Team OKR Operating Hub",
   description: "Internal team OKR alignment and transparency dashboard",
   icons: {
     icon: [

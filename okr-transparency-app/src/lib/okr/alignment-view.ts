@@ -78,7 +78,7 @@ export function buildAlignmentViewModel(records: OkrRecord[], selectedTeam?: str
 }
 
 function resolveParentObjective(objective: OkrRecord, recordById: Map<string, OkrRecord>) {
-  const target = objective.parent_id ? recordById.get(objective.parent_id) : null;
+  const target = objective.aligned_to_id ? recordById.get(objective.aligned_to_id) : null;
   if (!target) return null;
   if (!target.kr) return target;
   return target.parent_id ? recordById.get(target.parent_id) ?? null : null;
@@ -145,7 +145,7 @@ function isUnalignedObjective(
 }
 
 function isTopLevelObjective(objective: OkrRecord) {
-  return !objective.parent_id && topLevelTeams.has(objective.team);
+  return !objective.aligned_to_id && topLevelTeams.has(objective.team);
 }
 
 function countNodes(nodes: ObjectiveAlignmentNode[]): number {

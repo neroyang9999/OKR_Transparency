@@ -1,6 +1,6 @@
 {
   "name": "okr-transparency-app",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run --environment node src",
-    "migrate:firestore": "node scripts/migrate-json-to-firestore.mjs"
+    "migrate:firestore": "node scripts/migrate-json-to-firestore.mjs",
+    "repair:okr-graph": "node scripts/repair-okr-graph.mjs",
+    "migrate:alignment-edges": "node scripts/migrate-alignment-edges.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

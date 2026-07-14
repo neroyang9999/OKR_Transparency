@@ -4,13 +4,13 @@
     "status": "ok",
     "source": "snapshot",
     "lastSyncedAt": "2026-06-24T09:02:05.340Z",
-    "message": "Published Application Team OKR from page editor",
-    "rowCount": 40
+    "message": "Published Application Team OKR from page editor; repaired 6 orphaned alignment references",
+    "rowCount": 42
   },
   "records": [
     {
       "okr_id": "QA-KR1",
-      "parent_id": "SW-TOP-O1-KR1",
+      "parent_id": "RECOVERED-QA-QA-KR1-O",
       "level": "Team",
       "team": "QA",
       "objective": "建立 EOL release 和现场质量的可度量闭环",
@@ -30,7 +30,7 @@
     },
     {
       "okr_id": "SERVICE-KR1",
-      "parent_id": "SW-TOP-O1-KR2",
+      "parent_id": "RECOVERED-SERVICE-SERVICE-KR1-O",
       "level": "Team",
       "team": "Service",
       "objective": "验证产品能力是否真的降低现场依赖",
@@ -310,7 +310,7 @@
     },
     {
       "okr_id": "OPT-O1",
-      "parent_id": "HW-O1",
+      "parent_id": "",
       "level": "Team",
       "team": "Optics Team",
       "objective": "提升 OptiX 光学模组 readiness 和关键图像质量稳定性",
@@ -326,7 +326,8 @@
       "risks": "Optical calibration window may slip",
       "decisions_needed": "Confirm optics validation owner",
       "source_doc_url": "https://docs.example.com/optics-okrs#opt-o1",
-      "last_update": "2026-06-12"
+      "last_update": "2026-06-12",
+      "aligned_to_id": "HW-O1"
     },
     {
       "okr_id": "OPT-KR1",
@@ -370,7 +371,7 @@
     },
     {
       "okr_id": "QA-TEAM-OMQEZ9LKU",
-      "parent_id": "SW-TOP-O1",
+      "parent_id": "",
       "level": "Team",
       "team": "QA Team",
       "objective": "测试提高xx",
@@ -450,7 +451,7 @@
     },
     {
       "okr_id": "SW-KR1",
-      "parent_id": "ENG-O1-KR1",
+      "parent_id": "",
       "level": "Team",
       "team": "Software",
       "objective": "提升 EOL release 质量，减少 escaped defects",
@@ -530,7 +531,7 @@
     },
     {
       "okr_id": "SW-KR2",
-      "parent_id": "ENG-O1-KR2",
+      "parent_id": "",
       "level": "Team",
       "team": "Software",
       "objective": "支持 EOL 成本下降和标准配置可用",
@@ -590,7 +591,7 @@
     },
     {
       "okr_id": "SW-KR3",
-      "parent_id": "ENG-O2-KR1",
+      "parent_id": "",
       "level": "Team",
       "team": "Software",
       "objective": "支持 Smart Camera E2E launch readiness",
@@ -650,7 +651,7 @@
     },
     {
       "okr_id": "APPLICATION-TEAM-OMQEL50BO",
-      "parent_id": "SW-KR1-KRMQEKKCAC-1",
+      "parent_id": "",
       "level": "Team",
       "team": "Application Team",
       "objective": "想办法提升O1 KR1",
@@ -666,7 +667,8 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-24"
+      "last_update": "2026-06-24",
+      "aligned_to_id": "SW-KR1-KRMQEKKCAC-1"
     },
     {
       "okr_id": "APPLICATION-TEAM-OMQEL50BO-KRMQEL50BO-1",
@@ -730,7 +732,7 @@
     },
     {
       "okr_id": "APPLICATION-TEAM-OMQENCDVJ",
-      "parent_id": "SW-KR1-KRMQEKKCAC-1",
+      "parent_id": "",
       "level": "Team",
       "team": "Application Team",
       "objective": "12313",
@@ -746,7 +748,8 @@
       "risks": "",
       "decisions_needed": "",
       "source_doc_url": "page-edit",
-      "last_update": "2026-06-24"
+      "last_update": "2026-06-24",
+      "aligned_to_id": "SW-KR1-KRMQEKKCAC-1"
     },
     {
       "okr_id": "APPLICATION-TEAM-OMQENCDVJ-KRMQENCDVJ-1",
@@ -807,6 +810,46 @@
       "decisions_needed": "",
       "source_doc_url": "page-edit",
       "last_update": "2026-06-24"
+    },
+    {
+      "okr_id": "RECOVERED-QA-QA-KR1-O",
+      "parent_id": "",
+      "level": "Team",
+      "team": "QA",
+      "objective": "建立 EOL release 和现场质量的可度量闭环",
+      "kr": "",
+      "type": "Committed",
+      "owner": "QA Lead",
+      "baseline": "",
+      "target": "",
+      "actual": "",
+      "score": 0.6,
+      "confidence": "Green",
+      "dependencies": "Stable release scope",
+      "risks": "Automation scope may expand without capacity",
+      "decisions_needed": "Confirm critical path list",
+      "source_doc_url": "https://docs.example.com/qa-okrs#qa-kr1",
+      "last_update": "2026-06-10"
+    },
+    {
+      "okr_id": "RECOVERED-SERVICE-SERVICE-KR1-O",
+      "parent_id": "",
+      "level": "Team",
+      "team": "Service",
+      "objective": "验证产品能力是否真的降低现场依赖",
+      "kr": "",
+      "type": "Aspirational",
+      "owner": "Service Lead",
+      "baseline": "",
+      "target": "",
+      "actual": "",
+      "score": 0.3,
+      "confidence": "Yellow",
+      "dependencies": "Release package; deployment checklist",
+      "risks": "Rehearsal scenarios not scheduled",
+      "decisions_needed": "Schedule first two rehearsals",
+      "source_doc_url": "https://docs.example.com/service-okrs#service-kr1",
+      "last_update": "2026-06-10"
     }
   ]
 }

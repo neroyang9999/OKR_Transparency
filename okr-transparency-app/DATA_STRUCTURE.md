@@ -19,7 +19,7 @@ Page editor
 关键点：
 
 - OKR 由页面编辑器直接填写和维护，不再支持 Google Doc / CSV 导入。
-- OKR 主数据是扁平数组，通过 `okr_id` / `parent_id` 组装成树。
+- OKR 主数据是扁平数组：`parent_id` 只表示 Objective/KR 结构，`aligned_to_id` 只表示跨 Objective/团队对齐。
 - 页面编辑会先写入 draft，publish 后生成新的 snapshot。
 - `OKR_STORAGE=file` 时写本地 `data/*.json`；`OKR_STORAGE=firestore` 时写 Firestore。未显式设置时，本地默认为 `file`，Cloud Run 环境默认为 `firestore`。
 
@@ -29,13 +29,14 @@ Page editor
 
 | 文件 | 作用 | 当前状态 |
 | --- | --- | --- |
-| `okr-snapshot.json` | 当前已发布 OKR 快照，页面主读源 | 44 条 record，source=`snapshot` |
+| `okr-snapshot.json` | 当前已发布 OKR 快照，页面主读源 | 本地修复后 46 条 record，source=`snapshot` |
 | `okr-period-snapshots.json` | 按 period 保存的已发布记录，用于跨季度/历史 period | 1 个 period |
 | `okr-drafts.json` | 页面编辑草稿 | 1 份 draft |
 | `okr-progress-notes.json` | 每周进度备注 | 3 条 note |
+| `okr-snapshot-versions.json` | 按团队/周期保存发布前版本 | 首次新发布后生成 |
 | `okr-admin-config.json` | period、team、权限、用户、设置 | 2 个 period，10 个 team，42 个 user |
 | `okr-admin-events.json` | 管理操作审计事件 | 记录 login/config/publish/rollback |
-| `okr-admin-rollback-snapshot.json` | rollback 备份快照 | 存在 |
+| `okr-admin-rollback-snapshot.json` | 旧版全局 rollback 备份 | 仅兼容保留，新回滚不再读取 |
 | `app-events.log` | 应用日志 | 存在 |
 
 ## 3. 主 OKR 记录：`OkrRecord`
@@ -47,7 +48,7 @@ Page editor
 | 字段 | 类型/枚举 | 含义 | 对接注意事项 |
 | --- | --- | --- | --- |
 | `okr_id` | string | 唯一 ID | 必填；不能重复；被 `parent_id` 引用 |
-| `parent_id` | string | 上级 OKR/KR ID | 用于组树和 alignment；如果非空，必须能找到对应 `okr_id` |
+| `parent_id` | string | 结构父节点 ID | KR 指向所属 Objective；Objective 必须为空 |
 | `level` | `Engineering` \| `Team` | 层级 | 当前代码枚举只接受这两个值 |
 | `team` | string | 团队名 | 必填；应尽量与 admin config 的 team name 对齐 |
 | `objective` | string | Objective 标题 | 必填；KR 行也会保留所属 objective |
@@ -64,16 +65,16 @@ Page editor
 | `decisions_needed` | string | 需决策事项 | 用于 decisions needed count 和展示 |
 | `source_doc_url` | string | 来源链接/标记 | 必填；页面编辑发布时为 `page-edit` |
 | `last_update` | string | 最近更新时间 | 必填；建议 `YYYY-MM-DD` |
-| `aligned_to_id` | string, optional | 可选对齐 ID | 主要使用 draft 的 `alignedToId` 发布为 `parent_id` |
+| `aligned_to_id` | string, optional | 可选对齐 ID | Objective 对齐的上级 Objective 或 KR；与结构父节点分离 |
 
 ### 层级关系
 
 树构建逻辑：
 
-- `parent_id` 为空的记录是 root。
-- `parent_id` 指向另一条 `okr_id` 的记录会成为其 child。
-- `buildOkrTree` 只按 ID 关系组装，不强制 team 一致。
-- `normalizeAndValidate` 会检查 `parent_id` 是否存在。
+- Objective 的 `parent_id` 为空；KR 的 `parent_id` 指向所属 Objective。
+- Objective 的跨团队对齐写在 `aligned_to_id`，可以指向上级 Objective 或 KR。
+- 发布会检查重复 ID、缺失父节点、缺失对齐目标和循环引用。
+- 即使遇到历史脏数据，`buildOkrTree` 也会把异常记录作为 root 展示，不再静默丢弃。
 
 常见结构：
 
@@ -110,12 +111,12 @@ type OkrSnapshot = {
 本地文件：
 
 - 当前快照：`data/okr-snapshot.json`
-- rollback 备份：`data/okr-admin-rollback-snapshot.json`
+- 旧版 rollback 备份：`data/okr-admin-rollback-snapshot.json`（仅兼容保留）
 
 Firestore：
 
 - 当前快照：`okrSnapshots/current`
-- rollback 备份：`okrAdmin/rollbackSnapshot`
+- 旧版 rollback 备份：`okrAdmin/rollbackSnapshot`（新版本使用 `okrSnapshotVersions`）
 
 ## 5. Period 快照
 
@@ -143,8 +144,8 @@ Firestore：
 用途：
 
 - 保存不同季度/period 的发布记录。
-- `defaultEditablePeriod` 当前写死为 `2026-q3`。
-- publish draft 时会更新对应 period；如果 period 是 `2026-q3`，还会同时更新当前 `okr-snapshot.json` / `okrSnapshots/current`。
+- 当前周期由 `AdminConfig.defaultPeriodId` 唯一决定。
+- publish draft 时会更新对应 period；如果是默认周期，还会同时更新当前 `okr-snapshot.json` / `okrSnapshots/current`。
 
 ## 6. 页面编辑草稿：`OkrDraft`
 
@@ -182,7 +183,7 @@ type OkrDraft = {
 | `confidence` | `Green` / `Yellow` / `Red` |
 | `weight` | Objective 权重，0 到 100 |
 | `progress` | 页面进度百分比，0 到 100 或 null |
-| `alignedToId` | 对齐的上级 OKR ID；发布后写入 `parent_id` |
+| `alignedToId` | 对齐的上级 Objective/KR ID；发布后写入 `aligned_to_id` |
 | `status` | `draft` / `published` / `locked` |
 | `keyResults` | KR 列表 |
 
@@ -206,6 +207,7 @@ type OkrDraft = {
 
 - Objective 发布为一条 `OkrRecord`，`kr` 为空。
 - KR 发布为一条 child `OkrRecord`，`parent_id=objective.id`。
+- Objective 的 `parent_id` 为空，跨团队对齐写入 `aligned_to_id`。
 - Draft 的 `progress` 使用 0 到 100；发布后的 `score` 使用 0 到 1。
 - 如果 Objective progress 为空，会根据 KR progress 加权计算。
 - 页面编辑发布后的 `source_doc_url` 为 `page-edit`。
@@ -219,6 +221,7 @@ type OkrDraft = {
 Firestore：
 
 - `okrProgressNotes/{periodId_team_objectiveId_weekStart}`
+- `okrSnapshotVersions/{versionId}`
 
 结构：
 
@@ -232,6 +235,9 @@ type ProgressNote = {
   status: "Green" | "Yellow" | "Red";
   risks: string;
   nextSteps: string;
+  actual: string;
+  progress: number | null;
+  evidenceUrl: string;
   updatedBy: string;
   updatedAt: string;
 };
@@ -240,6 +246,7 @@ type ProgressNote = {
 对接注意事项：
 
 - `summary` 必填。
+- 在 KR 详情中保存周进展时，`actual`、`progress`、`status` 和 `risks` 会同步更新已发布 KR 当前状态。
 - `weekStart` 默认为当前日期所在周的周一，格式 `YYYY-MM-DD`。
 - 同一个 `team + periodId + objectiveId + weekStart` 写入时会覆盖同周旧 note。
 - 旧版 v1 的 `note` 字段会自动迁移为 v2 的 `summary`。
@@ -330,7 +337,9 @@ type AdminEvent = {
 | `/api/progress-notes` | GET/POST | `ProgressNote` | 读写每周进展备注 |
 | `/api/admin/config` | GET/PUT | `AdminConfig` | 读写管理配置 |
 | `/api/admin/events` | GET | `AdminEvent[]` | 读取管理事件 |
-| `/api/admin/rollback` | POST | `OkrSnapshot` | rollback 到备份快照 |
+| `/api/admin/rollback` | POST | `SnapshotVersion` | 按 versionId 回滚指定团队和周期 |
+| `/api/admin/versions` | GET | `SnapshotVersion[]` | 查看团队/周期版本历史 |
+| `/api/admin/backup` | GET | JSON backup | 导出配置、快照、草稿、进度和版本 |
 
 ## 11. 对接建议
 
@@ -344,7 +353,7 @@ type AdminEvent = {
 
 ```text
 okrAdmin/config
-okrAdmin/rollbackSnapshot
+okrAdmin/rollbackSnapshot  # legacy only
 okrSnapshots/current
 okrPeriodSnapshots/{periodId}
 okrDrafts/{periodId_team}
@@ -371,10 +380,9 @@ okrAdminEvents/{eventId}
 - 普通成员用 `role=user`，配置 `ownerAliases`。
 - `ownerAliases` 要和 OKR 数据里的 `owner` 能匹配，否则 owner-scoped edit/publish 会找不到对应记录。
 
-## 12. 当前对接风险点
+## 12. 当前对接注意事项
 
-- `level=Team` 且 `parent_id` 为空在 validator 中会报错；如果要支持顶层团队 Objective，需要先确认业务规则并改 validation。
-- `AdminTeam.name`、`OkrRecord.team`、用户 `teams` 三处都依赖字符串匹配，建议后续引入稳定 `team_id`，但当前不要贸然重构。
-- `aligned_to_id` 在类型中存在，但当前主要使用 draft 的 `alignedToId` 发布为 `parent_id`。
-- `score` 和 `progress` 单位不同，是最容易对接错的字段：snapshot 是 0-1，draft UI 是 0-100。
-- File 模式下多个 JSON 文件是应用状态，不是源文档；如果外部要批量更新，最好走页面/API，不要手工改多个 JSON。
+- `AdminTeam.name`、`OkrRecord.team`、用户 `teams` 仍需保持一致；后台保存会校验引用，后续可在独立迁移中引入稳定 `team_id`。
+- `score` 和 `progress` 单位不同：snapshot 是 0-1，draft/UI/周进展是 0-100。
+- File 模式下多个 JSON 文件是应用状态，不是源文档；批量修复应使用 `repair:okr-graph` / `migrate:alignment-edges`，常规更新走页面/API。
+- 每次发布和 KR 状态更新都会写入 `okrSnapshotVersions`，回滚按团队和周期合并，不覆盖其他团队。

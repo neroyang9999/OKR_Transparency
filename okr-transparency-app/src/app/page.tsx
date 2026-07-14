@@ -17,6 +17,7 @@ import { type AdminConfig, type AdminUser } from "@/lib/admin/config";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
+import { getOkrQualityStats } from "@/lib/okr/graph-validation";
 import { filterDraftByOwner } from "@/lib/okr/edit-types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
@@ -62,8 +63,9 @@ export default async function HomePage({
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
   const draft = baseDraft && selectedMember ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner) : baseDraft;
-  const periodRecords = selectedPeriod === "2026-q3" ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
+  const periodRecords = selectedPeriod === adminConfig.defaultPeriodId ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
+  const qualityStats = getOkrQualityStats(teamRecords);
   const selectedRecords = selectedMember
     ? buildOwnerScopedRecords(teamRecords, ownerAliasesForUser(selectedMember))
     : teamRecords;
@@ -110,6 +112,7 @@ export default async function HomePage({
               policy={editPolicy}
               ownerEmail={selectedMember?.email}
               title={selectedMember ? `${selectedMember.displayName} OKR` : `${selectedTeam} OKR`}
+              periods={periods}
             />
           ) : (
             <>
@@ -196,6 +199,16 @@ export default async function HomePage({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {(qualityStats.missingMetricCount > 0 || qualityStats.staleCount > 0 || qualityStats.nonGreenWithoutContextCount > 0) && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <span className="font-semibold">{lang === "en" ? "Data quality attention" : "数据质量待处理"}</span>
+              <span className="ml-2">
+                {lang === "en"
+                  ? `${qualityStats.missingMetricCount} KRs missing owner/baseline/target, ${qualityStats.staleCount} stale, ${qualityStats.nonGreenWithoutContextCount} Yellow/Red without context.`
+                  : `${qualityStats.missingMetricCount} 个 KR 缺少 owner/baseline/target，${qualityStats.staleCount} 个超过 14 天未更新，${qualityStats.nonGreenWithoutContextCount} 个 Yellow/Red 缺少风险或待决策说明。`}
+              </span>
             </div>
           )}
           <OkrDetailDrawer
@@ -392,7 +405,7 @@ function buildAlignmentChain(objective: OkrRecord, records: OkrRecord[]) {
   const recordById = new Map(records.map((record) => [record.okr_id, record]));
   const chain: OkrRecord[] = [];
   const visited = new Set<string>();
-  let currentId = objective.parent_id;
+  let currentId = objective.aligned_to_id;
 
   while (currentId && !visited.has(currentId)) {
     visited.add(currentId);
@@ -401,12 +414,12 @@ function buildAlignmentChain(objective: OkrRecord, records: OkrRecord[]) {
 
     chain.push(current);
     if (!current.kr) {
-      currentId = current.parent_id;
+      currentId = current.aligned_to_id;
       continue;
     }
 
     const parentObjective = current.parent_id ? recordById.get(current.parent_id) : null;
-    currentId = parentObjective?.parent_id ?? "";
+    currentId = parentObjective?.aligned_to_id ?? "";
   }
 
   return chain;

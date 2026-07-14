@@ -11,6 +11,7 @@ import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import type { Period } from "@/lib/periods";
 
 type OkrEditBoardProps = {
   initialDraft: OkrDraft;
@@ -20,6 +21,7 @@ type OkrEditBoardProps = {
   policy: TeamEditPolicy;
   ownerEmail?: string;
   title?: string;
+  periods: Period[];
 };
 
 export type AlignmentOption = {
@@ -36,7 +38,7 @@ export type AlignmentOption = {
 const confidenceOptions: ConfidenceLevel[] = ["Green", "Yellow", "Red"];
 const typeOptions: OkrType[] = ["Committed", "Aspirational", "Learning"];
 
-export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy, ownerEmail, title }: OkrEditBoardProps) {
+export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy, ownerEmail, title, periods }: OkrEditBoardProps) {
   const router = useRouter();
   const fixedOwner = teamOwner.trim() || initialDraft.team;
   const ownerScoped = Boolean(ownerEmail);
@@ -100,6 +102,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   }
 
   function removeObjective(objectiveId: string) {
+    if (!window.confirm(copy.confirmDeleteObjective)) return;
     changeDraft((current) => ({
       ...current,
       objectives: current.objectives.filter((objective) => objective.id !== objectiveId)
@@ -121,6 +124,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   }
 
   function removeKr(objectiveId: string, krId: string) {
+    if (!window.confirm(copy.confirmDeleteKr)) return;
     changeDraft((current) => ({
       ...current,
       objectives: current.objectives.map((objective) => {
@@ -131,6 +135,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   }
 
   async function publish() {
+    if (!window.confirm(copy.confirmPublish)) return;
     setSaveState("saving");
     const saved = await saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved);
     if (!saved) return;
@@ -166,7 +171,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <PeriodSwitcher selectedPeriod={draft.periodId} selectedTeam={draft.team} selectedMemberEmail={ownerEmail} lang={lang} mode="edit" />
+          <PeriodSwitcher selectedPeriod={draft.periodId} selectedTeam={draft.team} selectedMemberEmail={ownerEmail} lang={lang} mode="edit" periodsOverride={periods} />
           <StatusPill state={saveState} copy={copy} />
           <Link
             href={hrefWithLang(overviewHref(draft.team, draft.periodId, ownerEmail), lang)}
@@ -651,7 +656,10 @@ const zh = {
   errors: "必须修复",
   warnings: "建议检查",
   published: "已发布到 OKR 页面",
-  publishFailed: "发布失败"
+  publishFailed: "发布失败",
+  confirmDeleteObjective: "确认删除这个 Objective 及其全部 KR？删除后会自动保存草稿。",
+  confirmDeleteKr: "确认删除这个 KR？删除后会自动保存草稿。",
+  confirmPublish: "确认发布当前草稿？发布后公开页会立即更新，并自动保存可回滚版本。"
 };
 
 const en: typeof zh = {
@@ -688,5 +696,8 @@ const en: typeof zh = {
   errors: "Must fix",
   warnings: "Check",
   published: "Published to OKR page",
-  publishFailed: "Publish failed"
+  publishFailed: "Publish failed",
+  confirmDeleteObjective: "Delete this Objective and all of its KRs? The draft will auto-save.",
+  confirmDeleteKr: "Delete this KR? The draft will auto-save.",
+  confirmPublish: "Publish this draft now? The public page will update and a rollback version will be saved."
 };
