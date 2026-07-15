@@ -1,10 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { listFirestoreCollection, writeFirestoreDocument } from "./storage/firestore";
+import { deleteFirestoreDocument, listFirestoreCollection, readFirestoreDocument, writeFirestoreDocument } from "./storage/firestore";
 import { isFirestoreStorageEnabled } from "./storage/mode";
 
 const dataDir = path.join(process.cwd(), "data");
 const feedbackPath = path.join(dataDir, "okr-feedback.json");
+
+export type FeedbackStatus = "open" | "completed";
 
 export type UserFeedback = {
   id: string;
@@ -13,7 +15,12 @@ export type UserFeedback = {
   userEmail: string;
   userName: string;
   createdAt: string;
+  status: FeedbackStatus;
+  completedAt?: string;
+  completedBy?: string;
 };
+
+type StoredUserFeedback = Omit<UserFeedback, "status"> & { status?: FeedbackStatus };
 
 export type FeedbackInput = {
   message?: unknown;
@@ -45,7 +52,8 @@ export async function appendUserFeedback(
     page: input.page,
     userEmail: user.email,
     userName: user.displayName,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    status: "open"
   };
 
   if (isFirestoreStorageEnabled()) {
@@ -61,10 +69,47 @@ export async function appendUserFeedback(
 
 export async function readUserFeedback() {
   if (isFirestoreStorageEnabled()) {
-    return listFirestoreCollection<UserFeedback>("okrFeedback", 200, "createdAt desc");
+    const feedback = await listFirestoreCollection<StoredUserFeedback>("okrFeedback", 200, "createdAt desc");
+    return feedback.map(normalizeUserFeedback);
   }
 
-  return (await readFeedbackFile()).feedback;
+  return (await readFeedbackFile()).feedback.map(normalizeUserFeedback);
+}
+
+export async function updateUserFeedbackStatus(id: string, status: FeedbackStatus, actor: string) {
+  const feedbackId = id.trim();
+  if (!feedbackId || feedbackId.includes("/")) return null;
+
+  if (isFirestoreStorageEnabled()) {
+    const current = await readFirestoreDocument<StoredUserFeedback>(`okrFeedback/${feedbackId}`);
+    if (!current) return null;
+    const feedback = withFeedbackStatus(normalizeUserFeedback(current), status, actor);
+    await writeFirestoreDocument(`okrFeedback/${feedbackId}`, feedback);
+    return feedback;
+  }
+
+  const file = await readFeedbackFile();
+  const index = file.feedback.findIndex((item) => item.id === feedbackId);
+  if (index < 0) return null;
+  const feedback = withFeedbackStatus(normalizeUserFeedback(file.feedback[index]), status, actor);
+  file.feedback[index] = feedback;
+  await writeFeedbackFile(file.feedback);
+  return feedback;
+}
+
+export async function deleteUserFeedback(id: string) {
+  const feedbackId = id.trim();
+  if (!feedbackId || feedbackId.includes("/")) return false;
+
+  if (isFirestoreStorageEnabled()) {
+    return deleteFirestoreDocument(`okrFeedback/${feedbackId}`);
+  }
+
+  const file = await readFeedbackFile();
+  const feedback = file.feedback.filter((item) => item.id !== feedbackId);
+  if (feedback.length === file.feedback.length) return false;
+  await writeFeedbackFile(feedback);
+  return true;
 }
 
 async function readFeedbackFile(): Promise<FeedbackFile> {
@@ -74,4 +119,33 @@ async function readFeedbackFile(): Promise<FeedbackFile> {
   } catch {
     return { version: 1, feedback: [] };
   }
+}
+
+function normalizeUserFeedback(feedback: StoredUserFeedback): UserFeedback {
+  const { status, completedAt, completedBy, ...base } = feedback;
+  if (status === "completed") {
+    return { ...base, status, completedAt, completedBy };
+  }
+  return { ...base, status: "open" };
+}
+
+function withFeedbackStatus(feedback: UserFeedback, status: FeedbackStatus, actor: string): UserFeedback {
+  if (status === "completed") {
+    return {
+      ...feedback,
+      status,
+      completedAt: new Date().toISOString(),
+      completedBy: actor
+    };
+  }
+
+  const openFeedback = { ...feedback };
+  delete openFeedback.completedAt;
+  delete openFeedback.completedBy;
+  return { ...openFeedback, status: "open" };
+}
+
+async function writeFeedbackFile(feedback: StoredUserFeedback[]) {
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(feedbackPath, JSON.stringify({ version: 1, feedback: feedback.slice(0, 500) }, null, 2), "utf8");
 }

@@ -55,6 +55,13 @@ export async function writeFirestoreDocument(documentPath: string, value: Record
   return document.updateTime ?? "";
 }
 
+export async function deleteFirestoreDocument(documentPath: string) {
+  const response = await firestoreFetch(documentPath, { method: "DELETE" });
+  if (response.status === 404) return false;
+  await assertOk(response, `delete ${documentPath}`);
+  return true;
+}
+
 export class FirestorePreconditionError extends Error {
   constructor() {
     super("Firestore document changed before write");

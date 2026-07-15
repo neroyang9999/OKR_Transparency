@@ -20,6 +20,7 @@ import {
   Search,
   Settings,
   Shield,
+  Trash2,
   UserPlus,
   Users,
   X
@@ -267,7 +268,7 @@ export function AdminConsole() {
             {activeTab === "status" && <RuntimeStatus config={config} events={events} versions={versions} records={records} onNavigate={setActiveTab} />}
             {activeTab === "periods" && <PeriodManagement config={config} setConfig={setConfig} />}
             {activeTab === "organization" && <OrganizationAccess config={config} setConfig={setConfig} />}
-            {activeTab === "feedback" && <FeedbackReview feedback={feedback} />}
+            {activeTab === "feedback" && <FeedbackReview feedback={feedback} onFeedbackChange={setFeedback} />}
             {activeTab === "recovery" && <RecoveryAudit config={config} events={events} versions={versions} busy={busy} onRollback={rollback} />}
           </main>
         </div>
@@ -278,18 +279,62 @@ export function AdminConsole() {
   );
 }
 
-function FeedbackReview({ feedback }: { feedback: UserFeedback[] }) {
+function FeedbackReview({ feedback, onFeedbackChange }: { feedback: UserFeedback[]; onFeedbackChange: (feedback: UserFeedback[]) => void }) {
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "completed">("open");
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleFeedback = feedback.filter((item) => !normalizedQuery || [item.message, item.userName, item.userEmail, item.page]
-    .some((value) => value.toLowerCase().includes(normalizedQuery)));
+  const openCount = feedback.filter((item) => item.status === "open").length;
+  const completedCount = feedback.length - openCount;
+  const visibleFeedback = feedback.filter((item) => {
+    const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+    const matchesQuery = !normalizedQuery || [item.message, item.userName, item.userEmail, item.page, item.completedBy ?? ""]
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+    return matchesStatus && matchesQuery;
+  });
+
+  async function updateStatus(item: UserFeedback, status: "open" | "completed") {
+    setBusyId(item.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/feedback/${encodeURIComponent(item.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      const body = await response.json() as { feedback?: UserFeedback; error?: string };
+      if (!response.ok || !body.feedback) throw new Error(body.error || "更新反馈失败");
+      onFeedbackChange(feedback.map((current) => current.id === item.id ? body.feedback! : current));
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "更新反馈失败");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function removeFeedback(item: UserFeedback) {
+    if (!window.confirm("删除后无法恢复，确认删除这条反馈？")) return;
+    setBusyId(item.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/feedback/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+      const body = await response.json() as { deleted?: boolean; error?: string };
+      if (!response.ok || !body.deleted) throw new Error(body.error || "删除反馈失败");
+      onFeedbackChange(feedback.filter((current) => current.id !== item.id));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "删除反馈失败");
+    } finally {
+      setBusyId("");
+    }
+  }
 
   return (
     <Panel>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 className="font-semibold text-slate-950">反馈记录</h3>
-          <p className="mt-1 text-sm text-muted-foreground">共 {feedback.length} 条，按提交时间从新到旧排列。</p>
+          <p className="mt-1 text-sm text-muted-foreground">{openCount} 条待处理，{completedCount} 条已完成。</p>
         </div>
         <label className="relative block w-full sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -297,11 +342,33 @@ function FeedbackReview({ feedback }: { feedback: UserFeedback[] }) {
         </label>
       </div>
 
+      <div className="mt-4 flex flex-wrap gap-2" aria-label="反馈状态筛选">
+        {([
+          ["open", "待处理", openCount],
+          ["completed", "已完成", completedCount],
+          ["all", "全部", feedback.length]
+        ] as const).map(([value, label, count]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setStatusFilter(value)}
+            className={cn(
+              "inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium",
+              statusFilter === value ? "border-slate-950 bg-slate-950 text-white" : "border-border bg-white text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            {label}<span className={cn("ml-2 text-xs", statusFilter === value ? "text-slate-300" : "text-slate-400")}>{count}</span>
+          </button>
+        ))}
+      </div>
+
+      {error && <div role="alert" className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+
       <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
         {visibleFeedback.map((item) => {
           const pageIsSafe = item.page.startsWith("/") && !item.page.startsWith("//");
           return (
-            <article key={item.id} className="px-4 py-4">
+            <article key={item.id} className={cn("px-4 py-4", item.status === "completed" && "bg-slate-50/70")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-3">
                   <UserAvatar name={item.userName || item.userEmail} enabled />
@@ -310,16 +377,45 @@ function FeedbackReview({ feedback }: { feedback: UserFeedback[] }) {
                     <div className="truncate text-xs text-slate-500">{item.userEmail}</div>
                   </div>
                 </div>
-                <time className="text-xs text-slate-500" dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
+                <div className="flex items-center gap-2">
+                  <span className={cn("rounded-full px-2 py-1 text-xs font-medium", item.status === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800")}>
+                    {item.status === "completed" ? "已完成" : "待处理"}
+                  </span>
+                  <time className="text-xs text-slate-500" dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
+                </div>
               </div>
               <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">{item.message}</p>
-              <div className="mt-3 text-xs text-slate-500">
-                来源页面：{pageIsSafe ? <a href={item.page} className="text-blue-700 hover:underline">{item.page}</a> : item.page}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-slate-500">
+                  <div>来源页面：{pageIsSafe ? <a href={item.page} className="text-blue-700 hover:underline">{item.page}</a> : item.page}</div>
+                  {item.status === "completed" && item.completedAt && (
+                    <div className="mt-1">{item.completedBy || "管理员"} · {formatDate(item.completedAt)} 完成</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busyId === item.id}
+                    onClick={() => void updateStatus(item, item.status === "completed" ? "open" : "completed")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {item.status === "completed" ? <RotateCcw className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    {item.status === "completed" ? "重新打开" : "标记完成"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === item.id}
+                    onClick={() => void removeFeedback(item)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />删除
+                  </button>
+                </div>
               </div>
             </article>
           );
         })}
-        {visibleFeedback.length === 0 && <EmptyState text={feedback.length === 0 ? "还没有用户反馈" : "没有匹配的反馈"} />}
+        {visibleFeedback.length === 0 && <EmptyState text={feedback.length === 0 ? "还没有用户反馈" : statusFilter === "open" ? "当前没有待处理反馈" : "没有匹配的反馈"} />}
       </div>
     </Panel>
   );

@@ -6,6 +6,12 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 - Add user-facing changes here before the next release.
 
+## v0.7.1 - 2026-07-15
+
+- Use the verified company IAP identity throughout the online app without triggering a second Google OAuth login.
+- Turn administrator feedback records into a two-state work queue with pending and completed filters.
+- Allow system administrators to complete, reopen, and permanently delete feedback with confirmation and audit records.
+
 ## v0.7.0 - 2026-07-14
 
 - Add a bilingual My Action Center that collects the signed-in user's owned KRs, updates overdue by more than seven days, and open risk or decision context.

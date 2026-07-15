@@ -59,7 +59,8 @@ describe("POST /api/feedback", () => {
       page: "/teams?lang=en",
       userEmail: access.email,
       userName: access.displayName,
-      createdAt: "2026-07-14T08:00:00.000Z"
+      createdAt: "2026-07-14T08:00:00.000Z",
+      status: "open"
     });
 
     const response = await POST(new NextRequest("http://localhost/api/feedback", {
