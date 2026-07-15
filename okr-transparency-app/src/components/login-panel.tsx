@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn, signOut } from "next-auth/react";
 import { LogIn } from "lucide-react";
+import { useAppIdentity } from "@/components/auth-provider";
 import { normalizeLang } from "@/lib/i18n";
 
 type LoginPanelProps = {
@@ -15,11 +16,12 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
   const searchParams = useSearchParams();
   const lang = normalizeLang(searchParams.get("lang") ?? undefined);
   const copy = copies[lang];
+  const identity = useAppIdentity();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const showCredentials = process.env.NODE_ENV !== "production";
+  const showCredentials = identity.mode === "authjs" && process.env.NODE_ENV !== "production";
 
   useEffect(() => {
     const authOrigin = process.env.NEXT_PUBLIC_AUTH_ORIGIN;
@@ -76,10 +78,18 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
             <p className="mt-1 text-sm text-muted-foreground">
               {variant === "denied" && email
                 ? copy.denied(email)
-                : copy.subtitle}
+                : identity.mode === "iap"
+                  ? copy.iapUnavailable
+                  : copy.subtitle}
             </p>
           </div>
         </div>
+
+        {identity.mode === "iap" && (
+          <div className="rounded-md bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+            {variant === "denied" ? copy.iapDeniedHelp : copy.iapUnavailableHelp}
+          </div>
+        )}
 
         {showCredentials && (
           <form onSubmit={submit} className="space-y-4">
@@ -113,7 +123,7 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
           </form>
         )}
 
-        {!showCredentials && (
+        {identity.mode === "authjs" && !showCredentials && (
           <button
             type="button"
             onClick={() => void signIn("google")}
@@ -123,24 +133,26 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
           </button>
         )}
 
-        <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-          <button
-            type="button"
-            onClick={() => void signIn("google")}
-            className={cnGoogleButton(showCredentials)}
-          >
-            {copy.google}
-          </button>
-          {variant === "denied" && (
+        {identity.mode === "authjs" && (
+          <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
             <button
               type="button"
-              onClick={() => void signOut()}
-              className="text-sm font-medium text-slate-600 hover:text-slate-950"
+              onClick={() => void signIn("google")}
+              className={cnGoogleButton(showCredentials)}
             >
-              {copy.signOut}
+              {copy.google}
             </button>
-          )}
-        </div>
+            {variant === "denied" && (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="text-sm font-medium text-slate-600 hover:text-slate-950"
+              >
+                {copy.signOut}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -152,6 +164,9 @@ const copies = {
     deniedTitle: "账号无访问权限",
     subtitle: "请使用授权账号登录后查看 OKR",
     denied: (email: string) => `${email} 未配置 OKR 访问权限`,
+    iapUnavailable: "未能识别公司账号",
+    iapDeniedHelp: "身份验证已由公司账号完成，无需再次登录。请联系管理员开通 OKR 权限。",
+    iapUnavailableHelp: "请刷新页面；若仍无法识别账号，请联系管理员检查 IAP 配置。",
     username: "账号",
     password: "密码",
     submit: "登录",
@@ -166,6 +181,9 @@ const copies = {
     deniedTitle: "Account not authorized",
     subtitle: "Sign in with an authorized account to view OKRs.",
     denied: (email: string) => `${email} is not configured for OKR access.`,
+    iapUnavailable: "Your company account could not be identified.",
+    iapDeniedHelp: "Your company identity is already verified. Contact an administrator to enable OKR access.",
+    iapUnavailableHelp: "Refresh the page. If the account is still unavailable, ask an administrator to check IAP.",
     username: "Username",
     password: "Password",
     submit: "Sign in",

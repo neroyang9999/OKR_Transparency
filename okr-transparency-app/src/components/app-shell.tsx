@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { BarChart3, BriefcaseBusiness, GitBranch, Search, Users } from "lucide-react";
+import { useAppIdentity } from "@/components/auth-provider";
 import { APP_VERSION } from "@/lib/app-version";
 import { hrefWithLang, normalizeLang, t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,8 @@ export function AppShell({
   const pathname = usePathname();
   const lang = normalizeLang(searchParams.get("lang") ?? undefined);
   const { data: session } = useSession();
+  const identity = useAppIdentity();
+  const currentEmail = identity.mode === "iap" ? identity.email : session?.user?.email;
 
   return (
     <div className="min-h-screen">
@@ -77,16 +80,23 @@ export function AppShell({
                     </Link>
                   );
                 })}
-                {session?.user?.email ? (
+                {currentEmail && identity.mode === "iap" ? (
+                  <span
+                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 xl:inline-flex"
+                    title={currentEmail}
+                  >
+                    <span className="truncate">{currentEmail}</span>
+                  </span>
+                ) : currentEmail ? (
                   <button
                     type="button"
                     onClick={() => void signOut()}
                     className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 xl:inline-flex"
-                    title={session.user.email}
+                    title={currentEmail}
                   >
-                    <span className="truncate">{session.user.email}</span>
+                    <span className="truncate">{currentEmail}</span>
                   </button>
-                ) : (
+                ) : identity.mode === "authjs" ? (
                   <button
                     type="button"
                     onClick={() => void signIn("google")}
@@ -94,7 +104,7 @@ export function AppShell({
                   >
                     登录
                   </button>
-                )}
+                ) : null}
               </>
             )}
             <LanguageToggle pathname={pathname} searchParams={searchParams} />

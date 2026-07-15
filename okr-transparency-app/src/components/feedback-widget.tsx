@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { CheckCircle2, MessageSquareText, X } from "lucide-react";
+import { useAppIdentity } from "@/components/auth-provider";
 import { normalizeLang } from "@/lib/i18n";
 
 const copy = {
@@ -18,6 +19,7 @@ const copy = {
     submitting: "提交中…",
     success: "已收到，谢谢你的反馈。",
     login: "请先登录；若已登录，请联系管理员开通账号。",
+    iapDenied: "当前公司账号未开通反馈权限，请联系管理员。",
     loginButton: "登录",
     failed: "提交失败，请稍后重试。"
   },
@@ -32,6 +34,7 @@ const copy = {
     submitting: "Submitting…",
     success: "Thanks — your feedback has been received.",
     login: "Please sign in. If you are signed in, ask an administrator to enable your account.",
+    iapDenied: "Your company account is not enabled for feedback. Contact an administrator.",
     loginButton: "Sign in",
     failed: "Submission failed. Please try again later."
   }
@@ -42,6 +45,7 @@ export function FeedbackWidget() {
   const searchParams = useSearchParams();
   const lang = normalizeLang(searchParams.get("lang") ?? undefined);
   const text = copy[lang];
+  const identity = useAppIdentity();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,7 +67,11 @@ export function FeedbackWidget() {
     setBusy(false);
 
     if (response.status === 401) {
-      setStatus({ tone: "error", text: text.login, login: true });
+      setStatus({
+        tone: "error",
+        text: identity.mode === "iap" ? text.iapDenied : text.login,
+        login: identity.mode === "authjs"
+      });
       return;
     }
     if (!response.ok) {

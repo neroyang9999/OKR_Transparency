@@ -24,6 +24,7 @@ import {
   Users,
   X
 } from "lucide-react";
+import { useAppIdentity } from "@/components/auth-provider";
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { getAdminRuntimeSummary, type VersionRecordChange } from "@/lib/admin/dashboard";
 import type { UserFeedback } from "@/lib/feedback";
@@ -50,6 +51,8 @@ const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof 
 
 export function AdminConsole() {
   const { data: session } = useSession();
+  const identity = useAppIdentity();
+  const sessionEmail = identity.mode === "iap" ? identity.email : session?.user?.email;
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState("");
@@ -139,6 +142,7 @@ export function AdminConsole() {
   }
 
   async function logout() {
+    if (identity.mode === "iap") return;
     if (dirty && !window.confirm("仍有未保存的修改，确认退出后台？")) return;
     await fetch("/api/admin/logout", { method: "POST" });
     await signOut({ redirect: false });
@@ -194,7 +198,7 @@ export function AdminConsole() {
   if (loading) return <AdminFrame><LoadingCard /></AdminFrame>;
 
   if (!authenticated || !config || !savedConfig) {
-    return <AdminFrame><LoginPanel sessionEmail={session?.user?.email} token={token} setToken={setToken} busy={busy} error={loginError} showEmergencyToken={showEmergencyToken} onLogin={login} /></AdminFrame>;
+    return <AdminFrame><LoginPanel sessionEmail={sessionEmail} iapMode={identity.mode === "iap"} token={token} setToken={setToken} busy={busy} error={loginError} showEmergencyToken={showEmergencyToken} onLogin={login} /></AdminFrame>;
   }
 
   const currentTab = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
@@ -216,9 +220,15 @@ export function AdminConsole() {
             <button type="button" onClick={() => setSettingsOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
               <Settings className="h-4 w-4" />高级设置
             </button>
-            <button type="button" onClick={() => void logout()} className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900">
-              <LogOut className="h-4 w-4" />退出
-            </button>
+            {identity.mode === "iap" ? (
+              <span className="inline-flex h-9 max-w-64 items-center rounded-md px-3 text-sm text-slate-500" title={sessionEmail ?? undefined}>
+                <span className="truncate">{sessionEmail ?? "公司账号已认证"}</span>
+              </span>
+            ) : (
+              <button type="button" onClick={() => void logout()} className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900">
+                <LogOut className="h-4 w-4" />退出
+              </button>
+            )}
           </div>
         </header>
 
@@ -622,8 +632,8 @@ function SettingsDrawer({ config, setConfig, system, onClose }: AdminSectionProp
   );
 }
 
-function LoginPanel({ sessionEmail, token, setToken, busy, error, showEmergencyToken, onLogin }: { sessionEmail?: string | null; token: string; setToken: (value: string) => void; busy: boolean; error: string; showEmergencyToken: boolean; onLogin: () => void }) {
-  return <div className="mx-auto mt-20 max-w-md rounded-xl border border-border bg-white p-7 shadow-subtle"><div className="grid h-11 w-11 place-items-center rounded-md bg-slate-950 text-white"><Lock className="h-5 w-5" /></div><h1 className="mt-4 text-2xl font-semibold text-slate-950">OKR 运行控制台</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">使用系统管理员账号进入；紧急 Token 只在本地或显式开启时显示。</p><button type="button" onClick={() => void signIn("google")} className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800">使用 Google 登录</button>{sessionEmail && <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">当前账号：{sessionEmail}</div>}{showEmergencyToken && <details className="mt-5 rounded-lg border border-border p-4"><summary className="cursor-pointer text-sm font-medium text-slate-700">紧急管理员 Token</summary><input type="password" value={token} onChange={(event) => setToken(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void onLogin(); }} className="mt-3 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400" />{error && <div className="mt-2 text-sm text-rose-600">{error}</div>}<button type="button" onClick={onLogin} disabled={busy || !token.trim()} className="mt-3 h-9 w-full rounded-md bg-blue-600 text-sm font-medium text-white disabled:bg-slate-300">登录</button></details>}</div>;
+function LoginPanel({ sessionEmail, iapMode, token, setToken, busy, error, showEmergencyToken, onLogin }: { sessionEmail?: string | null; iapMode: boolean; token: string; setToken: (value: string) => void; busy: boolean; error: string; showEmergencyToken: boolean; onLogin: () => void }) {
+  return <div className="mx-auto mt-20 max-w-md rounded-xl border border-border bg-white p-7 shadow-subtle"><div className="grid h-11 w-11 place-items-center rounded-md bg-slate-950 text-white"><Lock className="h-5 w-5" /></div><h1 className="mt-4 text-2xl font-semibold text-slate-950">OKR 运行控制台</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">{iapMode ? "当前公司账号没有系统管理员权限，请联系其他管理员开通。" : "使用系统管理员账号进入；紧急 Token 只在本地或显式开启时显示。"}</p>{!iapMode && <button type="button" onClick={() => void signIn("google")} className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800">使用 Google 登录</button>}{sessionEmail && <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">当前账号：{sessionEmail}</div>}{showEmergencyToken && <details className="mt-5 rounded-lg border border-border p-4"><summary className="cursor-pointer text-sm font-medium text-slate-700">紧急管理员 Token</summary><input type="password" value={token} onChange={(event) => setToken(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void onLogin(); }} className="mt-3 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400" />{error && <div className="mt-2 text-sm text-rose-600">{error}</div>}<button type="button" onClick={onLogin} disabled={busy || !token.trim()} className="mt-3 h-9 w-full rounded-md bg-blue-600 text-sm font-medium text-white disabled:bg-slate-300">登录</button></details>}</div>;
 }
 
 function AdminFrame({ children }: { children: React.ReactNode }) { return <div className="min-h-screen bg-slate-50 px-4 py-5 sm:px-6">{children}</div>; }
