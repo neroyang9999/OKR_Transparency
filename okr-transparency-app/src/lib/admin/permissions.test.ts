@@ -127,6 +127,57 @@ describe("role-based OKR permissions", () => {
     });
   });
 
+  it("resolves an unconfigured UnitX IAP identity as read-only", async () => {
+    vi.mocked(isIapAuthenticationRequired).mockReturnValue(true);
+    vi.mocked(verifyIapJwt).mockResolvedValue({
+      email: "viewer@unitxlabs.com",
+      subject: "accounts.google.com:654321"
+    });
+    const request = new NextRequest("https://okr.example.com/api/okrs", {
+      headers: {
+        "x-goog-iap-jwt-assertion": "signed.jwt.value"
+      }
+    });
+
+    const access = await resolveRequestAccess(request, config);
+    expect(access).toMatchObject({
+      email: "viewer@unitxlabs.com",
+      role: "user",
+      teams: [],
+      ownerAliases: [],
+      source: "iap"
+    });
+    expect(getTeamEditPolicy(config, "Software", access)).toMatchObject({ canEdit: false, canPublish: false });
+  });
+
+  it("grants unconfigured UnitX accounts read-only access", () => {
+    const access = getAccessForSessionUser(config, { email: "viewer@unitxlabs.com", name: "Viewer" });
+
+    expect(access).toMatchObject({
+      email: "viewer@unitxlabs.com",
+      displayName: "Viewer",
+      role: "user",
+      teams: [],
+      ownerAliases: []
+    });
+    expect(getTeamEditPolicy(config, "Software", access)).toMatchObject({ canEdit: false, canPublish: false });
+    expect(authorizePublish(config, access, "Software", "2026-q3")).toMatchObject({ ok: false });
+    expect(authorizeDraftChange(config, access, draft, changeKrProgress(draft, "SW-O1-KR1", 80))).toMatchObject({ ok: false });
+  });
+
+  it("does not grant domain fallback access to explicitly disabled or external accounts", () => {
+    const configWithDisabledUnitxUser: AdminConfig = {
+      ...config,
+      users: [
+        ...config.users,
+        { email: "disabled@unitxlabs.com", displayName: "Disabled UnitX User", role: "user", teams: [], ownerAliases: [], enabled: false }
+      ]
+    };
+
+    expect(getAccessForSessionUser(configWithDisabledUnitxUser, { email: "disabled@unitxlabs.com", name: "Disabled" })).toBeNull();
+    expect(getAccessForSessionUser(config, { email: "viewer@example.com", name: "External" })).toBeNull();
+  });
+
   it("rejects an unsigned IAP email header when IAP authentication is required", async () => {
     vi.mocked(isIapAuthenticationRequired).mockReturnValue(true);
     const request = new NextRequest("https://okr.example.com/api/admin/session", {

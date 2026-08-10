@@ -21,11 +21,13 @@ const navItems = [
 export function AppShell({
   children,
   active,
-  hideNavigation = false
+  hideNavigation = false,
+  compactOnLaptop = false
 }: {
   children: React.ReactNode;
   active: string;
   hideNavigation?: boolean;
+  compactOnLaptop?: boolean;
 }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -35,7 +37,7 @@ export function AppShell({
   const currentEmail = identity.mode === "iap" ? identity.email : session?.user?.email;
 
   return (
-    <div className="min-h-screen">
+    <div className={cn("min-h-screen", compactOnLaptop && "overview-laptop-compact")}>
       <header className="sticky top-0 z-20 border-b border-border bg-white/92 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3">
           <Link href={hrefWithLang("/", lang)} className="flex items-center gap-3">

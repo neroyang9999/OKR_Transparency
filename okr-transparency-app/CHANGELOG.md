@@ -6,6 +6,15 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 - Add user-facing changes here before the next release.
 
+## v0.7.2 - 2026-08-10
+
+- Rename Integration Team / Integration Lead to System Team / System Leader and Platform Team / Platform Lead to Infra Team / Infra Leader without changing personnel assignments.
+- Allow unconfigured `@unitxlabs.com` accounts to browse OKRs with no edit, publish, progress-update, or administration permissions.
+- Show newly added members at the top of the admin member list, select them immediately, clear active search filters, and scroll them into view.
+- Render the main OKR overview at 90% density on laptop-height desktop viewports while leaving mobile, large-screen, and admin layouts unchanged.
+- Drive the alignment-map navigation from the configured organization hierarchy, remove obsolete teams, and add Software child-team views.
+- Make baseline, target, KR confidence, risk, and decision details optional so simple OKRs can be published without advanced fields.
+
 ## v0.7.1 - 2026-07-15
 
 - Use the verified company IAP identity throughout the online app without triggering a second Google OAuth login.

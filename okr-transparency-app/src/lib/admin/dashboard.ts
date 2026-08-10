@@ -38,14 +38,11 @@ export function getAdminRuntimeSummary(config: AdminConfig, events: AdminEvent[]
   if (unpublished.length > 0) {
     attention.push({ id: "unpublished-teams", level: "warning", title: `${unpublished.length} 个团队尚未发布`, description: unpublished.slice(0, 4).map((team) => team.name).join("、"), destination: "organization" });
   }
-  if (quality.missingMetricCount > 0) {
-    attention.push({ id: "missing-metrics", level: "critical", title: `${quality.missingMetricCount} 个 KR 缺少负责人或目标值`, description: "发布前需要补齐 owner、baseline 和 target。", destination: "organization" });
+  if (quality.missingOwnerCount > 0) {
+    attention.push({ id: "missing-owners", level: "critical", title: `${quality.missingOwnerCount} 个 KR 缺少负责人`, description: "发布前需要补齐 KR owner。", destination: "organization" });
   }
   if (quality.staleCount > 0) {
     attention.push({ id: "stale-krs", level: "warning", title: `${quality.staleCount} 个 KR 超过 14 天未更新`, description: "需要提醒对应负责人完成周更新。", destination: "organization" });
-  }
-  if (quality.nonGreenWithoutContextCount > 0) {
-    attention.push({ id: "risk-context", level: "critical", title: `${quality.nonGreenWithoutContextCount} 个非绿色 KR 没有风险说明`, description: "Yellow/Red 状态必须提供风险或决策请求。", destination: "organization" });
   }
   if (failedEvents.length > 0) {
     attention.push({ id: "failed-events", level: "critical", title: `${failedEvents.length} 个失败操作需要检查`, description: failedEvents[0]?.message ?? "查看审计记录了解原因。", destination: "recovery" });

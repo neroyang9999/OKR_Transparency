@@ -50,6 +50,8 @@ While Google OAuth is not configured, local development can use the credentials 
 
 Google sign-in is accepted when the email matches `OKR_ALLOWED_GOOGLE_DOMAINS` or an enabled user in the admin config. The admin backend stores role rules in `data/okr-admin-config.json` for local file storage and `okrAdmin/config` for Firestore storage:
 
+Accounts in `OKR_ALLOWED_GOOGLE_DOMAINS` that are not present in the admin config receive read-only access. They can browse OKRs but have no team membership, owner aliases, edit, publish, progress-update, or admin permissions. Explicitly disabled accounts remain blocked.
+
 - `super_admin`: all admin, edit, publish, and rollback permissions.
 - `team_leader`: edit and publish assigned teams.
 - `user`: edit only OKR/KR records whose owner matches one of their `ownerAliases`.

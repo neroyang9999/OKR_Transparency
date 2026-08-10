@@ -8,7 +8,7 @@ import { hrefWithLang, normalizeLang, t, type Lang } from "@/lib/i18n";
 import { normalizePeriod, periodLabel } from "@/lib/periods";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { buildAlignmentViewModel } from "@/lib/okr/alignment-view";
+import { buildMapTeamScope } from "@/lib/okr/map-team-scope";
 
 export default async function MapPage({
   searchParams
@@ -31,8 +31,7 @@ export default async function MapPage({
   const periodRecords = selectedPeriod === pageAccess.adminConfig.defaultPeriodId
     ? snapshot.records
     : await readPeriodRecords(selectedPeriod) ?? [];
-  const teams = buildAlignmentViewModel(periodRecords).teams;
-  const selectedTeam = teams.includes(params.team ?? "") ? params.team : undefined;
+  const teamScope = buildMapTeamScope(pageAccess.adminConfig.teams, periodRecords, params.team);
 
   return (
     <AppShell active="okrMap">
@@ -47,7 +46,7 @@ export default async function MapPage({
           {configuredPeriods.map((period) => (
             <Link
               key={period.id}
-              href={mapHref({ period: period.id, team: selectedTeam, lang })}
+              href={mapHref({ period: period.id, team: teamScope.selectedTeam, lang })}
               className={cn(
                 "grid h-10 min-w-40 place-items-center border-l border-border px-5 text-sm font-medium first:border-l-0",
                 period.id === selectedPeriod ? "bg-blue-50/70 text-blue-600" : "text-slate-700 hover:bg-slate-50"
@@ -59,33 +58,63 @@ export default async function MapPage({
           ))}
         </div>
       </div>
-      {teams.length > 0 && (
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-sm font-medium text-muted-foreground">{lang === "en" ? "Team" : "团队"}</span>
-          <Link
-            href={mapHref({ period: selectedPeriod, lang })}
-            className={cn(
-              "rounded-full border px-3 py-1 text-sm font-medium",
-              !selectedTeam ? "border-blue-200 bg-blue-50 text-blue-700" : "border-border bg-white text-slate-600 hover:bg-slate-50"
-            )}
-          >
-            {t(lang, "all")}
-          </Link>
-          {teams.map((team) => (
+      {teamScope.topLevelTeams.length > 0 && (
+        <div className="mb-5 space-y-2 rounded-lg border border-border bg-white p-3 shadow-subtle">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 min-w-24 text-sm font-medium text-muted-foreground">{lang === "en" ? "Organization" : "一级团队"}</span>
             <Link
-              key={team}
-              href={mapHref({ period: selectedPeriod, team, lang })}
+              href={mapHref({ period: selectedPeriod, lang })}
               className={cn(
                 "rounded-full border px-3 py-1 text-sm font-medium",
-                selectedTeam === team ? "border-blue-200 bg-blue-50 text-blue-700" : "border-border bg-white text-slate-600 hover:bg-slate-50"
+                !teamScope.selectedGroup ? "border-blue-200 bg-blue-50 text-blue-700" : "border-border bg-white text-slate-600 hover:bg-slate-50"
               )}
             >
-              {team}
+              {t(lang, "all")}
             </Link>
-          ))}
+            {teamScope.topLevelTeams.map((team) => (
+              <Link
+                key={team.id}
+                href={mapHref({ period: selectedPeriod, team: team.name, lang })}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-sm font-medium",
+                  teamScope.selectedGroup === team.name ? "border-blue-200 bg-blue-50 text-blue-700" : "border-border bg-white text-slate-600 hover:bg-slate-50"
+                )}
+              >
+                {team.name}
+              </Link>
+            ))}
+          </div>
+          {teamScope.childTeams.length > 0 && teamScope.selectedGroup && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+              <span className="mr-1 min-w-24 text-sm font-medium text-muted-foreground">
+                {lang === "en" ? `${teamScope.selectedGroup} teams` : `${teamScope.selectedGroup} 子团队`}
+              </span>
+              <Link
+                href={mapHref({ period: selectedPeriod, team: teamScope.selectedGroup, lang })}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-sm font-medium",
+                  teamScope.selectedTeam === teamScope.selectedGroup ? "border-blue-200 bg-blue-50 text-blue-700" : "border-border bg-white text-slate-600 hover:bg-slate-50"
+                )}
+              >
+                {lang === "en" ? `All ${teamScope.selectedGroup}` : `${teamScope.selectedGroup} 全部`}
+              </Link>
+              {teamScope.childTeams.map((team) => (
+                <Link
+                  key={team.id}
+                  href={mapHref({ period: selectedPeriod, team: team.name, lang })}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-sm font-medium",
+                    teamScope.selectedTeam === team.name ? "border-blue-200 bg-blue-50 text-blue-700" : "border-border bg-white text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  {team.name}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
-      <OkrMap records={periodRecords} lang={lang} selectedTeam={selectedTeam} />
+      <OkrMap records={teamScope.records} lang={lang} selectedTeam={teamScope.focusTeam} />
     </AppShell>
   );
 }

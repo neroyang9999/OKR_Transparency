@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { timingSafeEqual } from "crypto";
+import { emailMatchesAllowedGoogleDomain } from "./src/lib/allowed-google-domains";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -90,7 +91,7 @@ function getLocalAdminCredentials() {
 
 async function isAllowedGoogleUser(email: string) {
   if (!email) return false;
-  if (emailMatchesAllowedDomain(email)) return true;
+  if (emailMatchesAllowedGoogleDomain(email)) return true;
 
   try {
     const { readAdminConfig } = await import("./src/lib/admin/config");
@@ -103,18 +104,6 @@ async function isAllowedGoogleUser(email: string) {
     });
     return false;
   }
-}
-
-function emailMatchesAllowedDomain(email: string) {
-  return getAllowedGoogleDomains().some((domain) => email.endsWith(`@${domain}`));
-}
-
-function getAllowedGoogleDomains() {
-  const raw = process.env.OKR_ALLOWED_GOOGLE_DOMAINS ?? "unitxlabs.com";
-  return raw
-    .split(",")
-    .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
-    .filter(Boolean);
 }
 
 function safeEquals(left: string, right: string) {

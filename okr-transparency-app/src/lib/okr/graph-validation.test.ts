@@ -24,15 +24,15 @@ describe("OKR graph validation", () => {
     ]));
   });
 
-  it("keeps structural and content validation separate", () => {
+  it("keeps advanced KR details optional while still tracking required ownership", () => {
     const incomplete = { ...record("KR1", "O1"), kr: "Measure result", baseline: "", target: "", confidence: "Yellow" as const };
     expect(validateOkrGraph([record("O1", ""), incomplete]).errors).toEqual([]);
-    expect(validateOkrRecordQuality([incomplete]).errors).toEqual(expect.arrayContaining([
-      "KR1: baseline is required",
-      "KR1: target is required",
-      "KR1: Yellow/Red KR requires a risk or decision needed"
-    ]));
-    expect(getOkrQualityStats([incomplete]).missingMetricCount).toBe(1);
+    expect(validateOkrRecordQuality([incomplete]).errors).toEqual([]);
+    expect(getOkrQualityStats([incomplete]).missingOwnerCount).toBe(0);
+
+    const missingOwner = { ...incomplete, owner: "" };
+    expect(validateOkrRecordQuality([missingOwner]).errors).toContain("KR1: owner is required");
+    expect(getOkrQualityStats([missingOwner]).missingOwnerCount).toBe(1);
   });
 });
 

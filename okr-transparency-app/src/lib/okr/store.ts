@@ -4,6 +4,7 @@ import type { OkrSnapshot, OkrTreeResponse } from "./types";
 import { buildOkrTree, getOkrStats } from "./tree";
 import { FirestorePreconditionError, readFirestoreDocumentWithMetadata, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
+import { canonicalOwnerName, canonicalTeamName } from "../team-names";
 
 const dataDir = path.join(process.cwd(), "data");
 const snapshotPath = path.join(dataDir, "okr-snapshot.json");
@@ -16,14 +17,14 @@ export async function readOkrSnapshot(): Promise<OkrSnapshot> {
 export async function readOkrSnapshotState(): Promise<{ snapshot: OkrSnapshot; revision: string }> {
   if (isFirestoreStorageEnabled()) {
     const result = await readFirestoreDocumentWithMetadata<OkrSnapshot>(snapshotDocumentPath);
-    if (result) return { snapshot: result.value, revision: result.updateTime };
+    if (result) return { snapshot: canonicalizeSnapshot(result.value), revision: result.updateTime };
     return { snapshot: emptySnapshot(), revision: "missing" };
   }
 
   try {
     const [snapshotText, stat] = await Promise.all([fs.readFile(snapshotPath, "utf8"), fs.stat(snapshotPath)]);
     return {
-      snapshot: JSON.parse(snapshotText) as OkrSnapshot,
+      snapshot: canonicalizeSnapshot(JSON.parse(snapshotText) as OkrSnapshot),
       revision: `${stat.mtimeMs}:${stat.size}`
     };
   } catch {
@@ -80,5 +81,16 @@ function emptySnapshot(): OkrSnapshot {
       rowCount: 0
     },
     records: []
+  };
+}
+
+function canonicalizeSnapshot(snapshot: OkrSnapshot): OkrSnapshot {
+  return {
+    ...snapshot,
+    records: snapshot.records.map((record) => ({
+      ...record,
+      team: canonicalTeamName(record.team),
+      owner: canonicalOwnerName(record.owner)
+    }))
   };
 }

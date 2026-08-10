@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import {
   Activity,
@@ -445,9 +445,8 @@ function RuntimeStatus({ config, events, versions, records, onNavigate }: { conf
         <Panel>
           <div className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-emerald-600" /><h3 className="font-semibold text-slate-950">数据健康</h3></div>
           <div className="mt-4 space-y-3">
-            <HealthRow label="缺少关键指标" value={summary.quality.missingMetricCount} />
+            <HealthRow label="缺少负责人" value={summary.quality.missingOwnerCount} />
             <HealthRow label="超过 14 天未更新" value={summary.quality.staleCount} />
-            <HealthRow label="非绿色无风险说明" value={summary.quality.nonGreenWithoutContextCount} />
           </div>
         </Panel>
       </section>
@@ -590,15 +589,17 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
 function MemberAccess({ config, setConfig }: AdminSectionProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState<number | null>(config.users.length > 0 ? 0 : null);
+  const memberListRef = useRef<HTMLDivElement>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const visibleUsers = config.users.map((user, index) => ({ user, index })).filter(({ user }) => !normalizedQuery || [user.displayName, user.email, roleLabel(user.role), ...user.teams].join(" ").toLowerCase().includes(normalizedQuery));
   const selected = selectedIndex === null ? null : config.users[selectedIndex] ?? null;
 
   function addUser() {
-    const index = config.users.length;
     const user: AdminUser = { email: `new-user-${Date.now().toString(36)}@company.com`, displayName: "新成员", role: "user", teams: [config.defaultTeam], ownerAliases: [], enabled: true };
-    setConfig({ ...config, users: [...config.users, user] });
-    setSelectedIndex(index);
+    setQuery("");
+    setConfig({ ...config, users: [user, ...config.users] });
+    setSelectedIndex(0);
+    requestAnimationFrame(() => memberListRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
   }
 
   function removeUser() {
@@ -617,7 +618,7 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
       <Panel>
         <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-950">成员</h3><p className="mt-1 text-xs text-slate-500">{config.users.filter((user) => user.enabled).length} / {config.users.length} 个账号启用</p></div><button type="button" onClick={addUser} className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-medium text-white"><UserPlus className="h-4 w-4" />添加</button></div>
         <label className="relative mt-4 block"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、邮箱、团队" className="h-9 w-full rounded-md border border-border pl-9 pr-3 text-sm outline-none focus:border-blue-400" /></label>
-        <div className="mt-3 max-h-[620px] space-y-1 overflow-y-auto">
+        <div ref={memberListRef} className="mt-3 max-h-[620px] space-y-1 overflow-y-auto">
           {visibleUsers.map(({ user, index }) => (
             <button key={`${user.email}-${index}`} type="button" onClick={() => setSelectedIndex(index)} className={cn("flex w-full items-center gap-3 rounded-md px-3 py-2 text-left", selectedIndex === index ? "bg-slate-950 text-white" : "hover:bg-slate-50")}>
               <UserAvatar name={user.displayName || user.email} enabled={user.enabled} />

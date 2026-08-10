@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { listFirestoreCollection, readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
+import { canonicalOwnerName, canonicalTeamName } from "../team-names";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath = path.join(dataDir, "okr-admin-config.json");
@@ -282,7 +283,7 @@ function normalizePeriod(period: LegacyPeriod, index: number): AdminPeriod {
 function normalizeTeams(input: LegacyTeam[]) {
   const usedIds = new Set<string>();
   return input.map((team, index): AdminTeam => {
-    const name = String(team.name ?? `Team ${index + 1}`).trim() || `Team ${index + 1}`;
+    const name = canonicalTeamName(String(team.name ?? `Team ${index + 1}`)) || `Team ${index + 1}`;
     const baseId = String(team.id ?? slugify(name) ?? `team-${index + 1}`).trim();
     let id = baseId;
     let suffix = 2;
@@ -291,8 +292,8 @@ function normalizeTeams(input: LegacyTeam[]) {
     return {
       id,
       name,
-      owner: String(team.owner ?? "").trim(),
-      parentTeam: String(team.parentTeam ?? "").trim(),
+      owner: canonicalOwnerName(String(team.owner ?? "")),
+      parentTeam: canonicalTeamName(String(team.parentTeam ?? "")),
       color: normalizeTeamColor(team.color),
       enabled: team.enabled ?? true
     };
@@ -308,11 +309,11 @@ function normalizeUsers(input: Partial<AdminUser>[] | undefined, fallback: Admin
       email,
       displayName,
       role: user.role === "super_admin" || user.role === "team_leader" || user.role === "user" ? user.role : "user",
-      teams: Array.isArray(user.teams) ? unique(user.teams.map((team) => String(team).trim()).filter(Boolean)) : [],
+      teams: Array.isArray(user.teams) ? unique(user.teams.map((team) => canonicalTeamName(String(team))).filter(Boolean)) : [],
       ownerAliases: unique([
         displayName,
         email,
-        ...(Array.isArray(user.ownerAliases) ? user.ownerAliases.map((alias) => String(alias).trim()) : [])
+        ...(Array.isArray(user.ownerAliases) ? user.ownerAliases.map((alias) => canonicalOwnerName(String(alias))) : [])
       ].filter(Boolean)),
       enabled: user.enabled ?? true
     };
@@ -332,9 +333,9 @@ function defaultAdminConfig(): AdminConfig {
     teams: [
       { id: "software", name: "Software", owner: "Software Lead", parentTeam: "", color: "blue", enabled: true },
       { id: "application-team", name: "Application Team", owner: "Application Lead", parentTeam: "Software", color: "blue", enabled: true },
-      { id: "integration-team", name: "Integration Team", owner: "Integration Lead", parentTeam: "Software", color: "blue", enabled: true },
+      { id: "integration-team", name: "System Team", owner: "System Leader", parentTeam: "Software", color: "blue", enabled: true },
       { id: "qa-team", name: "QA Team", owner: "QA Lead", parentTeam: "Software", color: "blue", enabled: true },
-      { id: "platform-team", name: "Platform Team", owner: "Platform Lead", parentTeam: "Software", color: "blue", enabled: true },
+      { id: "platform-team", name: "Infra Team", owner: "Infra Leader", parentTeam: "Software", color: "blue", enabled: true },
       { id: "algorithm-team", name: "Algorithm Team", owner: "Algorithm Lead", parentTeam: "Software", color: "blue", enabled: true },
       { id: "tpm-team", name: "TPM Team", owner: "TPM Lead", parentTeam: "Software", color: "blue", enabled: true },
       { id: "hardware", name: "Hardware", owner: "Hardware Lead", parentTeam: "", color: "emerald", enabled: true },

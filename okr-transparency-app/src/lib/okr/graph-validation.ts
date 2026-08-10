@@ -7,9 +7,8 @@ export type OkrGraphValidation = {
 
 export type OkrQualityStats = {
   krCount: number;
-  missingMetricCount: number;
+  missingOwnerCount: number;
   staleCount: number;
-  nonGreenWithoutContextCount: number;
 };
 
 export function validateOkrGraph(records: OkrRecord[]): OkrGraphValidation {
@@ -89,11 +88,6 @@ export function validateOkrRecordQuality(records: OkrRecord[]): OkrGraphValidati
   const warnings: string[] = [];
   records.filter((record) => record.kr).forEach((record) => {
     if (!record.owner.trim()) errors.push(`${record.okr_id}: owner is required`);
-    if (!record.baseline.trim()) errors.push(`${record.okr_id}: baseline is required`);
-    if (!record.target.trim()) errors.push(`${record.okr_id}: target is required`);
-    if (record.confidence !== "Green" && !record.risks.trim() && !record.decisions_needed.trim()) {
-      errors.push(`${record.okr_id}: Yellow/Red KR requires a risk or decision needed`);
-    }
     if (isStale(record.last_update, 14)) warnings.push(`${record.okr_id}: update is older than 14 days`);
   });
   return { errors: unique(errors), warnings: unique(warnings) };
@@ -103,11 +97,8 @@ export function getOkrQualityStats(records: OkrRecord[]): OkrQualityStats {
   const krs = records.filter((record) => record.kr);
   return {
     krCount: krs.length,
-    missingMetricCount: krs.filter((record) => !record.owner.trim() || !record.baseline.trim() || !record.target.trim()).length,
-    staleCount: krs.filter((record) => isStale(record.last_update, 14)).length,
-    nonGreenWithoutContextCount: krs.filter((record) =>
-      record.confidence !== "Green" && !record.risks.trim() && !record.decisions_needed.trim()
-    ).length
+    missingOwnerCount: krs.filter((record) => !record.owner.trim()).length,
+    staleCount: krs.filter((record) => isStale(record.last_update, 14)).length
   };
 }
 

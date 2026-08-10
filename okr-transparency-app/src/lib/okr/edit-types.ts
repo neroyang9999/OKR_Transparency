@@ -201,11 +201,6 @@ export function validateDraft(draft: OkrDraft): DraftValidation {
       const krLabel = `${label}-KR${krIndex + 1}`;
       if (!kr.title.trim()) errors.push(`${krLabel}: KR title is required`);
       if (!kr.owner.trim()) errors.push(`${krLabel}: owner is required`);
-      if (!kr.baseline.trim()) errors.push(`${krLabel}: baseline is required`);
-      if (!kr.target.trim()) errors.push(`${krLabel}: target is required`);
-      if (kr.confidence !== "Green" && !kr.risks.trim() && !kr.decisionsNeeded.trim()) {
-        errors.push(`${krLabel}: Yellow/Red KR requires a risk or decision needed`);
-      }
       if (kr.progress !== null && !isPercent(kr.progress)) {
         errors.push(`${krLabel}: progress must be between 0 and 100`);
       }

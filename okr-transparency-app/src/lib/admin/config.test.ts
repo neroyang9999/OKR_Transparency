@@ -37,6 +37,23 @@ describe("admin config v2", () => {
     ]));
   });
 
+  it("maps legacy System and Infra team names without changing user assignments", () => {
+    const config = normalizeAdminConfig({
+      teams: [
+        { id: "integration-team", name: "Integration Team", owner: "Integration Lead", parentTeam: "Software", enabled: true },
+        { id: "platform-team", name: "Platform Team", owner: "Platform Lead", parentTeam: "Software", enabled: true }
+      ],
+      users: [{ email: "lead@example.com", displayName: "Lead", role: "team_leader", teams: ["Integration Team", "Platform Team"], ownerAliases: ["Integration Lead", "Platform Lead"], enabled: true }]
+    });
+
+    expect(config.teams.map((team) => [team.id, team.name, team.owner])).toEqual([
+      ["integration-team", "System Team", "System Leader"],
+      ["platform-team", "Infra Team", "Infra Leader"]
+    ]);
+    expect(config.users[0].teams).toEqual(["System Team", "Infra Team"]);
+    expect(config.users[0].ownerAliases).toEqual(expect.arrayContaining(["System Leader", "Infra Leader"]));
+  });
+
   it("prevents the current administrator from removing or demoting their own account", () => {
     const config = normalizeAdminConfig({});
     const next = {

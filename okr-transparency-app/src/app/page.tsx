@@ -50,7 +50,7 @@ export default async function HomePage({
 
   if (!access) {
     return (
-      <AppShell active="overview" hideNavigation>
+      <AppShell active="overview" hideNavigation compactOnLaptop>
         <LoginPanel variant={sessionUser ? "denied" : "login"} email={sessionUser?.email} />
       </AppShell>
     );
@@ -98,7 +98,7 @@ export default async function HomePage({
   );
 
   return (
-    <AppShell active="overview">
+    <AppShell active="overview" compactOnLaptop>
       <div className="grid min-h-[calc(100vh-104px)] gap-5 lg:grid-cols-[300px_1fr]">
         <TeamSidebar items={teamNav} selectedTeam={selectedTeam} selectedMemberEmail={selectedMember?.email} lang={lang} />
 
@@ -201,13 +201,13 @@ export default async function HomePage({
               )}
             </div>
           )}
-          {(qualityStats.missingMetricCount > 0 || qualityStats.staleCount > 0 || qualityStats.nonGreenWithoutContextCount > 0) && (
+          {(qualityStats.missingOwnerCount > 0 || qualityStats.staleCount > 0) && (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <span className="font-semibold">{lang === "en" ? "Data quality attention" : "数据质量待处理"}</span>
               <span className="ml-2">
                 {lang === "en"
-                  ? `${qualityStats.missingMetricCount} KRs missing owner/baseline/target, ${qualityStats.staleCount} stale, ${qualityStats.nonGreenWithoutContextCount} Yellow/Red without context.`
-                  : `${qualityStats.missingMetricCount} 个 KR 缺少 owner/baseline/target，${qualityStats.staleCount} 个超过 14 天未更新，${qualityStats.nonGreenWithoutContextCount} 个 Yellow/Red 缺少风险或待决策说明。`}
+                  ? `${qualityStats.missingOwnerCount} KRs missing an owner, ${qualityStats.staleCount} stale.`
+                  : `${qualityStats.missingOwnerCount} 个 KR 缺少负责人，${qualityStats.staleCount} 个超过 14 天未更新。`}
               </span>
             </div>
           )}

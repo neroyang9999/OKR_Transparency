@@ -137,19 +137,14 @@ describe("OKR edit draft helpers", () => {
     expect(result.errors.some((error) => error.includes("alignment"))).toBe(true);
   });
 
-  it("requires measurable and actionable KRs", () => {
+  it("keeps advanced KR details optional", () => {
     const result = validateDraft({
       ...draft,
       objectives: draft.objectives.map((objective) => ({
         ...objective,
-        keyResults: objective.keyResults.map((kr) => ({ ...kr, owner: "", baseline: "", target: "", risks: "", decisionsNeeded: "" }))
+        keyResults: objective.keyResults.map((kr) => ({ ...kr, baseline: "", target: "", risks: "", decisionsNeeded: "" }))
       }))
     });
-    expect(result.errors).toEqual(expect.arrayContaining([
-      "O1-KR1: owner is required",
-      "O1-KR1: baseline is required",
-      "O1-KR1: target is required",
-      "O1-KR1: Yellow/Red KR requires a risk or decision needed"
-    ]));
+    expect(result.errors).toEqual([]);
   });
 });

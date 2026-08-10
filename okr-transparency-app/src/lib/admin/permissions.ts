@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { isAuthorized } from "../admin-auth";
 import { isIapAuthenticationRequired, verifyIapJwt } from "../iap-auth";
+import { emailMatchesAllowedGoogleDomain } from "../allowed-google-domains";
 import type { AdminConfig, AdminRole, AdminUser } from "./config";
 import type { EditableObjective, OkrDraft } from "../okr/edit-types";
 
@@ -74,10 +75,21 @@ export function getAccessForSessionUser(config: AdminConfig, user: SessionUser |
   const email = normalizeToken(user?.email ?? "");
   if (!email) return null;
 
-  const configured = config.users.find((item) => normalizeToken(item.email) === email && item.enabled);
-  if (!configured) return null;
+  const configured = config.users.find((item) => normalizeToken(item.email) === email);
+  if (configured) {
+    return configured.enabled ? accessFromAdminUser(configured, user?.name ?? configured.displayName, source) : null;
+  }
 
-  return accessFromAdminUser(configured, user?.name ?? configured.displayName, source);
+  if (!emailMatchesAllowedGoogleDomain(email)) return null;
+
+  return {
+    email,
+    displayName: user?.name?.trim() || email,
+    role: "user",
+    teams: [],
+    ownerAliases: [],
+    source
+  };
 }
 
 export function accessFromAdminUser(user: AdminUser, sessionName = "", source: "google" | "iap" = "google"): UserAccess {
