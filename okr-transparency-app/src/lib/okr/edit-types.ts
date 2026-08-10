@@ -276,7 +276,7 @@ export function validateDraft(draft: OkrDraft): DraftValidation {
     }
 
     if (!topLevelTeams.has(draft.team) && !objective.alignedToId) {
-      errors.push(`${label}: upper-level alignment is required`);
+      warnings.push(`${label}: upper-level alignment is recommended`);
     }
 
     objective.keyResults.forEach((kr, krIndex) => {

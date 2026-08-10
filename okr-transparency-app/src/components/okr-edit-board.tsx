@@ -242,7 +242,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                   <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} />
                 </div>
               </div>
-              <ReadOnlyField label={copy.progress} value={objectiveProgress === null ? "N/A" : `${objectiveProgress}%`} />
+              <ReadOnlyField label={copy.progressPercent} value={objectiveProgress === null ? "N/A" : `${objectiveProgress}%`} />
               <NumberInput label={copy.weight} value={objective.weight} onChange={(value) => updateObjective(objective.id, { weight: value ?? 100 })} disabled={objectiveLocked} />
               <button
                 type="button"
@@ -273,7 +273,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                         </div>
                       </div>
                     </div>
-                    <NumberInput label={copy.progress} value={kr.progress} onChange={(value) => updateKr(objective.id, kr.id, { progress: value })} disabled={!canEditDraft && !isEditableOwner(kr.owner, policy.editableOwnerAliases)} />
+                    <NumberInput label={copy.progressPercent} value={kr.progress} onChange={(value) => updateKr(objective.id, kr.id, { progress: value })} disabled={!canEditDraft && !isEditableOwner(kr.owner, policy.editableOwnerAliases)} step={1} placeholder="0–100" />
                     <NumberInput label={copy.weight} value={kr.weight} onChange={(value) => updateKr(objective.id, kr.id, { weight: value ?? 0 })} disabled={!canEditDraft} />
                     <button
                       type="button"
@@ -614,7 +614,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NumberInput({ label, value, onChange, disabled = false }: { label: string; value: number | null; onChange: (value: number | null) => void; disabled?: boolean }) {
+function NumberInput({ label, value, onChange, disabled = false, step = 0.1, placeholder = "暂无" }: { label: string; value: number | null; onChange: (value: number | null) => void; disabled?: boolean; step?: number; placeholder?: string }) {
   return (
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
@@ -622,14 +622,14 @@ function NumberInput({ label, value, onChange, disabled = false }: { label: stri
         type="number"
         min={0}
         max={100}
-        step={0.1}
+        step={step}
         value={value ?? ""}
         onChange={(event) => {
           const nextValue = parsePercentInput(event.target.value);
           if (nextValue !== undefined) onChange(nextValue);
         }}
         disabled={disabled}
-        placeholder="暂无"
+        placeholder={placeholder}
         className="mt-1 h-10 w-full rounded-md border border-border bg-white px-3 text-sm tabular-nums outline-none focus:border-blue-400"
       />
     </label>
@@ -685,6 +685,7 @@ const zh = {
   type: "Type",
   confidence: "Confidence",
   progress: "进度",
+  progressPercent: "进度 (%)",
   weight: "权重",
   addKr: "添加 Key Result",
   addObjective: "添加 Objective",
@@ -728,6 +729,7 @@ const en: typeof zh = {
   type: "Type",
   confidence: "Confidence",
   progress: "Progress",
+  progressPercent: "Progress (%)",
   weight: "Weight",
   addKr: "Add Key Result",
   addObjective: "Add Objective",
