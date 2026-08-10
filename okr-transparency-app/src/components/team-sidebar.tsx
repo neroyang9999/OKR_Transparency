@@ -90,8 +90,10 @@ export function TeamSidebar({
                       {initials(item.name)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">{item.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{teamOwnerLabel(lang, item.owner)}</span>
+                      <span className="block truncate font-semibold" title={item.name}>{item.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground" title={teamOwnerLabel(lang, item.owner)}>
+                        {teamOwnerLabel(lang, item.owner)}
+                      </span>
                     </span>
                   </Link>
                   {hasNestedItems && (
@@ -138,9 +140,11 @@ export function TeamSidebar({
                               className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
                             >
                               <TeamAvatar name={child.name} color={child.color} selected={selectedChild && !selectedMemberEmail} />
-                              <span className="min-w-0">
-                                <span className="block truncate font-semibold">{child.name}</span>
-                                <span className="block truncate text-xs text-muted-foreground">{teamOwnerLabel(lang, child.owner)}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-semibold" title={child.name}>{child.name}</span>
+                                <span className="block truncate text-xs text-muted-foreground" title={teamOwnerLabel(lang, child.owner)}>
+                                  {teamOwnerLabel(lang, child.owner)}
+                                </span>
                               </span>
                             </Link>
                             {child.members.length > 0 && (
@@ -241,9 +245,9 @@ function MemberList({
             <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500">
               <UserRound className="h-3.5 w-3.5" />
             </span>
-            <span className="min-w-0">
-              <span className="block truncate font-medium">{member.displayName}</span>
-              <span className="block truncate text-[11px] text-muted-foreground">{member.email}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium" title={member.displayName}>{member.displayName}</span>
+              <span className="block truncate text-[11px] text-muted-foreground" title={member.email}>{member.email}</span>
             </span>
           </Link>
         );

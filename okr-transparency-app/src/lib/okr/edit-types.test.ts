@@ -128,13 +128,14 @@ describe("OKR edit draft helpers", () => {
     expect(result.warnings.some((warning) => warning.includes("alignment"))).toBe(false);
   });
 
-  it("rejects child-team objectives that are not aligned upward", () => {
+  it("warns about child-team objectives that are not aligned upward without blocking publish", () => {
     const result = validateDraft({
       ...draft,
       team: "QA Team",
       objectives: draft.objectives.map((objective) => ({ ...objective, team: "QA Team", alignedToId: undefined }))
     });
-    expect(result.errors.some((error) => error.includes("alignment"))).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.some((warning) => warning.includes("alignment"))).toBe(true);
   });
 
   it("keeps advanced KR details optional", () => {
