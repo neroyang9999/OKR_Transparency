@@ -120,6 +120,8 @@ OKRs are created and maintained directly in the browser page editor. The app no 
 
 Drafts are saved first. Publishing writes normalized OKR records into the selected period and, for the configured default period, the current snapshot. Rollback restores a selected team-and-period version without changing other teams.
 
+Objective, KR, risk, and decision text supports Chinese and English versions. The editor detects the language actually entered instead of assuming it from the page language, keeps acronym-only values unchanged, and generates the other language through Cloud Translation when running on GCP. Machine translations can be edited and are never overwritten after a user changes them. Translation failure never blocks saving the original text.
+
 Publishing validates the complete candidate graph before any public data changes. Structural Objective/KR relationships use `parent_id`; cross-team alignment uses `aligned_to_id`. Every publish stores a team-and-period version, and concurrent updates to the current Firestore snapshot are rejected instead of silently overwriting newer data.
 
 KR publishing requires an owner, baseline, target, and risk/decision context for Yellow or Red status. Weekly KR updates can change actual value, progress, confidence, risk, next steps, and an evidence link in one action.
@@ -144,6 +146,7 @@ The production deployment target is the `nero` GCP project:
 - Image registry: Artifact Registry `unitx-internal`
 - Auth boundary: IAP, default `domain:unitxlabs.com`
 - Storage: Firestore
+- Bilingual content: Cloud Translation Advanced using the Cloud Run service identity
 
 Build and push an image:
 

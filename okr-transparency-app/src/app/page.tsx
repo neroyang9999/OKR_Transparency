@@ -197,7 +197,7 @@ export default async function HomePage({
                           <TeamAvatar name={child.team} />
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-slate-900">{child.team}</div>
-                            <div className="mt-1 truncate text-xs text-muted-foreground">{translateText(child.objective, lang)}</div>
+                            <div className="mt-1 truncate text-xs text-muted-foreground">{translateText(child.objective, lang, child.localized?.objective)}</div>
                           </div>
                         </div>
                       </Link>
@@ -284,7 +284,7 @@ function ObjectiveBlock({
             href={detailHref(objective.okr_id)}
             className="mt-2 block text-xl font-semibold leading-8 text-slate-950 hover:text-blue-700"
           >
-            {t(lang, "targetPrefix")}{translateText(objective.objective, lang)}
+            {t(lang, "targetPrefix")}{translateText(objective.objective, lang, objective.localized?.objective)}
           </OkrDetailLink>
           {alignmentChain.length > 0 && <AlignmentPill chain={alignmentChain} lang={lang} />}
           <div className="mt-3 h-2 max-w-3xl overflow-hidden rounded-full bg-slate-100">
@@ -303,7 +303,11 @@ function ObjectiveBlock({
               periodId={selectedPeriod}
               objectiveId={objective.okr_id}
               progressNotes={objectiveProgressNotes}
-              fallbackNote={translateText(objective.risks || objective.decisions_needed || t(lang, "noHighRisk"), lang)}
+              fallbackNote={objective.risks
+                ? translateText(objective.risks, lang, objective.localized?.risks)
+                : objective.decisions_needed
+                  ? translateText(objective.decisions_needed, lang, objective.localized?.decisionsNeeded)
+                  : t(lang, "noHighRisk")}
               defaultStatus={objective.confidence}
               fullHistoryHref={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
               lang={lang}
@@ -327,7 +331,7 @@ function KRRow({ kr, detailHref, lang }: { kr: OkrRecord; detailHref: string; la
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           <CircleDot className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-          <span className="text-sm font-semibold leading-6 text-slate-900">{translateText(kr.kr, lang)}</span>
+          <span className="text-sm font-semibold leading-6 text-slate-900">{translateText(kr.kr, lang, kr.localized?.kr)}</span>
         </div>
         <Badge
           className="shrink-0"
@@ -357,7 +361,7 @@ function AlignmentPill({ chain, lang }: { chain: OkrRecord[]; lang: Lang }) {
       <span className="text-blue-300">/</span>
       <span>{primary.owner}</span>
       <span className="rounded bg-white px-1">{primaryKind}</span>
-      <span className="max-w-[360px] truncate">{translateText(primary.kr || primary.objective, lang)}</span>
+      <span className="max-w-[360px] truncate">{translateText(primary.kr || primary.objective, lang, primary.kr ? primary.localized?.kr : primary.localized?.objective)}</span>
       {chain.slice(1).map((record) => {
         const kind = record.kr ? "KR" : "O";
         return (
@@ -367,7 +371,7 @@ function AlignmentPill({ chain, lang }: { chain: OkrRecord[]; lang: Lang }) {
             <span className="text-blue-300">/</span>
             <span>{record.owner}</span>
             <span className="rounded bg-white px-1">{kind}</span>
-            <span className="max-w-[260px] truncate">{translateText(record.kr || record.objective, lang)}</span>
+            <span className="max-w-[260px] truncate">{translateText(record.kr || record.objective, lang, record.kr ? record.localized?.kr : record.localized?.objective)}</span>
           </span>
         );
       })}
@@ -391,10 +395,10 @@ function AlignmentPill({ chain, lang }: { chain: OkrRecord[]; lang: Lang }) {
                   </span>
                   <ConfidenceBadge value={record.confidence} />
                 </span>
-                <span className="mt-2 block text-sm font-semibold leading-6 text-slate-900">{translateText(record.kr || record.objective, lang)}</span>
+                <span className="mt-2 block text-sm font-semibold leading-6 text-slate-900">{translateText(record.kr || record.objective, lang, record.kr ? record.localized?.kr : record.localized?.objective)}</span>
                 {parent && (
                   <span className="mt-2 block text-xs leading-5 text-slate-500">
-                    {lang === "en" ? "Parent Objective" : "所属 Objective"}：{translateText(parent.objective, lang)}
+                    {lang === "en" ? "Parent Objective" : "所属 Objective"}：{translateText(parent.objective, lang, parent.localized?.objective)}
                   </span>
                 )}
                 <span className="mt-2 block text-xs text-slate-500">

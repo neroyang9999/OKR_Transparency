@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftToRecords, filterDraftByOwner, mergeDraftByOwner, normalizeDraft, validateDraft, type OkrDraft } from "./edit-types";
+import { draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
 
 const draft: OkrDraft = {
   version: 1,
@@ -146,6 +146,35 @@ describe("OKR edit draft helpers", () => {
       }))
     });
     expect(result.errors).toEqual([]);
+  });
+
+  it("keeps bilingual content when publishing and selects it by display language", () => {
+    const bilingualDraft: OkrDraft = {
+      ...draft,
+      objectives: draft.objectives.map((objective) => ({
+        ...objective,
+        titleLocalized: { zh: "提升软件质量", en: "Improve software quality", zhOrigin: "manual", enOrigin: "machine" },
+        keyResults: objective.keyResults.map((kr) => ({
+          ...kr,
+          titleLocalized: { zh: "减少逃逸问题", en: "Reduce escaped issues", zhOrigin: "manual", enOrigin: "machine" }
+        }))
+      }))
+    };
+
+    expect(localizeDraftForLanguage(bilingualDraft, "zh").objectives[0].title).toBe("提升软件质量");
+    expect(draftToRecords(bilingualDraft)[1].localized?.kr?.en).toBe("Reduce escaped issues");
+  });
+
+  it("reuses saved translations when the browser sends an older draft shape", () => {
+    const existing = {
+      ...draft,
+      objectives: draft.objectives.map((objective) => ({
+        ...objective,
+        titleLocalized: { zh: "提升软件质量", en: "Improve software quality", zhOrigin: "manual" as const, enOrigin: "machine" as const }
+      }))
+    };
+
+    expect(withExistingLocalizedContent(draft, existing).objectives[0].titleLocalized?.zh).toBe("提升软件质量");
   });
 
   it("merges one owner scope without overwriting another member's OKRs", () => {

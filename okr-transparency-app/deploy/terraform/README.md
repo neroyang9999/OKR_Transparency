@@ -4,7 +4,9 @@ Target project: `nero` (`gen-lang-client-0913302758`).
 
 This deploys the Next.js OKR app to Cloud Run, stores app secrets in Secret
 Manager, grants the runtime service account Firestore access, and binds IAP
-access to `domain:unitxlabs.com` by default.
+access to `domain:unitxlabs.com` by default. It also enables Cloud Translation
+and grants the runtime service account `roles/cloudtranslate.user` so OKR text
+can be translated without storing a service-account key in the application.
 
 ## One-time setup
 

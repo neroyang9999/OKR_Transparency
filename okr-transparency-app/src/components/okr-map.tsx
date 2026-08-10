@@ -304,7 +304,7 @@ function ObjectiveNodeCard({ item, lang, collapsed, onToggle }: { item: Position
             href={hrefWithLang(`/?team=${encodeURIComponent(objective.team)}`, lang)}
             className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-slate-950 hover:text-blue-700"
           >
-            {translateText(objective.objective, lang)}
+            {translateText(objective.objective, lang, objective.localized?.objective)}
           </Link>
         </div>
         <div className="shrink-0 pr-3 text-right text-xs font-semibold tabular-nums text-slate-500">{progress}%</div>
@@ -334,7 +334,7 @@ function UnalignedObjective({ objective, lang }: { objective: OkrRecord; lang: L
         href={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
         className="block text-base font-semibold leading-6 text-slate-950 hover:text-blue-700"
       >
-        {translateText(objective.objective, lang)}
+        {translateText(objective.objective, lang, objective.localized?.objective)}
       </Link>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <TypeBadge value={objective.type} />

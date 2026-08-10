@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
 import type { ProgressNote } from "@/lib/okr/progress-notes";
-import type { ConfidenceLevel, OkrRecord } from "@/lib/okr/types";
+import type { ConfidenceLevel, LocalizedText, OkrRecord } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
 import { ProgressNoteCard } from "@/components/progress-note-card";
 
@@ -95,7 +95,7 @@ export function OkrDetailDrawer({
                 <TypeBadge value={record.type} />
                 <ConfidenceBadge value={record.confidence} />
               </div>
-              <h2 className="text-lg font-semibold leading-7 text-slate-950">{translateText(title, lang)}</h2>
+              <h2 className="text-lg font-semibold leading-7 text-slate-950">{translateText(title, lang, record.kr ? record.localized?.kr : record.localized?.objective)}</h2>
             </div>
             <button
               type="button"
@@ -198,8 +198,8 @@ export function OkrDetailDrawer({
                 <CompactField label={t(lang, "target")} value={record.target} lang={lang} />
                 <CompactField label={t(lang, "actual")} value={record.actual} lang={lang} />
                 <CompactField label={t(lang, "dependencies")} value={record.dependencies} lang={lang} />
-                <CompactField label={t(lang, "risks")} value={record.risks} lang={lang} />
-                <CompactField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} />
+                <CompactField label={t(lang, "risks")} value={record.risks} lang={lang} localized={record.localized?.risks} />
+                <CompactField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} localized={record.localized?.decisionsNeeded} />
               </div>
             )}
           </div>
@@ -267,11 +267,11 @@ function SectionTitle({ title, count }: { title: string; count?: number }) {
   );
 }
 
-function CompactField({ label, value, lang }: { label: string; value: string; lang: Lang }) {
+function CompactField({ label, value, lang, localized }: { label: string; value: string; lang: Lang; localized?: LocalizedText }) {
   return (
     <div className="min-w-0">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm leading-5 text-slate-800">{translateText(value, lang) || t(lang, "noneListed")}</div>
+      <div className="mt-1 text-sm leading-5 text-slate-800">{translateText(value, lang, localized) || t(lang, "noneListed")}</div>
     </div>
   );
 }
@@ -285,7 +285,7 @@ function RelatedRecord({ record, lang }: { record: OkrRecord; lang: Lang }) {
         <span className="text-xs text-muted-foreground">{t(lang, "score")} <Score value={record.score} /></span>
       </div>
       <div className="mt-2 text-sm font-semibold leading-5 text-slate-900">
-        {translateText(record.kr || record.objective, lang)}
+        {translateText(record.kr || record.objective, lang, record.kr ? record.localized?.kr : record.localized?.objective)}
       </div>
     </Link>
   );

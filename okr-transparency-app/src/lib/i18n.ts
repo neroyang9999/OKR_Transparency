@@ -1,3 +1,5 @@
+import type { LocalizedText } from "./okr/types";
+
 export type Lang = "zh" | "en";
 
 export function normalizeLang(lang?: string): Lang {
@@ -183,7 +185,9 @@ const englishText: Record<string, string> = {
   "完成关键安装、标定和环境稳定性问题闭环，P0 blocker 清零": "Close key installation, calibration, and environmental stability issues, with P0 blockers cleared"
 };
 
-export function translateText(value: string | null | undefined, lang: Lang) {
+export function translateText(value: string | null | undefined, lang: Lang, localized?: LocalizedText) {
   if (!value) return value ?? "";
+  const storedTranslation = localized?.[lang]?.trim();
+  if (storedTranslation) return storedTranslation;
   return lang === "en" ? englishText[value] ?? value : value;
 }

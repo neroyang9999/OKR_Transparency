@@ -9,7 +9,7 @@ import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { readProgressNotesForObjective, type ProgressNote } from "@/lib/okr/progress-notes";
 import { readOkrSnapshot } from "@/lib/okr/store";
-import type { ConfidenceLevel } from "@/lib/okr/types";
+import type { ConfidenceLevel, LocalizedText } from "@/lib/okr/types";
 
 export default async function OkrDetailPage({
   params,
@@ -61,7 +61,7 @@ export default async function OkrDetailPage({
           <TypeBadge value={record.type} />
           <ConfidenceBadge value={record.confidence} />
         </div>
-        <h1 className="mt-4 text-2xl font-semibold leading-9 text-slate-950">{translateText(title, lang)}</h1>
+        <h1 className="mt-4 text-2xl font-semibold leading-9 text-slate-950">{translateText(title, lang, record.kr ? record.localized?.kr : record.localized?.objective)}</h1>
         <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-4">
           <Field label={t(lang, "owner")} value={record.owner} />
           <Field label={t(lang, "score")} value={<Score value={record.score} />} />
@@ -72,7 +72,7 @@ export default async function OkrDetailPage({
           <div className="mt-4 rounded-md border border-border bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <span className="font-medium text-slate-900">{t(lang, "parent")}：</span>
             <Link href={hrefWithLang(`/okr/${encodeURIComponent(parent.okr_id)}`, lang)} className="hover:text-blue-700">
-              {translateText(parent.kr || parent.objective, lang)}
+              {translateText(parent.kr || parent.objective, lang, parent.kr ? parent.localized?.kr : parent.localized?.objective)}
             </Link>
           </div>
         )}
@@ -105,7 +105,7 @@ export default async function OkrDetailPage({
                       <span className="text-xs text-muted-foreground">{t(lang, "score")} <Score value={child.score} /></span>
                     </div>
                     <div className="mt-2 text-sm font-semibold leading-5 text-slate-900">
-                      {translateText(child.kr || child.objective, lang)}
+                      {translateText(child.kr || child.objective, lang, child.kr ? child.localized?.kr : child.localized?.objective)}
                     </div>
                   </Link>
                 ))}
@@ -121,8 +121,8 @@ export default async function OkrDetailPage({
               <SideField label={t(lang, "target")} value={record.target} lang={lang} />
               <SideField label={t(lang, "actual")} value={record.actual} lang={lang} />
               <SideField label={t(lang, "dependencies")} value={record.dependencies} lang={lang} />
-              <SideField label={t(lang, "risks")} value={record.risks} lang={lang} />
-              <SideField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} />
+              <SideField label={t(lang, "risks")} value={record.risks} lang={lang} localized={record.localized?.risks} />
+              <SideField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} localized={record.localized?.decisionsNeeded} />
             </div>
           </DetailSection>
         </aside>
@@ -188,11 +188,11 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function SideField({ label, value, lang }: { label: string; value: string; lang: Lang }) {
+function SideField({ label, value, lang, localized }: { label: string; value: string; lang: Lang; localized?: LocalizedText }) {
   return (
     <div>
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="mt-1 leading-5 text-slate-800">{translateText(value, lang) || t(lang, "noneListed")}</div>
+      <div className="mt-1 leading-5 text-slate-800">{translateText(value, lang, localized) || t(lang, "noneListed")}</div>
     </div>
   );
 }

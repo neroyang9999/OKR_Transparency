@@ -17,6 +17,18 @@ describe("searchOkrs", () => {
     });
     expect(results.map((record) => record.okr_id)).toEqual(["SW-KR1"]);
   });
+
+  it("searches both stored languages", () => {
+    const bilingual = {
+      ...records[0],
+      localized: {
+        kr: { zh: "减少现场逃逸", en: "Reduce field escapes", zhOrigin: "manual" as const, enOrigin: "machine" as const }
+      }
+    };
+
+    expect(searchOkrs([bilingual], { q: "现场逃逸" })).toHaveLength(1);
+    expect(searchOkrs([bilingual], { q: "field escapes" })).toHaveLength(1);
+  });
 });
 
 function record(

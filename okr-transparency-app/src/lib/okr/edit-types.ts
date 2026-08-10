@@ -1,8 +1,10 @@
-import type { ConfidenceLevel, OkrRecord, OkrType } from "./types";
+import { localizedValue } from "./bilingual";
+import type { ConfidenceLevel, LocalizedText, OkrRecord, OkrType } from "./types";
 
 export type EditableKr = {
   id: string;
   title: string;
+  titleLocalized?: LocalizedText;
   owner: string;
   baseline: string;
   target: string;
@@ -11,7 +13,9 @@ export type EditableKr = {
   confidence: ConfidenceLevel;
   weight: number;
   risks: string;
+  risksLocalized?: LocalizedText;
   decisionsNeeded: string;
+  decisionsNeededLocalized?: LocalizedText;
 };
 
 export type EditableObjective = {
@@ -19,6 +23,7 @@ export type EditableObjective = {
   periodId: string;
   team: string;
   title: string;
+  titleLocalized?: LocalizedText;
   owner: string;
   type: OkrType;
   confidence: ConfidenceLevel;
@@ -80,6 +85,7 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
         periodId,
         team,
         title: objective.objective,
+        titleLocalized: objective.localized?.objective,
         owner: objective.owner,
         type: objective.type,
         confidence: objective.confidence,
@@ -90,6 +96,7 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
         keyResults: children.map((kr, krIndex) => ({
           id: kr.okr_id || `${objective.okr_id}-KR${krIndex + 1}`,
           title: kr.kr,
+          titleLocalized: kr.localized?.kr,
           owner: kr.owner,
           baseline: kr.baseline,
           target: kr.target,
@@ -98,7 +105,9 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
           confidence: kr.confidence,
           weight: distributeWeight(children.length, krIndex),
           risks: kr.risks,
-          decisionsNeeded: kr.decisions_needed
+          risksLocalized: kr.localized?.risks,
+          decisionsNeeded: kr.decisions_needed,
+          decisionsNeededLocalized: kr.localized?.decisionsNeeded
         }))
       };
     }) : []
@@ -166,7 +175,12 @@ export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwn
       decisions_needed: collectText(objective.keyResults.map((kr) => kr.decisionsNeeded)),
       source_doc_url: "page-edit",
       last_update: today,
-      aligned_to_id: objective.alignedToId
+      aligned_to_id: objective.alignedToId,
+      localized: compactLocalizedFields({
+        objective: objective.titleLocalized,
+        risks: collectLocalizedText(objective.keyResults.map((kr) => kr.risksLocalized)),
+        decisionsNeeded: collectLocalizedText(objective.keyResults.map((kr) => kr.decisionsNeededLocalized))
+      })
     });
 
     objective.keyResults.forEach((kr) => {
@@ -188,12 +202,58 @@ export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwn
         risks: kr.risks,
         decisions_needed: kr.decisionsNeeded,
         source_doc_url: "page-edit",
-        last_update: today
+        last_update: today,
+        localized: compactLocalizedFields({
+          objective: objective.titleLocalized,
+          kr: kr.titleLocalized,
+          risks: kr.risksLocalized,
+          decisionsNeeded: kr.decisionsNeededLocalized
+        })
       });
     });
   });
 
   return records;
+}
+
+export function localizeDraftForLanguage(draft: OkrDraft, language: "zh" | "en"): OkrDraft {
+  return {
+    ...draft,
+    objectives: draft.objectives.map((objective) => ({
+      ...objective,
+      title: localizedValue(objective.title, objective.titleLocalized, language),
+      keyResults: objective.keyResults.map((kr) => ({
+        ...kr,
+        title: localizedValue(kr.title, kr.titleLocalized, language),
+        risks: localizedValue(kr.risks, kr.risksLocalized, language),
+        decisionsNeeded: localizedValue(kr.decisionsNeeded, kr.decisionsNeededLocalized, language)
+      }))
+    }))
+  };
+}
+
+export function withExistingLocalizedContent(draft: OkrDraft, existing: OkrDraft): OkrDraft {
+  const objectiveById = new Map(existing.objectives.map((objective) => [objective.id, objective]));
+  return {
+    ...draft,
+    objectives: draft.objectives.map((objective) => {
+      const previousObjective = objectiveById.get(objective.id);
+      const krById = new Map(previousObjective?.keyResults.map((kr) => [kr.id, kr]) ?? []);
+      return {
+        ...objective,
+        titleLocalized: objective.titleLocalized ?? previousObjective?.titleLocalized,
+        keyResults: objective.keyResults.map((kr) => {
+          const previousKr = krById.get(kr.id);
+          return {
+            ...kr,
+            titleLocalized: kr.titleLocalized ?? previousKr?.titleLocalized,
+            risksLocalized: kr.risksLocalized ?? previousKr?.risksLocalized,
+            decisionsNeededLocalized: kr.decisionsNeededLocalized ?? previousKr?.decisionsNeededLocalized
+          };
+        })
+      };
+    })
+  };
 }
 
 export function validateDraft(draft: OkrDraft): DraftValidation {
@@ -305,6 +365,22 @@ function normalizeToken(value: string) {
 
 function collectText(items: string[]) {
   return items.map((item) => item.trim()).filter(Boolean).join("; ");
+}
+
+function collectLocalizedText(items: Array<LocalizedText | undefined>): LocalizedText | undefined {
+  const zh = collectText(items.map((item) => item?.zh ?? ""));
+  const en = collectText(items.map((item) => item?.en ?? ""));
+  if (!zh && !en) return undefined;
+  return {
+    ...(zh ? { zh } : {}),
+    ...(en ? { en } : {}),
+    zhOrigin: items.some((item) => item?.zhOrigin === "manual") ? "manual" : "machine",
+    enOrigin: items.some((item) => item?.enOrigin === "manual") ? "manual" : "machine"
+  };
+}
+
+function compactLocalizedFields(fields: NonNullable<OkrRecord["localized"]>) {
+  return Object.values(fields).some(Boolean) ? fields : undefined;
 }
 
 function normalizeNullablePercent(value: number | null) {
