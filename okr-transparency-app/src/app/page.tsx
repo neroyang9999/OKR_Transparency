@@ -1,8 +1,7 @@
 import Link from "next/link";
 import {
   CircleDot,
-  Link2,
-  Users
+  Link2
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
@@ -84,11 +83,6 @@ export default async function HomePage({
         const parent = record.parent_id ? recordById.get(record.parent_id) : null;
         return !parent || parent.team !== selectedTeam;
       });
-  const selectedNavItem = teamNav.find((item) => item.name === selectedTeam);
-  const childTeamNames = new Set(selectedNavItem?.children.map((child) => child.name) ?? []);
-  const childTeams = !selectedMember && childTeamNames.size > 0
-    ? periodRecords.filter((record) => childTeamNames.has(record.team) && isTeamRoot(record, recordById))
-    : [];
   const alignmentOptions = selectedMember
     ? getAlignmentOptions(periodRecords, selectedTeam, adminConfig, { targetTeam: selectedTeam, ownerAliases: [selectedTeamOwner, selectedTeam] })
     : getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
@@ -179,32 +173,6 @@ export default async function HomePage({
                   lang={lang}
                 />
               ))}
-
-              {childTeams.length > 0 && (
-                <div className="border-t border-border bg-slate-50 px-6 py-4">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Users className="h-4 w-4 text-blue-500" />
-                    {selectedTeam} {t(lang, "childTeams")}
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {childTeams.map((child) => (
-                      <Link
-                        key={child.okr_id}
-                        href={hrefWithLang(`/?team=${encodeURIComponent(child.team)}`, lang)}
-                        className="rounded-md border border-border bg-white p-3 hover:border-blue-200 hover:bg-blue-50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <TeamAvatar name={child.team} />
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-slate-900">{child.team}</div>
-                            <div className="mt-1 truncate text-xs text-muted-foreground">{translateText(child.objective, lang, child.localized?.objective)}</div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
           {(qualityStats.missingOwnerCount > 0 || qualityStats.staleCount > 0) && (
@@ -502,11 +470,6 @@ function buildOwnerScopedRecords(teamRecords: OkrRecord[], ownerAliases: string[
 function ownerMatches(owner: string, aliases: string[]) {
   const normalizedOwner = normalizeToken(owner);
   return Boolean(normalizedOwner) && aliases.some((alias) => normalizeToken(alias) === normalizedOwner);
-}
-
-function isTeamRoot(record: OkrRecord, recordById: Map<string, OkrRecord>) {
-  const parent = record.parent_id ? recordById.get(record.parent_id) : null;
-  return !parent || parent.team !== record.team;
 }
 
 function initials(name: string) {
