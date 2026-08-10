@@ -91,7 +91,7 @@ export function TeamSidebar({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{item.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{item.owner}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{teamOwnerLabel(lang, item.owner)}</span>
                     </span>
                   </Link>
                   {hasNestedItems && (
@@ -140,7 +140,7 @@ export function TeamSidebar({
                               <TeamAvatar name={child.name} color={child.color} selected={selectedChild && !selectedMemberEmail} />
                               <span className="min-w-0">
                                 <span className="block truncate font-semibold">{child.name}</span>
-                                <span className="block truncate text-xs text-muted-foreground">{child.owner}</span>
+                                <span className="block truncate text-xs text-muted-foreground">{teamOwnerLabel(lang, child.owner)}</span>
                               </span>
                             </Link>
                             {child.members.length > 0 && (
@@ -203,6 +203,11 @@ function filterTeamItems(items: TeamNavItem[], query: string) {
     });
     return parentMatches || members.length > 0 || children.length > 0 ? [{ ...item, members, children }] : [];
   });
+}
+
+function teamOwnerLabel(lang: Lang, owner: string) {
+  if (!owner) return lang === "zh" ? "未配置负责人" : "Owner not configured";
+  return lang === "zh" ? `负责人 · ${owner}` : `Owner · ${owner}`;
 }
 
 function useOpenTeams(initialOpen: string[]) {

@@ -310,6 +310,9 @@ function ObjectiveNodeCard({ item, lang, collapsed, onToggle }: { item: Position
         <div className="shrink-0 pr-3 text-right text-xs font-semibold tabular-nums text-slate-500">{progress}%</div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {objectiveNode.unaligned && (
+          <Badge tone="yellow">{lang === "en" ? "Unaligned" : "未对齐"}</Badge>
+        )}
         <TypeBadge value={objective.type} />
         <ConfidenceBadge value={objective.confidence} />
         {item.node.children.length > 0 && <Badge tone="blue">{item.node.children.length}</Badge>}

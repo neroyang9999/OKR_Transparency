@@ -10,6 +10,7 @@ import { OkrDetailDrawer, OkrDetailLink } from "@/components/okr-detail-drawer";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { ProgressNoteCard } from "@/components/progress-note-card";
 import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
+import { resolveTeamOwner, selectableTeamOwners } from "@/lib/admin/team-owners";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
@@ -21,6 +22,7 @@ import { getOkrQualityStats } from "@/lib/okr/graph-validation";
 import { filterDraftByOwner } from "@/lib/okr/edit-types";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
+import { ownerScopeForTeam, ownerScopeForUser } from "@/lib/okr/owner-scope";
 import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import type { Period } from "@/lib/periods";
@@ -45,8 +47,11 @@ export default async function HomePage({
   const teamNav = buildTeamNav(adminConfig);
   const selectedMember = normalizeMember(member, selectedTeam, adminConfig);
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
-  const selectedOwner = selectedMember ? ownerForUser(selectedMember) : selectedTeamOwner;
-  const selectedOwnerAliases = selectedMember ? ownerAliasesForUser(selectedMember) : [selectedTeamOwner];
+  const selectedOwnerScope = selectedMember
+    ? ownerScopeForUser(selectedMember)
+    : ownerScopeForTeam(adminConfig, selectedTeam) ?? { owner: selectedTeamOwner, aliases: [selectedTeamOwner] };
+  const selectedOwner = selectedOwnerScope.owner;
+  const selectedOwnerAliases = selectedOwnerScope.aliases;
 
   if (!access) {
     return (
@@ -62,12 +67,12 @@ export default async function HomePage({
   ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
-  const draft = baseDraft && selectedMember ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner) : baseDraft;
+  const draft = baseDraft ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner) : null;
   const periodRecords = selectedPeriod === adminConfig.defaultPeriodId ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
   const qualityStats = getOkrQualityStats(teamRecords);
   const selectedRecords = selectedMember
-    ? buildOwnerScopedRecords(teamRecords, ownerAliasesForUser(selectedMember))
+    ? buildOwnerScopedRecords(teamRecords, selectedOwnerAliases)
     : teamRecords;
   const displayRecordCount = selectedMember
     ? selectedRecords.filter((record) => ownerMatches(record.owner, selectedOwnerAliases)).length
@@ -170,6 +175,7 @@ export default async function HomePage({
                   progressNotes={progressNotes}
                   showProgressNotes={adminConfig.settings.allowProgressNotes}
                   detailHref={detailHref}
+                  displayOwner={selectedOwner}
                   lang={lang}
                 />
               ))}
@@ -235,6 +241,7 @@ function ObjectiveBlock({
   progressNotes,
   showProgressNotes,
   detailHref,
+  displayOwner,
   lang
 }: {
   index: number;
@@ -245,6 +252,7 @@ function ObjectiveBlock({
   progressNotes: ProgressNote[];
   showProgressNotes: boolean;
   detailHref: (okrId: string) => string;
+  displayOwner: string;
   lang: Lang;
 }) {
   const children = records.filter((record) => record.parent_id === objective.okr_id);
@@ -267,7 +275,7 @@ function ObjectiveBlock({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{objective.owner}</span>
+            <span>{displayOwner}</span>
             <TypeBadge value={objective.type} />
             <ConfidenceBadge value={objective.confidence} />
             <span>{t(lang, "score")} <Score value={objective.score} /></span>
@@ -580,14 +588,14 @@ function buildTeamNav(config: AdminConfig): TeamNavItem[] {
     .filter((team) => !team.parentTeam)
     .map((team) => ({
       name: team.name,
-      owner: team.owner,
+      owner: resolveTeamOwner(config.users, team)?.displayName ?? "",
       color: team.color,
       members: membersByTeam.get(team.name) ?? [],
       children: enabledTeams
         .filter((child) => child.parentTeam === team.name)
         .map((child) => ({
           name: child.name,
-          owner: child.owner,
+          owner: resolveTeamOwner(config.users, child)?.displayName ?? "",
           color: child.color,
           members: membersByTeam.get(child.name) ?? []
         }))
@@ -595,26 +603,14 @@ function buildTeamNav(config: AdminConfig): TeamNavItem[] {
 }
 
 function membersForTeam(users: AdminUser[], team: string) {
-  return users
-    .filter((user) => user.enabled && user.teams.includes(team) && user.role !== "team_leader")
+  return selectableTeamOwners(users)
+    .filter((user) => user.teams.includes(team) && user.role !== "team_leader" && !(user.leaderTeams ?? []).includes(team))
     .map((user) => ({
       email: user.email,
       displayName: user.displayName || user.email,
       role: user.role
     }))
     .sort((left, right) => left.displayName.localeCompare(right.displayName));
-}
-
-function ownerAliasesForUser(user: AdminUser) {
-  return Array.from(new Set([
-    ...user.ownerAliases,
-    user.displayName,
-    user.email
-  ].map((value) => value.trim()).filter(Boolean)));
-}
-
-function ownerForUser(user: AdminUser) {
-  return user.displayName || user.ownerAliases[0] || user.email;
 }
 
 function normalizeToken(value: string) {

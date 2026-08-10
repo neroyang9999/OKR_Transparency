@@ -7,6 +7,7 @@ export type ObjectiveAlignmentNode = {
   objective: OkrRecord;
   keyResults: OkrRecord[];
   children: ObjectiveAlignmentNode[];
+  unaligned: boolean;
 };
 
 export type AlignmentViewModel = {
@@ -45,7 +46,7 @@ export function buildAlignmentViewModel(records: OkrRecord[], selectedTeam?: str
       .map((id) => objectiveById.get(id)?.team)
       .filter((team): team is string => Boolean(team)),
     ...objectives
-      .filter((objective) => isUnalignedObjective(objective, parentByObjectiveId, childrenByParentId))
+      .filter((objective) => isUnalignedObjective(objective, parentByObjectiveId))
       .map((objective) => objective.team)
   ])).sort();
 
@@ -53,16 +54,20 @@ export function buildAlignmentViewModel(records: OkrRecord[], selectedTeam?: str
     ? collectVisibleIdsForTeam(objectives, selectedTeam, parentByObjectiveId, childrenByParentId)
     : new Set(objectives.map((objective) => objective.okr_id));
 
+  const unalignedObjectiveIds = new Set(
+    objectives
+      .filter((objective) => isUnalignedObjective(objective, parentByObjectiveId))
+      .map((objective) => objective.okr_id)
+  );
+
   const roots = objectives
     .filter((objective) => !parentByObjectiveId.has(objective.okr_id))
     .filter((objective) => visibleIds.has(objective.okr_id))
-    .filter((objective) => isTopLevelObjective(objective) || childrenByParentId.has(objective.okr_id))
-    .map((objective) => buildNode(objective, keyResultsByParent, childrenByParentId, visibleIds))
-    .filter((node) => node.children.length > 0 || !selectedTeam)
+    .map((objective) => buildNode(objective, keyResultsByParent, childrenByParentId, visibleIds, unalignedObjectiveIds))
     .sort(sortNodes);
 
   const unalignedObjectives = objectives
-    .filter((objective) => isUnalignedObjective(objective, parentByObjectiveId, childrenByParentId))
+    .filter((objective) => unalignedObjectiveIds.has(objective.okr_id))
     .filter((objective) => !selectedTeam || objective.team === selectedTeam)
     .sort((a, b) => a.team.localeCompare(b.team) || a.okr_id.localeCompare(b.okr_id));
 
@@ -122,26 +127,26 @@ function buildNode(
   objective: OkrRecord,
   keyResultsByParent: Map<string, OkrRecord[]>,
   childrenByParentId: Map<string, OkrRecord[]>,
-  visibleIds: Set<string>
+  visibleIds: Set<string>,
+  unalignedObjectiveIds: Set<string>
 ): ObjectiveAlignmentNode {
   return {
     objective,
     keyResults: keyResultsByParent.get(objective.okr_id) ?? [],
+    unaligned: unalignedObjectiveIds.has(objective.okr_id),
     children: (childrenByParentId.get(objective.okr_id) ?? [])
       .filter((child) => visibleIds.has(child.okr_id))
-      .map((child) => buildNode(child, keyResultsByParent, childrenByParentId, visibleIds))
+      .map((child) => buildNode(child, keyResultsByParent, childrenByParentId, visibleIds, unalignedObjectiveIds))
       .sort(sortNodes)
   };
 }
 
 function isUnalignedObjective(
   objective: OkrRecord,
-  parentByObjectiveId: Map<string, string>,
-  childrenByParentId: Map<string, OkrRecord[]>
+  parentByObjectiveId: Map<string, string>
 ) {
   return !parentByObjectiveId.has(objective.okr_id)
-    && !isTopLevelObjective(objective)
-    && !childrenByParentId.has(objective.okr_id);
+    && !isTopLevelObjective(objective);
 }
 
 function isTopLevelObjective(objective: OkrRecord) {

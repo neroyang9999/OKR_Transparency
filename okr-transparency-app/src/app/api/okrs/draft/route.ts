@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiAccess } from "@/lib/admin/api-access";
 import { readAdminConfig, type AdminConfig } from "@/lib/admin/config";
-import { readDraft, writeDraft, writeOwnerScopedDraft } from "@/lib/okr/drafts";
+import { readDraft, writeOwnerScopedDraft } from "@/lib/okr/drafts";
 import { filterDraftByOwner, normalizeDraft, validateDraft, type OkrDraft } from "@/lib/okr/edit-types";
+import { ownerScopeForMember, ownerScopeForTeam } from "@/lib/okr/owner-scope";
 import { authorizeDraftChange, canEditTeamOwner, resolveRequestAccess } from "@/lib/admin/permissions";
 
 export async function GET(request: NextRequest) {
@@ -24,26 +25,20 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json() as OkrDraft & { ownerEmail?: string };
     const draft = body as OkrDraft;
-    const ownerScope = resolveOwnerScope(config, draft.team, body.ownerEmail);
-    if (body.ownerEmail && !ownerScope) {
-      return NextResponse.json({ error: "Member is not configured for this team" }, { status: 403 });
+    const ownerScope = body.ownerEmail
+      ? ownerScopeForMember(config, draft.team, body.ownerEmail)
+      : ownerScopeForTeam(config, draft.team);
+    if (!ownerScope) {
+      return NextResponse.json({ error: body.ownerEmail ? "Member is not configured for this team" : "Team is not configured" }, { status: 403 });
     }
     const previous = await readDraft(draft.team, draft.periodId);
-    const previousForAuthorization = ownerScope
-      ? filterDraftByOwner(previous, ownerScope.aliases, ownerScope.owner)
-      : previous;
-    const nextForAuthorization = ownerScope
-      ? normalizeDraft(draft, ownerScope.owner, true)
-      : draft;
-    const authorization = ownerScope
-      ? authorizeOwnerScopedDraftChange(config, access, previousForAuthorization, nextForAuthorization, ownerScope.aliases)
-      : authorizeDraftChange(config, access, previousForAuthorization, nextForAuthorization);
+    const previousForAuthorization = filterDraftByOwner(previous, ownerScope.aliases, ownerScope.owner);
+    const nextForAuthorization = normalizeDraft(draft, ownerScope.owner, true);
+    const authorization = authorizeOwnerScopedDraftChange(config, access, previousForAuthorization, nextForAuthorization, ownerScope.aliases);
     if (!authorization.ok) return NextResponse.json({ error: authorization.error }, { status: 403 });
 
-    const saved = ownerScope
-      ? await writeOwnerScopedDraft(draft, ownerScope.owner, ownerScope.aliases)
-      : await writeDraft(draft, await getTeamOwner(draft.team), true);
-    const responseDraft = ownerScope ? filterDraftByOwner(saved, ownerScope.aliases, ownerScope.owner) : saved;
+    const saved = await writeOwnerScopedDraft(draft, ownerScope.owner, ownerScope.aliases);
+    const responseDraft = filterDraftByOwner(saved, ownerScope.aliases, ownerScope.owner);
     return NextResponse.json({ draft: responseDraft, validation: validateDraft(responseDraft) });
   } catch (error) {
     return NextResponse.json(
@@ -51,25 +46,6 @@ export async function PUT(request: NextRequest) {
       { status: 422 }
     );
   }
-}
-
-async function getTeamOwner(team: string) {
-  const config = await readAdminConfig();
-  return config.teams.find((item) => item.name === team && item.enabled)?.owner ?? team;
-}
-
-function resolveOwnerScope(config: AdminConfig, team: string, ownerEmail: string | undefined) {
-  const email = ownerEmail?.trim().toLowerCase();
-  if (!email) return null;
-
-  const user = config.users.find((item) => item.enabled && item.email.toLowerCase() === email && item.teams.includes(team));
-  if (!user) return null;
-
-  const owner = user.displayName || user.email;
-  return {
-    owner,
-    aliases: Array.from(new Set([...user.ownerAliases, user.displayName, user.email].map((value) => value.trim()).filter(Boolean)))
-  };
 }
 
 function authorizeOwnerScopedDraftChange(

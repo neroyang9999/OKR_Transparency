@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { appendAdminEvent, readAdminConfig, type AdminConfig } from "@/lib/admin/config";
 import { publishDraft } from "@/lib/okr/drafts";
+import { ownerScopeForMember, ownerScopeForTeam } from "@/lib/okr/owner-scope";
 import { SnapshotConflictError } from "@/lib/okr/store";
 import { authorizePublish, getTeamEditPolicy, resolveRequestAccess, validateEditablePeriod, type UserAccess } from "@/lib/admin/permissions";
 
@@ -13,16 +14,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as { team?: string; periodId?: string; ownerEmail?: string };
     const team = body.team ?? "Software";
     const periodId = body.periodId ?? config.defaultPeriodId;
-    const ownerScope = resolveOwnerScope(config, team, body.ownerEmail);
-    if (body.ownerEmail && !ownerScope) {
-      return NextResponse.json({ error: "Member is not configured for this team" }, { status: 403 });
+    const ownerScope = body.ownerEmail
+      ? ownerScopeForMember(config, team, body.ownerEmail)
+      : ownerScopeForTeam(config, team);
+    if (!ownerScope) {
+      return NextResponse.json({ error: body.ownerEmail ? "Member is not configured for this team" : "Team is not configured" }, { status: 403 });
     }
     const authorization = body.ownerEmail
       ? authorizeOwnerScopedPublish(config, access, team, periodId, body.ownerEmail)
       : authorizePublish(config, access, team, periodId);
     if (!authorization.ok) return NextResponse.json({ error: authorization.error }, { status: 403 });
 
-    const result = await publishDraft(team, periodId, await getTeamOwner(team), ownerScope ?? undefined, access.displayName);
+    const result = await publishDraft(team, periodId, ownerScope.owner, ownerScope, access.displayName);
     if (result.errors.length > 0) {
       await appendAdminEvent({
         type: "publish",
@@ -65,22 +68,4 @@ function authorizeOwnerScopedPublish(config: AdminConfig, access: UserAccess | n
   return access?.role === "user" && access.email === ownerEmail.trim().toLowerCase()
     ? { ok: true, error: "" }
     : { ok: false, error: "Users can only publish their own OKRs" };
-}
-
-async function getTeamOwner(team: string) {
-  const config = await readAdminConfig();
-  return config.teams.find((item) => item.name === team && item.enabled)?.owner ?? team;
-}
-
-function resolveOwnerScope(config: AdminConfig, team: string, ownerEmail: string | undefined) {
-  const email = ownerEmail?.trim().toLowerCase();
-  if (!email) return null;
-
-  const user = config.users.find((item) => item.enabled && item.email.toLowerCase() === email && item.teams.includes(team));
-  if (!user) return null;
-
-  return {
-    owner: user.displayName || user.email,
-    aliases: Array.from(new Set([...user.ownerAliases, user.displayName, user.email].map((value) => value.trim()).filter(Boolean)))
-  };
 }

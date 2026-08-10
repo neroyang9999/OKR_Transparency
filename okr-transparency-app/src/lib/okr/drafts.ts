@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { draftToRecords, filterDraftByOwner, normalizeDraft, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
+import { draftToRecords, filterDraftByOwner, mergeDraftByOwner, normalizeDraft, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
 import { readOkrSnapshot, readOkrSnapshotState, writeOkrSnapshot } from "./store";
 import type { OkrSnapshot } from "./types";
 import { documentIdFromParts } from "../storage/document-ids";
@@ -83,14 +83,9 @@ export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceO
 
 export async function writeOwnerScopedDraft(draft: OkrDraft, owner: string, ownerAliases: string[]) {
   const current = await readDraft(draft.team, draft.periodId);
-  const normalizedScope = normalizeDraft(draft, owner, true);
   const nextDraft: OkrDraft = {
-    ...current,
+    ...mergeDraftByOwner(current, draft, owner, ownerAliases),
     updatedAt: new Date().toISOString(),
-    objectives: [
-      ...current.objectives.filter((objective) => !draftObjectiveMatchesOwner(objective, ownerAliases)),
-      ...normalizedScope.objectives.map((objective) => ({ ...objective, status: "draft" as const }))
-    ]
   };
 
   return writeDraft(nextDraft, owner, false, true);
@@ -160,11 +155,12 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
   }
   await writePeriodRecords(periodId, nextPeriodRecords);
   await writeDraft({
-    ...draft,
-    objectives: [
-      ...(ownerScope ? draft.objectives.filter((objective) => !draftObjectiveMatchesOwner(objective, ownerScope.aliases)) : []),
-      ...normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
-    ]
+    ...(ownerScope
+      ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published")
+      : {
+          ...draft,
+          objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
+        })
   }, ownerScope?.owner ?? teamOwner, false, true);
 
   return { snapshot, ...validation };
@@ -326,10 +322,6 @@ function draftDocumentPath(team: string, periodId: string) {
 
 function periodDocumentPath(periodId: string) {
   return `okrPeriodSnapshots/${documentIdFromParts([periodId])}`;
-}
-
-function draftObjectiveMatchesOwner(objective: OkrDraft["objectives"][number], ownerAliases: string[]) {
-  return ownerMatches(objective.owner, ownerAliases) || objective.keyResults.some((kr) => ownerMatches(kr.owner, ownerAliases));
 }
 
 function ownerMatches(owner: string, aliases: string[]) {

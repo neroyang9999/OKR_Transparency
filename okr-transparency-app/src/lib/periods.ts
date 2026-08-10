@@ -1,4 +1,4 @@
-import { hrefWithLang, type Lang } from "@/lib/i18n";
+import { hrefWithLang, type Lang } from "./i18n";
 
 export type Period = {
   id: string;

@@ -62,6 +62,22 @@ describe("alignment view model", () => {
     ]);
 
     expect(model.unalignedObjectives.map((item) => item.okr_id)).toEqual(["TPM-O1"]);
+    expect(model.roots.map((item) => item.objective.okr_id)).toEqual(["SW-O1", "TPM-O1"]);
+    expect(model.roots.find((item) => item.objective.okr_id === "TPM-O1")?.unaligned).toBe(true);
+    expect(model.objectiveCount).toBe(2);
+  });
+
+  it("shows a selected team's unaligned Objective in the map", () => {
+    const model = buildAlignmentViewModel([
+      record({ okr_id: "SW-O1", parent_id: "", team: "Software", objective: "Software objective" }),
+      record({ okr_id: "TPM-O1", parent_id: "", team: "TPM Team", objective: "Unaligned objective" })
+    ], "TPM Team");
+
+    expect(model.roots).toHaveLength(1);
+    expect(model.roots[0].objective.okr_id).toBe("TPM-O1");
+    expect(model.roots[0].unaligned).toBe(true);
+    expect(model.objectiveCount).toBe(1);
+    expect(model.alignedObjectiveCount).toBe(0);
   });
 
   it("filters the tree to a selected team while preserving ancestors", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftToRecords, normalizeDraft, validateDraft, type OkrDraft } from "./edit-types";
+import { draftToRecords, filterDraftByOwner, mergeDraftByOwner, normalizeDraft, validateDraft, type OkrDraft } from "./edit-types";
 
 const draft: OkrDraft = {
   version: 1,
@@ -146,5 +146,49 @@ describe("OKR edit draft helpers", () => {
       }))
     });
     expect(result.errors).toEqual([]);
+  });
+
+  it("merges one owner scope without overwriting another member's OKRs", () => {
+    const memberObjective = {
+      ...draft.objectives[0],
+      id: "TPM-MEMBER-O1",
+      owner: "Yang Luo",
+      keyResults: draft.objectives[0].keyResults.map((kr) => ({ ...kr, id: "TPM-MEMBER-O1-KR1", owner: "Yang Luo" }))
+    };
+    const current = {
+      ...draft,
+      team: "TPM Team",
+      objectives: [draft.objectives[0], memberObjective]
+    };
+    const teamLeadChange = {
+      ...current,
+      objectives: [{ ...draft.objectives[0], title: "Updated team objective" }]
+    };
+
+    const merged = mergeDraftByOwner(current, teamLeadChange, "Software Lead", ["Software Lead"]);
+
+    expect(merged.objectives).toHaveLength(2);
+    expect(merged.objectives.find((objective) => objective.id === "SW-O1")?.title).toBe("Updated team objective");
+    expect(merged.objectives.find((objective) => objective.id === "TPM-MEMBER-O1")?.owner).toBe("Yang Luo");
+  });
+
+  it("does not show a member's OKR in the team lead edit scope", () => {
+    const mixedDraft = {
+      ...draft,
+      team: "TPM Team",
+      objectives: [
+        draft.objectives[0],
+        {
+          ...draft.objectives[0],
+          id: "TPM-MEMBER-O1",
+          owner: "Yang Luo",
+          keyResults: draft.objectives[0].keyResults.map((kr) => ({ ...kr, owner: "Yang Luo" }))
+        }
+      ]
+    };
+
+    const teamDraft = filterDraftByOwner(mixedDraft, ["Software Lead"], "Software Lead");
+
+    expect(teamDraft.objectives.map((objective) => objective.id)).toEqual(["SW-O1"]);
   });
 });

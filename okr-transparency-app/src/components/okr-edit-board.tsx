@@ -48,6 +48,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const [draft, setDraft] = useState(() => withDefaultAlignment(normalizeDraft(initialDraft, fixedOwner, true), defaultAlignmentId));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const copy = lang === "en" ? en : zh;
   const showAlignment = ownerScoped || draft.team !== "Software";
@@ -135,7 +136,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   }
 
   async function publish() {
-    if (!window.confirm(copy.confirmPublish)) return;
+    setPublishConfirmOpen(false);
     setSaveState("saving");
     const saved = await saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved);
     if (!saved) return;
@@ -190,7 +191,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           </button>
           <button
             type="button"
-            onClick={publish}
+            onClick={() => setPublishConfirmOpen(true)}
             disabled={saveState === "saving" || validation.errors.length > 0 || !canPublishDraft}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
@@ -320,6 +321,47 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           {copy.addObjective}
         </button>
       </div>
+
+      {publishConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="publish-confirm-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0"
+            onClick={() => setPublishConfirmOpen(false)}
+            aria-label={copy.cancel}
+          />
+          <div className="relative w-full max-w-sm rounded-xl border border-border bg-white p-5 shadow-2xl">
+            <h2 id="publish-confirm-title" className="text-lg font-semibold text-slate-950">
+              {copy.confirmPublishTitle}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {copy.confirmPublishDescription}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPublishConfirmOpen(false)}
+                className="h-9 rounded-md px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => void publish()}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Send className="h-4 w-4" />
+                {copy.confirmPublishAction}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -657,9 +699,12 @@ const zh = {
   warnings: "建议检查",
   published: "已发布到 OKR 页面",
   publishFailed: "发布失败",
+  cancel: "取消",
   confirmDeleteObjective: "确认删除这个 Objective 及其全部 KR？删除后会自动保存草稿。",
   confirmDeleteKr: "确认删除这个 KR？删除后会自动保存草稿。",
-  confirmPublish: "确认发布当前草稿？发布后公开页会立即更新，并自动保存可回滚版本。"
+  confirmPublishTitle: "发布 OKR？",
+  confirmPublishDescription: "发布后，团队页面将立即更新。",
+  confirmPublishAction: "确认发布"
 };
 
 const en: typeof zh = {
@@ -697,7 +742,10 @@ const en: typeof zh = {
   warnings: "Check",
   published: "Published to OKR page",
   publishFailed: "Publish failed",
+  cancel: "Cancel",
   confirmDeleteObjective: "Delete this Objective and all of its KRs? The draft will auto-save.",
   confirmDeleteKr: "Delete this KR? The draft will auto-save.",
-  confirmPublish: "Publish this draft now? The public page will update and a rollback version will be saved."
+  confirmPublishTitle: "Publish OKR?",
+  confirmPublishDescription: "The team page will update immediately.",
+  confirmPublishAction: "Publish"
 };

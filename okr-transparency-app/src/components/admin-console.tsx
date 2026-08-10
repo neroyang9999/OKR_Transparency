@@ -28,6 +28,9 @@ import {
 import { useAppIdentity } from "@/components/auth-provider";
 import type { AdminConfig, AdminEvent, AdminPeriod, AdminRole, AdminTeam, AdminUser } from "@/lib/admin/config";
 import { getAdminRuntimeSummary, type VersionRecordChange } from "@/lib/admin/dashboard";
+import { filterAdminUsers, matchesAdminRoleCategory } from "@/lib/admin/user-filter";
+import { resolveTeamOwner, selectableTeamOwners } from "@/lib/admin/team-owners";
+import { deleteAdminTeam, teamDeleteBlockReason } from "@/lib/admin/team-delete";
 import type { UserFeedback } from "@/lib/feedback";
 import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import type { OkrRecord, OkrTreeResponse } from "@/lib/okr/types";
@@ -540,7 +543,10 @@ function OrganizationAccess({ config, setConfig }: AdminSectionProps) {
 function TeamStructure({ config, setConfig }: AdminSectionProps) {
   const orderedTeams = useMemo(() => orderTeams(config.teams), [config.teams]);
   const [selectedId, setSelectedId] = useState(config.teams[0]?.id ?? "");
+  const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const selected = config.teams.find((team) => team.id === selectedId) ?? config.teams[0];
+  const deleteTarget = deleteTeamId ? config.teams.find((team) => team.id === deleteTeamId) ?? null : null;
 
   function addTeam() {
     const sequence = config.teams.length + 1;
@@ -549,13 +555,33 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
     setSelectedId(team.id);
   }
 
+  function openDeleteConfirmation() {
+    setDeleteTeamId(selected.id);
+    setDeleteConfirmation("");
+  }
+
+  function closeDeleteConfirmation() {
+    setDeleteTeamId(null);
+    setDeleteConfirmation("");
+  }
+
+  function confirmDeleteTeam() {
+    if (!deleteTarget || deleteConfirmation !== deleteTarget.name) return;
+    const nextConfig = deleteAdminTeam(config, deleteTarget.id);
+    setConfig(nextConfig);
+    setSelectedId(nextConfig.teams[0]?.id ?? "");
+    closeDeleteConfirmation();
+  }
+
   if (!selected) return <Panel><EmptyState text="暂无团队" /></Panel>;
   const isNew = selected.id.startsWith("new-");
-  const ownerOptions = unique([selected.owner, ...config.users.filter((user) => user.enabled).map((user) => user.displayName)]).filter(Boolean);
+  const owner = resolveTeamOwner(config.users, selected);
+  const ownerOptions = selectableTeamOwners(config.users).map((user) => user.displayName);
   const parentOptions = config.teams.filter((team) => team.id !== selected.id && !isDescendant(config.teams, selected.name, team.name)).map((team) => team.name);
+  const deleteBlockReason = teamDeleteBlockReason(config, selected.id);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+    <><div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <Panel>
         <div className="flex items-center justify-between"><div><h3 className="font-semibold text-slate-950">团队层级</h3><p className="mt-1 text-xs text-slate-500">{config.teams.filter((team) => team.enabled).length} 个启用团队</p></div><button type="button" onClick={addTeam} className="grid h-8 w-8 place-items-center rounded-md border border-border text-slate-600 hover:bg-slate-50" aria-label="添加团队"><Plus className="h-4 w-4" /></button></div>
         <div className="mt-4 space-y-1">
@@ -573,30 +599,43 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold text-slate-950">{selected.name}</h3><p className="mt-1 text-sm text-muted-foreground">维护负责人、上级团队和展示状态。</p></div>{config.defaultTeam === selected.name ? <StatusBadge tone="blue">默认团队</StatusBadge> : <button type="button" onClick={() => setConfig({ ...config, defaultTeam: selected.name })} className="h-8 rounded-md border border-border px-3 text-xs font-medium text-slate-700">设为默认</button>}</div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <TextField label="团队名称" value={selected.name} disabled={!isNew} onChange={(name) => renameTeam(config, setConfig, selected.id, name)} hint={isNew ? "保存后名称将作为 OKR 团队标识。" : "现有团队名称关联已发布 OKR，不在后台直接重命名。"} />
-          <SelectField label="负责人" value={selected.owner} options={ownerOptions} onChange={(owner) => updateTeam(config, setConfig, selected.id, { owner })} placeholder="选择负责人" />
+          <div><SelectField label="负责人" value={owner?.displayName ?? ""} options={ownerOptions} onChange={(owner) => assignTeamOwner(config, setConfig, selected.id, owner)} placeholder="选择现有成员" /><p className={cn("mt-1 text-xs leading-5", owner ? "text-slate-500" : "text-amber-700")}>{owner ? "仅显示已启用且信息完整的现有成员。" : "当前没有有效负责人，请从现有成员中重新选择。"}</p></div>
           <SelectField label="上级团队" value={selected.parentTeam} options={parentOptions} onChange={(parentTeam) => updateTeam(config, setConfig, selected.id, { parentTeam })} placeholder="无上级团队" allowEmpty />
           <div><div className="text-xs font-medium text-slate-500">团队颜色</div><div className="mt-2 flex gap-2">{teamColors.map((color) => <button key={color} type="button" onClick={() => updateTeam(config, setConfig, selected.id, { color })} aria-label={`选择 ${color}`} className={cn("h-7 w-7 rounded-full ring-offset-2", teamColorClass(color), selected.color === color && "ring-2 ring-slate-950")} />)}</div></div>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <div><div className="text-sm font-medium text-slate-800">团队状态</div><div className="text-xs text-slate-500">停用后不再出现在编辑入口中，历史 OKR 保留。</div></div>
-          <button type="button" onClick={() => updateTeam(config, setConfig, selected.id, { enabled: !selected.enabled })} className={cn("h-9 rounded-md px-3 text-sm font-medium", selected.enabled ? "border border-border text-slate-700" : "bg-emerald-600 text-white")}>{selected.enabled ? "停用团队" : "重新启用"}</button>
+          <div><div className="text-sm font-medium text-slate-800">团队状态</div><div className="text-xs text-slate-500">停用后不再出现在编辑入口中，历史 OKR 保留。</div>{deleteBlockReason && <div className="mt-1 text-xs text-amber-700">{deleteBlockReason}</div>}</div>
+          <div className="flex items-center gap-2"><button type="button" onClick={openDeleteConfirmation} disabled={Boolean(deleteBlockReason)} title={deleteBlockReason || "永久删除团队配置"} className="inline-flex h-9 items-center rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 className="mr-1.5 h-4 w-4" />永久删除</button><button type="button" onClick={() => updateTeam(config, setConfig, selected.id, { enabled: !selected.enabled })} className={cn("h-9 rounded-md px-3 text-sm font-medium", selected.enabled ? "border border-border text-slate-700" : "bg-emerald-600 text-white")}>{selected.enabled ? "停用团队" : "重新启用"}</button></div>
         </div>
       </Panel>
-    </div>
+    </div>{deleteTarget && <TeamDeleteDialog teamName={deleteTarget.name} confirmation={deleteConfirmation} setConfirmation={setDeleteConfirmation} onCancel={closeDeleteConfirmation} onConfirm={confirmDeleteTeam} />}</>
   );
+}
+
+function TeamDeleteDialog({ teamName, confirmation, setConfirmation, onCancel, onConfirm }: { teamName: string; confirmation: string; setConfirmation: (value: string) => void; onCancel: () => void; onConfirm: () => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-label={`永久删除 ${teamName}`}><div className="w-full max-w-md rounded-xl border border-rose-200 bg-white p-6 shadow-2xl"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600"><AlertTriangle className="h-5 w-5" /></div><div><h3 className="text-lg font-semibold text-slate-950">永久删除团队</h3><p className="mt-2 text-sm leading-6 text-slate-600">将永久删除 <strong>{teamName}</strong> 的团队配置及成员关联。历史 OKR、快照和审计记录仍会保留。</p></div></div><label className="mt-5 block"><span className="text-xs font-medium text-slate-600">输入团队名称 <strong>{teamName}</strong> 以确认</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-2 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-rose-400" /></label><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onCancel} className="h-9 rounded-md border border-border px-4 text-sm font-medium text-slate-700">取消</button><button type="button" onClick={onConfirm} disabled={confirmation !== teamName} className="h-9 rounded-md bg-rose-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300">永久删除团队</button></div></div></div>;
 }
 
 function MemberAccess({ config, setConfig }: AdminSectionProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState<number | null>(config.users.length > 0 ? 0 : null);
+  const [roleFilter, setRoleFilter] = useState<AdminRole>(config.users[0]?.role ?? "user");
   const memberListRef = useRef<HTMLDivElement>(null);
-  const normalizedQuery = query.trim().toLowerCase();
-  const visibleUsers = config.users.map((user, index) => ({ user, index })).filter(({ user }) => !normalizedQuery || [user.displayName, user.email, roleLabel(user.role), ...user.teams].join(" ").toLowerCase().includes(normalizedQuery));
+  const visibleUsers = filterAdminUsers(config.users, roleFilter, query);
   const selected = selectedIndex === null ? null : config.users[selectedIndex] ?? null;
 
-  function addUser() {
-    const user: AdminUser = { email: `new-user-${Date.now().toString(36)}@company.com`, displayName: "新成员", role: "user", teams: [config.defaultTeam], ownerAliases: [], enabled: true };
+  function selectRole(role: AdminRole) {
+    setRoleFilter(role);
     setQuery("");
+    const firstMatch = config.users.findIndex((user) => matchesAdminRoleCategory(user, role));
+    setSelectedIndex(firstMatch >= 0 ? firstMatch : null);
+    requestAnimationFrame(() => memberListRef.current?.scrollTo({ top: 0 }));
+  }
+
+  function addUser() {
+    const user: AdminUser = { email: nextUserEmail(config.users), displayName: "新成员", role: "user", teams: [config.defaultTeam], ownerAliases: [], enabled: true };
+    setQuery("");
+    setRoleFilter("user");
     setConfig({ ...config, users: [user, ...config.users] });
     setSelectedIndex(0);
     requestAnimationFrame(() => memberListRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
@@ -617,12 +656,32 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
     <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
       <Panel>
         <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-950">成员</h3><p className="mt-1 text-xs text-slate-500">{config.users.filter((user) => user.enabled).length} / {config.users.length} 个账号启用</p></div><button type="button" onClick={addUser} className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-medium text-white"><UserPlus className="h-4 w-4" />添加</button></div>
+        <div className="mt-4 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+          {(["super_admin", "team_leader", "user"] as AdminRole[]).map((role) => {
+            const count = config.users.filter((user) => matchesAdminRoleCategory(user, role)).length;
+            return (
+              <button
+                key={role}
+                type="button"
+                onClick={() => selectRole(role)}
+                aria-pressed={roleFilter === role}
+                className={cn(
+                  "flex min-w-0 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium",
+                  roleFilter === role ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <span className="truncate">{roleLabel(role)}</span>
+                <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] tabular-nums", roleFilter === role ? "bg-blue-50 text-blue-700" : "bg-slate-200 text-slate-500")}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
         <label className="relative mt-4 block"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、邮箱、团队" className="h-9 w-full rounded-md border border-border pl-9 pr-3 text-sm outline-none focus:border-blue-400" /></label>
         <div ref={memberListRef} className="mt-3 max-h-[620px] space-y-1 overflow-y-auto">
           {visibleUsers.map(({ user, index }) => (
             <button key={`${user.email}-${index}`} type="button" onClick={() => setSelectedIndex(index)} className={cn("flex w-full items-center gap-3 rounded-md px-3 py-2 text-left", selectedIndex === index ? "bg-slate-950 text-white" : "hover:bg-slate-50")}>
               <UserAvatar name={user.displayName || user.email} enabled={user.enabled} />
-              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{user.displayName}</span><span className={cn("block truncate text-xs", selectedIndex === index ? "text-slate-300" : "text-slate-500")}>{roleLabel(user.role)} · {user.teams.join("、") || "全部团队"}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{user.displayName}</span><span className={cn("block truncate text-xs", selectedIndex === index ? "text-slate-300" : "text-slate-500")}>{userRoleSummary(user)} · {user.teams.join("、") || "全部团队"}</span></span>
             </button>
           ))}
           {visibleUsers.length === 0 && <EmptyState text="没有匹配成员" />}
@@ -635,9 +694,10 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <TextField label="姓名" value={selected.displayName} onChange={(displayName) => updateUser(config, setConfig, selectedIndex!, { displayName })} />
             <TextField label="登录邮箱" value={selected.email} onChange={(email) => updateUser(config, setConfig, selectedIndex!, { email })} />
-            <SelectField label="角色" value={selected.role} options={["super_admin", "team_leader", "user"]} optionLabel={(value) => roleLabel(value as AdminRole)} onChange={(role) => updateUser(config, setConfig, selectedIndex!, { role: role as AdminRole })} />
+            <SelectField label="角色" value={selected.role} options={["super_admin", "team_leader", "user"]} optionLabel={(value) => roleLabel(value as AdminRole)} onChange={(role) => { const nextRole = role as AdminRole; updateUser(config, setConfig, selectedIndex!, { role: nextRole, leaderTeams: nextRole === "super_admin" ? selected.leaderTeams : [] }); setRoleFilter(nextRole); setQuery(""); }} />
             <div><div className="text-xs font-medium text-slate-500">团队范围</div><div className="mt-2 flex flex-wrap gap-2">{config.teams.filter((team) => team.enabled).map((team) => { const checked = selected.teams.includes(team.name); return <button key={team.id} type="button" onClick={() => updateUser(config, setConfig, selectedIndex!, { teams: checked ? selected.teams.filter((name) => name !== team.name) : [...selected.teams, team.name] })} className={cn("rounded-full border px-3 py-1 text-xs", checked ? "border-blue-600 bg-blue-50 text-blue-700" : "border-border text-slate-600 hover:bg-slate-50")}>{team.name}</button>; })}</div></div>
           </div>
+          {selected.role === "super_admin" && <div className="mt-5 rounded-lg border border-border p-4"><div className="text-sm font-medium text-slate-900">兼任团队负责人</div><p className="mt-1 text-xs leading-5 text-slate-500">可同时选择负责团队；不会减少超级管理员的全局权限。</p><div className="mt-3 flex flex-wrap gap-2">{config.teams.filter((team) => team.enabled).map((team) => { const checked = (selected.leaderTeams ?? []).includes(team.name); return <button key={team.id} type="button" onClick={() => updateUser(config, setConfig, selectedIndex!, { leaderTeams: checked ? (selected.leaderTeams ?? []).filter((name) => name !== team.name) : [...(selected.leaderTeams ?? []), team.name] })} className={cn("rounded-full border px-3 py-1 text-xs", checked ? "border-violet-600 bg-violet-50 text-violet-700" : "border-border text-slate-600 hover:bg-slate-50")}>{team.name}</button>; })}</div></div>}
           <EffectiveAccess config={config} user={selected} />
           <details className="mt-5 rounded-lg border border-border p-4"><summary className="cursor-pointer text-sm font-medium text-slate-800">高级：Owner 匹配别名</summary><p className="mt-2 text-xs leading-5 text-slate-500">姓名和邮箱会自动加入匹配；仅在历史 OKR 使用其他 Owner 名称时补充。</p><input value={selected.ownerAliases.join(", ")} onChange={(event) => updateUser(config, setConfig, selectedIndex!, { ownerAliases: splitList(event.target.value) })} className="mt-3 h-9 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400" /></details>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
@@ -763,13 +823,22 @@ function UserAvatar({ name, enabled }: { name: string; enabled: boolean }) { con
 function EffectiveAccess({ config, user }: { config: AdminConfig; user: AdminUser }) {
   const teams = user.role === "super_admin" ? config.teams.filter((team) => team.enabled).map((team) => team.name) : user.role === "team_leader" ? unique(user.teams.flatMap((team) => [team, ...descendantTeams(config.teams, team)])) : user.teams;
   const capability = user.role === "super_admin" ? "管理后台、编辑和发布所有团队" : user.role === "team_leader" ? "编辑并发布所选团队及其下级团队" : "仅编辑本人名下的 KR，不可发布";
-  return <div className="mt-5 rounded-lg bg-slate-50 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">最终生效权限</div><div className="mt-2 text-sm font-medium text-slate-900">{capability}</div><div className="mt-2 text-xs leading-5 text-slate-500">范围：{teams.length ? teams.join("、") : "无团队范围"}</div></div>;
+  const leaderTeams = user.role === "team_leader" ? user.teams : user.leaderTeams ?? [];
+  return <div className="mt-5 rounded-lg bg-slate-50 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">最终生效权限</div><div className="mt-2 text-sm font-medium text-slate-900">{capability}</div><div className="mt-2 text-xs leading-5 text-slate-500">范围：{teams.length ? teams.join("、") : "无团队范围"}</div>{leaderTeams.length > 0 && <div className="mt-2 text-xs leading-5 text-violet-700">团队负责人：{leaderTeams.join("、")}</div>}</div>;
 }
 
 type AdminSectionProps = { config: AdminConfig; setConfig: (config: AdminConfig) => void };
 const teamColors = ["blue", "emerald", "violet", "amber", "rose", "slate"];
 function teamColorClass(color: string) { return ({ blue: "bg-blue-500", emerald: "bg-emerald-500", violet: "bg-violet-500", amber: "bg-amber-500", rose: "bg-rose-500", slate: "bg-slate-500" } as Record<string, string>)[color] ?? "bg-slate-500"; }
-function roleLabel(role: AdminRole) { return role === "super_admin" ? "系统管理员" : role === "team_leader" ? "团队负责人" : "成员"; }
+function roleLabel(role: AdminRole) { return role === "super_admin" ? "超级管理员" : role === "team_leader" ? "团队负责人" : "成员"; }
+function userRoleSummary(user: AdminUser) { return user.role === "super_admin" && (user.leaderTeams?.length ?? 0) > 0 ? "超级管理员 + 团队负责人" : roleLabel(user.role); }
+
+function nextUserEmail(users: AdminUser[]) {
+  const existing = new Set(users.map((user) => user.email.toLowerCase()));
+  let sequence = users.length + 1;
+  while (existing.has(`new-user-${sequence}@company.com`)) sequence += 1;
+  return `new-user-${sequence}@company.com`;
+}
 function eventTypeLabel(type: AdminEvent["type"]) { return type === "config.update" ? "配置更新" : type === "publish" ? "发布" : type === "rollback" ? "回滚" : "登录"; }
 function periodLabel(config: AdminConfig, id: string) { return config.periods.find((period) => period.id === id)?.shortLabel ?? id; }
 function formatDate(value: string) { if (!value) return "暂无"; const timestamp = Date.parse(value); return Number.isFinite(timestamp) ? new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(timestamp) : value.slice(0, 16); }
@@ -777,8 +846,9 @@ function splitList(value: string) { return value.split(",").map((item) => item.t
 function unique(values: string[]) { return Array.from(new Set(values)); }
 function updatePeriod(config: AdminConfig, setConfig: (config: AdminConfig) => void, id: string, patch: Partial<AdminPeriod>) { setConfig({ ...config, periods: config.periods.map((period) => period.id === id ? { ...period, ...patch } : period) }); }
 function updateTeam(config: AdminConfig, setConfig: (config: AdminConfig) => void, id: string, patch: Partial<AdminTeam>) { setConfig({ ...config, teams: config.teams.map((team) => team.id === id ? { ...team, ...patch } : team) }); }
+function assignTeamOwner(config: AdminConfig, setConfig: (config: AdminConfig) => void, id: string, owner: string) { const previousOwner = config.teams.find((team) => team.id === id)?.owner ?? ""; setConfig({ ...config, teams: config.teams.map((team) => team.id === id ? { ...team, owner } : team), users: config.users.map((user) => user.displayName === owner ? { ...user, ownerAliases: unique([...user.ownerAliases, previousOwner].filter(Boolean)) } : user) }); }
 function updateUser(config: AdminConfig, setConfig: (config: AdminConfig) => void, index: number, patch: Partial<AdminUser>) { setConfig({ ...config, users: config.users.map((user, itemIndex) => itemIndex === index ? { ...user, ...patch } : user) }); }
-function renameTeam(config: AdminConfig, setConfig: (config: AdminConfig) => void, id: string, name: string) { const previous = config.teams.find((team) => team.id === id)?.name ?? ""; setConfig({ ...config, defaultTeam: config.defaultTeam === previous ? name : config.defaultTeam, teams: config.teams.map((team) => team.id === id ? { ...team, name } : team.parentTeam === previous ? { ...team, parentTeam: name } : team), users: config.users.map((user) => ({ ...user, teams: user.teams.map((team) => team === previous ? name : team) })) }); }
+function renameTeam(config: AdminConfig, setConfig: (config: AdminConfig) => void, id: string, name: string) { const previous = config.teams.find((team) => team.id === id)?.name ?? ""; setConfig({ ...config, defaultTeam: config.defaultTeam === previous ? name : config.defaultTeam, teams: config.teams.map((team) => team.id === id ? { ...team, name } : team.parentTeam === previous ? { ...team, parentTeam: name } : team), users: config.users.map((user) => ({ ...user, teams: user.teams.map((team) => team === previous ? name : team), leaderTeams: user.leaderTeams?.map((team) => team === previous ? name : team) })) }); }
 function orderTeams(teams: AdminTeam[]) { const result: Array<{ team: AdminTeam; depth: number }> = []; const visited = new Set<string>(); function visit(parent: string, depth: number) { teams.filter((team) => team.parentTeam === parent && !visited.has(team.id)).forEach((team) => { visited.add(team.id); result.push({ team, depth }); visit(team.name, depth + 1); }); } visit("", 0); teams.filter((team) => !visited.has(team.id)).forEach((team) => result.push({ team, depth: 0 })); return result; }
 function descendantTeams(teams: AdminTeam[], parent: string): string[] { const children = teams.filter((team) => team.parentTeam === parent); return children.flatMap((team) => [team.name, ...descendantTeams(teams, team.name)]); }
 function isDescendant(teams: AdminTeam[], parent: string, candidate: string) { return descendantTeams(teams, parent).includes(candidate); }

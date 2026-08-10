@@ -35,6 +35,7 @@ export type AdminUser = {
   displayName: string;
   role: AdminRole;
   teams: string[];
+  leaderTeams?: string[];
   ownerAliases: string[];
   enabled: boolean;
 };
@@ -171,6 +172,9 @@ export function validateAdminConfig(config: AdminConfig) {
     user.teams.forEach((team) => {
       if (!teamSet.has(team)) errors.push(`${user.email}: assigned team ${team} does not exist`);
     });
+    (user.leaderTeams ?? []).forEach((team) => {
+      if (!teamSet.has(team)) errors.push(`${user.email}: leader team ${team} does not exist`);
+    });
   });
   if (config.users.filter((user) => user.enabled && user.role === "super_admin" && isValidEmail(user.email)).length < 2) {
     errors.push("At least two enabled system administrators with valid email addresses are required");
@@ -209,6 +213,7 @@ export function normalizeAdminConfig(input: AdminConfigInput): AdminConfig {
   }));
 
   const sourceTeams = Array.isArray(input.teams) && input.teams.length > 0 ? input.teams : fallback.teams;
+  const users = normalizeUsers(input.users, fallback.users);
   const teams = normalizeTeams(sourceTeams);
   const defaultTeam = teams.some((team) => team.name === input.defaultTeam)
     ? String(input.defaultTeam)
@@ -221,7 +226,7 @@ export function normalizeAdminConfig(input: AdminConfigInput): AdminConfig {
     periods,
     defaultTeam,
     teams,
-    users: normalizeUsers(input.users, fallback.users),
+    users,
     settings: {
       defaultLanguage: input.settings?.defaultLanguage === "en" ? "en" : "zh",
       showEditLinks: input.settings?.showEditLinks ?? fallback.settings.showEditLinks,
@@ -310,6 +315,7 @@ function normalizeUsers(input: Partial<AdminUser>[] | undefined, fallback: Admin
       displayName,
       role: user.role === "super_admin" || user.role === "team_leader" || user.role === "user" ? user.role : "user",
       teams: Array.isArray(user.teams) ? unique(user.teams.map((team) => canonicalTeamName(String(team))).filter(Boolean)) : [],
+      leaderTeams: Array.isArray(user.leaderTeams) ? unique(user.leaderTeams.map((team) => canonicalTeamName(String(team))).filter(Boolean)) : [],
       ownerAliases: unique([
         displayName,
         email,

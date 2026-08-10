@@ -37,7 +37,7 @@ describe("admin config v2", () => {
     ]));
   });
 
-  it("maps legacy System and Infra team names without changing user assignments", () => {
+  it("maps legacy System and Infra team names without changing stored owner aliases", () => {
     const config = normalizeAdminConfig({
       teams: [
         { id: "integration-team", name: "Integration Team", owner: "Integration Lead", parentTeam: "Software", enabled: true },
@@ -52,6 +52,16 @@ describe("admin config v2", () => {
     ]);
     expect(config.users[0].teams).toEqual(["System Team", "Infra Team"]);
     expect(config.users[0].ownerAliases).toEqual(expect.arrayContaining(["System Leader", "Infra Leader"]));
+  });
+
+  it("keeps team leadership as a separate responsibility for a super administrator", () => {
+    const config = normalizeAdminConfig({
+      teams: [{ id: "tpm-team", name: "TPM Team", owner: "TPM Lead", parentTeam: "", enabled: true }],
+      users: [{ email: "admin@example.com", displayName: "Admin", role: "super_admin", teams: ["TPM Team"], leaderTeams: ["TPM Team"], ownerAliases: [], enabled: true }]
+    });
+
+    expect(config.users[0]).toMatchObject({ role: "super_admin", leaderTeams: ["TPM Team"] });
+    expect(validateAdminConfig(config)).not.toContain("admin@example.com: leader team TPM Team does not exist");
   });
 
   it("prevents the current administrator from removing or demoting their own account", () => {

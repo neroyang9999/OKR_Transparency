@@ -118,6 +118,28 @@ export function filterDraftByOwner(draft: OkrDraft, ownerAliases: string[], fall
   }, owner, true);
 }
 
+export function mergeDraftByOwner(
+  current: OkrDraft,
+  scopedDraft: OkrDraft,
+  owner: string,
+  ownerAliases: string[],
+  status: EditableObjective["status"] = "draft"
+): OkrDraft {
+  const aliases = ownerAliases.map(normalizeToken).filter(Boolean);
+  const normalizedScope = normalizeDraft(scopedDraft, owner, true);
+  return {
+    ...current,
+    objectives: [
+      ...current.objectives.filter((objective) => {
+        if (aliases.length === 0) return true;
+        return !aliases.includes(normalizeToken(objective.owner)) &&
+          !objective.keyResults.some((kr) => aliases.includes(normalizeToken(kr.owner)));
+      }),
+      ...normalizedScope.objectives.map((objective) => ({ ...objective, status }))
+    ]
+  };
+}
+
 export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwner = true): OkrRecord[] {
   const today = new Date().toISOString().slice(0, 10);
   const records: OkrRecord[] = [];
