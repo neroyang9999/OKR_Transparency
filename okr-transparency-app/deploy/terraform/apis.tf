@@ -5,6 +5,7 @@ locals {
     "secretmanager.googleapis.com",
     "firestore.googleapis.com",
     "datastore.googleapis.com",
+    "translate.googleapis.com",
     "iap.googleapis.com"
   ])
 }

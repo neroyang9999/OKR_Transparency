@@ -17,6 +17,7 @@ vi.mock("@/lib/okr/drafts", () => ({ readDraft: vi.fn(), writeOwnerScopedDraft: 
 vi.mock("@/lib/okr/edit-types", () => ({
   filterDraftByOwner: vi.fn((draft) => draft),
   normalizeDraft: vi.fn((draft) => draft),
+  withExistingLocalizedContent: vi.fn((draft) => draft),
   validateDraft: vi.fn(() => ({ errors: [], warnings: [] }))
 }));
 vi.mock("@/lib/okr/owner-scope", () => ({

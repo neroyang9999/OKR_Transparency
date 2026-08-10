@@ -216,7 +216,7 @@ function ObjectiveGroup({ group, lang }: { group: ObjectiveGroupData; lang: Lang
         <ConfidenceBadge value={objective.confidence} />
       </div>
       <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">
-        {translateText(objective.objective, lang)}
+        {translateText(objective.objective, lang, objective.localized?.objective)}
       </h3>
       <div className="mt-3 grid gap-3 text-xs text-slate-600 sm:grid-cols-3">
         <Field label={t(lang, "owner")} value={objective.owner} />
@@ -233,7 +233,7 @@ function ObjectiveGroup({ group, lang }: { group: ObjectiveGroupData; lang: Lang
                 <ConfidenceBadge value={kr.confidence} />
                 <span className="text-xs text-muted-foreground">{t(lang, "score")} <Score value={kr.score} /></span>
               </div>
-              <div className="mt-2 text-sm font-semibold leading-5 text-slate-900">{translateText(kr.kr || kr.objective, lang)}</div>
+              <div className="mt-2 text-sm font-semibold leading-5 text-slate-900">{translateText(kr.kr || kr.objective, lang, kr.kr ? kr.localized?.kr : kr.localized?.objective)}</div>
             </div>
           ))}
         </div>
@@ -250,11 +250,11 @@ function AttentionItem({ record, lang }: { record: OkrRecord; lang: Lang }) {
         <Badge tone="gray">{record.team}</Badge>
         <ConfidenceBadge value={record.confidence} />
       </div>
-      <div className="mt-3 text-sm font-semibold leading-5 text-slate-950">{translateText(record.kr || record.objective, lang)}</div>
+      <div className="mt-3 text-sm font-semibold leading-5 text-slate-950">{translateText(record.kr || record.objective, lang, record.kr ? record.localized?.kr : record.localized?.objective)}</div>
       <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-        {record.risks && <IconLine icon={<CircleAlert className="h-3.5 w-3.5" />} text={translateText(record.risks, lang)} />}
+        {record.risks && <IconLine icon={<CircleAlert className="h-3.5 w-3.5" />} text={translateText(record.risks, lang, record.localized?.risks)} />}
         {record.dependencies && <IconLine icon={<GitBranch className="h-3.5 w-3.5" />} text={translateText(record.dependencies, lang)} />}
-        {record.decisions_needed && <IconLine icon={<ArrowUpRight className="h-3.5 w-3.5" />} text={translateText(record.decisions_needed, lang)} />}
+        {record.decisions_needed && <IconLine icon={<ArrowUpRight className="h-3.5 w-3.5" />} text={translateText(record.decisions_needed, lang, record.localized?.decisionsNeeded)} />}
       </div>
     </article>
   );

@@ -19,10 +19,10 @@ export function OkrRecordCard({ record, compact = false, lang = "zh" }: { record
         </div>
         <Link href={hrefWithLang(`/teams?team=${encodeURIComponent(record.team)}`, lang)} className="group mt-3 block">
           <h3 className="text-sm font-semibold leading-5 text-slate-950 group-hover:text-blue-700">
-            {translateText(record.kr || record.objective, lang)}
+            {translateText(record.kr || record.objective, lang, record.kr ? record.localized?.kr : record.localized?.objective)}
           </h3>
           {record.kr && (
-            <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">{translateText(record.objective, lang)}</p>
+            <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">{translateText(record.objective, lang, record.localized?.objective)}</p>
           )}
         </Link>
         <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
@@ -42,8 +42,8 @@ export function OkrRecordCard({ record, compact = false, lang = "zh" }: { record
         {!compact && (record.dependencies || record.risks || record.decisions_needed) && (
           <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
             {record.dependencies && <InfoLine icon={<GitBranch className="h-3.5 w-3.5" />} label={t(lang, "dependencies")} text={translateText(record.dependencies, lang)} />}
-            {record.risks && <InfoLine icon={<CircleAlert className="h-3.5 w-3.5" />} label={t(lang, "risks")} text={translateText(record.risks, lang)} />}
-            {record.decisions_needed && <InfoLine icon={<ArrowUpRight className="h-3.5 w-3.5" />} label={t(lang, "decisions")} text={translateText(record.decisions_needed, lang)} />}
+            {record.risks && <InfoLine icon={<CircleAlert className="h-3.5 w-3.5" />} label={t(lang, "risks")} text={translateText(record.risks, lang, record.localized?.risks)} />}
+            {record.decisions_needed && <InfoLine icon={<ArrowUpRight className="h-3.5 w-3.5" />} label={t(lang, "decisions")} text={translateText(record.decisions_needed, lang, record.localized?.decisionsNeeded)} />}
           </div>
         )}
       </CardContent>

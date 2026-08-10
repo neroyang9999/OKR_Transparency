@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
-import { calculateObjectiveProgress, createEmptyKr, createEmptyObjective, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
+import { calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
 import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
@@ -45,7 +45,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const canEditDraft = ownerScoped ? policy.canEdit : policy.canPublish;
   const canPublishDraft = ownerScoped ? canEditDraft : policy.canPublish;
   const defaultAlignmentId = ownerScoped ? alignmentOptions[0]?.id : undefined;
-  const [draft, setDraft] = useState(() => withDefaultAlignment(normalizeDraft(initialDraft, fixedOwner, true), defaultAlignmentId));
+  const [draft, setDraft] = useState(() => withDefaultAlignment(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), defaultAlignmentId));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);

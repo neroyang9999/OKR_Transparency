@@ -113,7 +113,8 @@ resource "google_cloud_run_v2_service" "api" {
     google_secret_manager_secret_version.auth_secret,
     google_secret_manager_secret_version.admin_token,
     google_project_iam_member.api_datastore_user,
-    google_project_iam_member.api_secret_accessor
+    google_project_iam_member.api_secret_accessor,
+    google_project_iam_member.api_translation_user
   ]
 }
 

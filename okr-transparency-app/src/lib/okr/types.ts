@@ -6,6 +6,24 @@ export type OkrLevel = (typeof okrLevels)[number];
 export type OkrType = (typeof okrTypes)[number];
 export type ConfidenceLevel = (typeof confidenceLevels)[number];
 
+export type ContentLanguage = "zh" | "en" | "neutral";
+export type TranslationOrigin = "manual" | "machine";
+
+export type LocalizedText = {
+  zh?: string;
+  en?: string;
+  zhOrigin?: TranslationOrigin;
+  enOrigin?: TranslationOrigin;
+  detectedLanguage?: ContentLanguage;
+};
+
+export type OkrLocalizedFields = {
+  objective?: LocalizedText;
+  kr?: LocalizedText;
+  risks?: LocalizedText;
+  decisionsNeeded?: LocalizedText;
+};
+
 export type OkrRecord = {
   okr_id: string;
   parent_id: string;
@@ -26,6 +44,7 @@ export type OkrRecord = {
   source_doc_url: string;
   last_update: string;
   aligned_to_id?: string;
+  localized?: OkrLocalizedFields;
 };
 
 export type OkrNode = OkrRecord & {

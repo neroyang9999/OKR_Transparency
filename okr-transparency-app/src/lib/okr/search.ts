@@ -24,7 +24,15 @@ export function searchOkrs(records: OkrRecord[], params: OkrSearchParams) {
       record.owner,
       record.dependencies,
       record.risks,
-      record.decisions_needed
+      record.decisions_needed,
+      record.localized?.objective?.zh ?? "",
+      record.localized?.objective?.en ?? "",
+      record.localized?.kr?.zh ?? "",
+      record.localized?.kr?.en ?? "",
+      record.localized?.risks?.zh ?? "",
+      record.localized?.risks?.en ?? "",
+      record.localized?.decisionsNeeded?.zh ?? "",
+      record.localized?.decisionsNeeded?.en ?? ""
     ].some((value) => value.toLowerCase().includes(query));
   });
 }

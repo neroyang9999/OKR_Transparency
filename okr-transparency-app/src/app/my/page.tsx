@@ -172,7 +172,7 @@ function KrActionRow({ item, accessEmail, periodId, lang, emphasizeUpdate = fals
         {item.isStale && <Badge tone="yellow">{copy.overdue}</Badge>}
       </div>
       <Link href={hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang)} className="mt-2 block text-sm font-semibold leading-6 text-slate-950 hover:text-blue-700">
-        {translateText(record.kr, lang)}
+        {translateText(record.kr, lang, record.localized?.kr)}
       </Link>
       <div className="mt-1 text-xs text-muted-foreground">
         {copy.lastActivity}: {item.lastActivityAt ? formatDate(item.lastActivityAt, lang) : copy.neverUpdated}
@@ -180,8 +180,8 @@ function KrActionRow({ item, accessEmail, periodId, lang, emphasizeUpdate = fals
       </div>
       {showContext && (record.risks || record.decisions_needed) && (
         <div className="mt-3 space-y-1 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">
-          {record.risks && <div><span className="font-semibold">{copy.riskLabel}：</span>{translateText(record.risks, lang)}</div>}
-          {record.decisions_needed && <div><span className="font-semibold">{copy.decisionLabel}：</span>{translateText(record.decisions_needed, lang)}</div>}
+          {record.risks && <div><span className="font-semibold">{copy.riskLabel}：</span>{translateText(record.risks, lang, record.localized?.risks)}</div>}
+          {record.decisions_needed && <div><span className="font-semibold">{copy.decisionLabel}：</span>{translateText(record.decisions_needed, lang, record.localized?.decisionsNeeded)}</div>}
         </div>
       )}
       <div className="mt-3 flex items-center gap-3">
