@@ -7,6 +7,7 @@ import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
+import { getPopulatedOkrDetailFields } from "@/lib/okr/detail-fields";
 import { readProgressNotesForObjective, type ProgressNote } from "@/lib/okr/progress-notes";
 import { readOkrSnapshot } from "@/lib/okr/store";
 import type { ConfidenceLevel, LocalizedText } from "@/lib/okr/types";
@@ -41,6 +42,7 @@ export default async function OkrDetailPage({
   const children = snapshot.records.filter((item) => item.parent_id === record.okr_id);
   const progressNotes = await readProgressNotesForObjective(record.team, pageAccess.adminConfig.defaultPeriodId, record.okr_id);
   const title = record.kr || record.objective;
+  const populatedDetailFields = getPopulatedOkrDetailFields(record);
 
   return (
     <AppShell active="teams">
@@ -78,7 +80,7 @@ export default async function OkrDetailPage({
         )}
       </section>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]">
+      <div className={`mt-5 grid gap-5 ${populatedDetailFields.length > 0 ? "xl:grid-cols-[1fr_360px]" : ""}`}>
         <section className="space-y-5">
           <DetailSection title={lang === "en" ? "Weekly Progress History" : "周进展完整历史"}>
             {progressNotes.length === 0 ? (
@@ -114,18 +116,20 @@ export default async function OkrDetailPage({
           )}
         </section>
 
-        <aside className="space-y-5">
-          <DetailSection title={lang === "en" ? "Current Fields" : "当前字段"}>
-            <div className="space-y-3 text-sm">
-              <SideField label={t(lang, "baseline")} value={record.baseline} lang={lang} />
-              <SideField label={t(lang, "target")} value={record.target} lang={lang} />
-              <SideField label={t(lang, "actual")} value={record.actual} lang={lang} />
-              <SideField label={t(lang, "dependencies")} value={record.dependencies} lang={lang} />
-              <SideField label={t(lang, "risks")} value={record.risks} lang={lang} localized={record.localized?.risks} />
-              <SideField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} localized={record.localized?.decisionsNeeded} />
-            </div>
-          </DetailSection>
-        </aside>
+        {populatedDetailFields.length > 0 && (
+          <aside className="space-y-5">
+            <DetailSection title={lang === "en" ? "Current Fields" : "当前字段"}>
+              <div className="space-y-3 text-sm">
+                {populatedDetailFields.includes("baseline") && <SideField label={t(lang, "baseline")} value={record.baseline} lang={lang} />}
+                {populatedDetailFields.includes("target") && <SideField label={t(lang, "target")} value={record.target} lang={lang} />}
+                {populatedDetailFields.includes("actual") && <SideField label={t(lang, "actual")} value={record.actual} lang={lang} />}
+                {populatedDetailFields.includes("dependencies") && <SideField label={t(lang, "dependencies")} value={record.dependencies} lang={lang} />}
+                {populatedDetailFields.includes("risks") && <SideField label={t(lang, "risks")} value={record.risks} lang={lang} localized={record.localized?.risks} />}
+                {populatedDetailFields.includes("decisions_needed") && <SideField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} localized={record.localized?.decisionsNeeded} />}
+              </div>
+            </DetailSection>
+          </aside>
+        )}
       </div>
     </AppShell>
   );

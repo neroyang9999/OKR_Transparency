@@ -135,7 +135,7 @@ npm run reset:firestore-okrs -- --project=knowledge-base-496322 --write --confir
 
 The first command is always read-only. The write command backs up the raw Firestore documents under `data/firestore-reset-backups/`, deletes only OKR snapshots, period snapshots, drafts, progress notes, snapshot versions, and the legacy rollback snapshot, then verifies that none remain.
 
-KR publishing requires an owner, baseline, target, and risk/decision context for Yellow or Red status. Weekly KR updates can change actual value, progress, confidence, risk, next steps, and an evidence link in one action.
+KR publishing requires a title and owner. Baseline, target, dependency, risk, and decision fields remain compatible with historical snapshots but are optional; detail views show them only when they contain data. Weekly KR updates can change actual value, progress, confidence, risk, next steps, and an evidence link in one action.
 
 Local data repair and migration commands:
 
