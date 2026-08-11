@@ -8,8 +8,10 @@ import { readFirestoreDocument, writeFirestoreDocument } from "../storage/firest
 import { isFirestoreStorageEnabled } from "../storage/mode";
 import { readAdminConfig } from "../admin/config";
 import { validateOkrGraph, validateOkrRecordQuality } from "./graph-validation";
+import { buildPublicationCandidate } from "./publication-candidate";
 import { readSnapshotVersion, writeSnapshotVersion } from "./snapshot-versions";
 import { canonicalOwnerName, canonicalTeamName, legacyTeamNamesFor } from "../team-names";
+import type { OkrOwnerScope } from "./owner-scope";
 
 const dataDir = path.join(process.cwd(), "data");
 const draftPath = path.join(dataDir, "okr-drafts.json");
@@ -81,19 +83,19 @@ export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceO
   return nextDraft;
 }
 
-export async function writeOwnerScopedDraft(draft: OkrDraft, owner: string, ownerAliases: string[]) {
+export async function writeOwnerScopedDraft(draft: OkrDraft, ownerScope: OkrOwnerScope) {
   const current = await readDraft(draft.team, draft.periodId);
   const nextDraft: OkrDraft = {
-    ...mergeDraftByOwner(current, draft, owner, ownerAliases),
+    ...mergeDraftByOwner(current, draft, ownerScope.owner, ownerScope.aliases, "draft", ownerScope),
     updatedAt: new Date().toISOString(),
   };
 
-  return writeDraft(nextDraft, owner, false, true);
+  return writeDraft(nextDraft, ownerScope.owner, false, true);
 }
 
-export async function publishDraft(team: string, periodId: string, teamOwner = team, ownerScope?: { owner: string; aliases: string[] }, actor = teamOwner): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
+export async function publishDraft(team: string, periodId: string, teamOwner = team, ownerScope?: OkrOwnerScope, actor = teamOwner): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
   const draft = await readDraft(team, periodId);
-  const publishableDraft = ownerScope ? filterDraftByOwner(draft, ownerScope.aliases, ownerScope.owner) : draft;
+  const publishableDraft = ownerScope ? filterDraftByOwner(draft, ownerScope.aliases, ownerScope.owner, ownerScope) : draft;
   const validation = validateDraft(publishableDraft);
   if (validation.errors.length > 0) {
     return { snapshot: await readOkrSnapshot(), ...validation };
@@ -107,13 +109,18 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
     ...normalizedDraft,
     objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" }))
   }, ownerScope?.owner ?? teamOwner, true);
-  const removePublishedRecord = ownerScope
-    ? (record: OkrSnapshot["records"][number]) => record.team === team && ownerMatches(record.owner, ownerScope.aliases) && draft.periodId === defaultPeriodId
-    : (record: OkrSnapshot["records"][number]) => record.team === team && draft.periodId === defaultPeriodId;
-  const nextRecords = [
-    ...current.records.filter((record) => !removePublishedRecord(record)),
-    ...publishedRecords
-  ];
+  const currentPeriodRecords = await readPeriodRecords(periodId);
+  const currentRecords = periodId === defaultPeriodId
+    ? current.records
+    : currentPeriodRecords ?? [];
+  const candidate = buildPublicationCandidate(currentRecords, publishedRecords, {
+    team,
+    ownerAliases: ownerScope?.aliases,
+    objectiveScope: ownerScope?.objectiveScope,
+    ownerEmail: ownerScope?.ownerEmail
+  });
+  const nextPeriodRecords = candidate.records;
+  const nextRecords = periodId === defaultPeriodId ? nextPeriodRecords : current.records;
   const snapshot: OkrSnapshot = {
     version: 1,
     meta: {
@@ -125,22 +132,13 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
     },
     records: nextRecords
   };
-  const currentPeriodRecords = await readPeriodRecords(periodId) ?? [];
-  const nextPeriodRecords = [
-    ...currentPeriodRecords.filter((record) =>
-      ownerScope
-        ? !(record.team === team && ownerMatches(record.owner, ownerScope.aliases))
-        : record.team !== team
-    ),
-    ...publishedRecords
-  ];
-  const graphValidation = validateOkrGraph(periodId === defaultPeriodId ? nextRecords : nextPeriodRecords);
+  const graphValidation = validateOkrGraph(nextPeriodRecords);
   const qualityValidation = validateOkrRecordQuality(publishedRecords);
   if (graphValidation.errors.length > 0 || qualityValidation.errors.length > 0) {
     return {
       snapshot: current,
       errors: [...graphValidation.errors, ...qualityValidation.errors],
-      warnings: [...validation.warnings, ...graphValidation.warnings, ...qualityValidation.warnings]
+      warnings: [...validation.warnings, ...candidate.warnings, ...graphValidation.warnings, ...qualityValidation.warnings]
     };
   }
 
@@ -148,7 +146,7 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
     periodId,
     team,
     actor,
-    records: currentPeriodRecords.filter((record) => record.team === team)
+    records: currentRecords.filter((record) => record.team === team)
   });
   if (periodId === defaultPeriodId) {
     await writeOkrSnapshot(snapshot, currentState.revision);
@@ -156,14 +154,18 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
   await writePeriodRecords(periodId, nextPeriodRecords);
   await writeDraft({
     ...(ownerScope
-      ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published")
+      ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published", ownerScope)
       : {
           ...draft,
           objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
         })
   }, ownerScope?.owner ?? teamOwner, false, true);
 
-  return { snapshot, ...validation };
+  return {
+    snapshot,
+    errors: [],
+    warnings: [...validation.warnings, ...candidate.warnings, ...graphValidation.warnings, ...qualityValidation.warnings]
+  };
 }
 
 export async function rollbackTeamVersion(versionId: string) {
@@ -324,13 +326,14 @@ function periodDocumentPath(periodId: string) {
   return `okrPeriodSnapshots/${documentIdFromParts([periodId])}`;
 }
 
-function ownerMatches(owner: string, aliases: string[]) {
-  const normalizedOwner = normalizeToken(owner);
-  return Boolean(normalizedOwner) && aliases.some((alias) => normalizeToken(alias) === normalizedOwner);
-}
-
 function canonicalizeRecord(record: OkrSnapshot["records"][number]) {
-  return { ...record, team: canonicalTeamName(record.team), owner: canonicalOwnerName(record.owner) };
+  return {
+    ...record,
+    team: canonicalTeamName(record.team),
+    owner: canonicalOwnerName(record.owner),
+    objective_scope: record.objective_scope ?? "team",
+    owner_email: record.owner_email?.trim().toLowerCase() || undefined
+  };
 }
 
 function canonicalizeDraft(draft: OkrDraft): OkrDraft {
@@ -342,11 +345,9 @@ function canonicalizeDraft(draft: OkrDraft): OkrDraft {
       ...objective,
       team,
       owner: canonicalOwnerName(objective.owner),
+      objectiveScope: objective.objectiveScope ?? "team",
+      ownerEmail: objective.ownerEmail?.trim().toLowerCase() || undefined,
       keyResults: objective.keyResults.map((kr) => ({ ...kr, owner: canonicalOwnerName(kr.owner) }))
     }))
   };
-}
-
-function normalizeToken(value: string) {
-  return value.trim().toLowerCase();
 }

@@ -19,7 +19,7 @@ export async function updateLocalizedText(
 ): Promise<LocalizedText | undefined> {
   const text = value.trim();
   if (!text) return undefined;
-  if (text === existing?.zh || text === existing?.en) return existing;
+  if ((text === existing?.zh || text === existing?.en) && existing?.zh?.trim() && existing?.en?.trim()) return existing;
 
   const detectedLanguage = detectOkrLanguage(text);
   if (detectedLanguage === "neutral") {

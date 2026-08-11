@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
-import { calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
+import { applyDraftObjectiveScope, calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
 import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
@@ -45,7 +45,13 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const canEditDraft = ownerScoped ? policy.canEdit : policy.canPublish;
   const canPublishDraft = ownerScoped ? canEditDraft : policy.canPublish;
   const defaultAlignmentId = ownerScoped ? alignmentOptions[0]?.id : undefined;
-  const [draft, setDraft] = useState(() => withDefaultAlignment(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), defaultAlignmentId));
+  const objectiveScope = ownerScoped
+    ? { objectiveScope: "member" as const, ownerEmail }
+    : { objectiveScope: "team" as const };
+  const [draft, setDraft] = useState(() => withDefaultAlignment(
+    applyDraftObjectiveScope(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), objectiveScope),
+    defaultAlignmentId
+  ));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -56,10 +62,10 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   useEffect(() => {
     if (saveState !== "dirty") return;
     const timer = window.setTimeout(() => {
-      void saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved);
+      void saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved, copy.translationFailed);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [draft, fixedOwner, ownerEmail, saveState, copy.saved]);
+  }, [draft, fixedOwner, ownerEmail, saveState, copy.saved, copy.translationFailed]);
 
   function changeDraft(updater: (current: OkrDraft) => OkrDraft) {
     setSaveState("dirty");
@@ -96,6 +102,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         ...current.objectives,
         {
           ...createEmptyObjective(current.team, current.periodId, fixedOwner),
+          ...objectiveScope,
           alignedToId: defaultAlignmentId
         }
       ]
@@ -138,8 +145,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   async function publish() {
     setPublishConfirmOpen(false);
     setSaveState("saving");
-    const saved = await saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved);
-    if (!saved) return;
+    const saveResult = await saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved, copy.translationFailed);
+    if (!saveResult.ok) return;
 
     const response = await fetch("/api/okrs/publish", {
       method: "POST",
@@ -156,7 +163,11 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
     }
 
     setSaveState("saved");
-    setMessage(copy.published);
+    setMessage(saveResult.translationWarnings.length > 0 ? `${copy.published} · ${copy.translationFailed}` : copy.published);
+    if (saveResult.translationWarnings.length > 0) {
+      router.refresh();
+      return;
+    }
     router.push(hrefWithLang(overviewHref(draft.team, draft.periodId, ownerEmail), lang));
   }
 
@@ -183,7 +194,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           </Link>
           <button
             type="button"
-            onClick={() => saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved)}
+            onClick={() => saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved, copy.translationFailed)}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <Save className="h-4 w-4" />
@@ -236,8 +247,9 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                     disabled={objectiveLocked}
                   />
                 </div>
-                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="mt-3 grid gap-2 md:grid-cols-4">
                   <ReadOnlyField label={copy.owner} value={fixedOwner} />
+                  <ReadOnlyField label={lang === "en" ? "Scope" : "目标范围"} value={ownerScoped ? (lang === "en" ? "Member Objective" : "成员 Objective") : (lang === "en" ? "Team Objective" : "团队 Objective")} />
                   <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} />
                   <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} />
                 </div>
@@ -519,8 +531,9 @@ async function saveDraft(
   ownerEmail: string | undefined,
   setSaveState: (state: "saved" | "saving" | "dirty" | "error") => void,
   setMessage: (message: string) => void,
-  savedMessage: string
-): Promise<boolean> {
+  savedMessage: string,
+  translationFailedMessage = "Machine translation failed; original text was saved"
+): Promise<{ ok: boolean; translationWarnings: string[] }> {
   setSaveState("saving");
   const response = await fetch("/api/okrs/draft", {
     method: "PUT",
@@ -533,16 +546,17 @@ async function saveDraft(
     })
   });
 
+  const body = await response.json().catch(() => ({})) as { error?: string; translationWarnings?: string[] };
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string };
     setSaveState("error");
     setMessage(body.error ?? "Save failed");
-    return false;
+    return { ok: false, translationWarnings: [] };
   }
 
+  const translationWarnings = body.translationWarnings ?? [];
   setSaveState("saved");
-  setMessage(savedMessage);
-  return true;
+  setMessage(translationWarnings.length > 0 ? `${savedMessage} · ${translationFailedMessage}` : savedMessage);
+  return { ok: true, translationWarnings };
 }
 
 function overviewHref(team: string, periodId: string, ownerEmail?: string) {
@@ -699,6 +713,7 @@ const zh = {
   errors: "必须修复",
   warnings: "建议检查",
   published: "已发布到 OKR 页面",
+  translationFailed: "机翻失败，原文已保存；请稍后再次保存",
   publishFailed: "发布失败",
   cancel: "取消",
   confirmDeleteObjective: "确认删除这个 Objective 及其全部 KR？删除后会自动保存草稿。",
@@ -743,6 +758,7 @@ const en: typeof zh = {
   errors: "Must fix",
   warnings: "Check",
   published: "Published to OKR page",
+  translationFailed: "Machine translation failed; the original text was saved. Please save again later",
   publishFailed: "Publish failed",
   cancel: "Cancel",
   confirmDeleteObjective: "Delete this Objective and all of its KRs? The draft will auto-save.",

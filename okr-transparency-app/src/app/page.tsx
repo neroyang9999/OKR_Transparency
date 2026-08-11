@@ -48,7 +48,7 @@ export default async function HomePage({
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
   const selectedOwnerScope = selectedMember
     ? ownerScopeForUser(selectedMember)
-    : ownerScopeForTeam(adminConfig, selectedTeam) ?? { owner: selectedTeamOwner, aliases: [selectedTeamOwner] };
+    : ownerScopeForTeam(adminConfig, selectedTeam) ?? { owner: selectedTeamOwner, aliases: [selectedTeamOwner], objectiveScope: "team" as const };
   const selectedOwner = selectedOwnerScope.owner;
   const selectedOwnerAliases = selectedOwnerScope.aliases;
 
@@ -66,7 +66,7 @@ export default async function HomePage({
   ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
-  const draft = baseDraft ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner) : null;
+  const draft = baseDraft ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner, selectedOwnerScope) : null;
   const periodRecords = selectedPeriod === adminConfig.defaultPeriodId ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
   const qualityStats = getOkrQualityStats(teamRecords);

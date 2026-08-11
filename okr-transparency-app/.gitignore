@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-start-*.log*
 out
 dist
 .env
@@ -9,6 +10,9 @@ data/okr-drafts.json
 data/okr-period-snapshots.json
 data/okr-feedback.json
 data/repair-backups/
+data/firestore-reset-backups/
+data/local-sync-backups/
+data/okr-snapshot-versions.json
 coverage
 deploy/terraform/.terraform
 deploy/terraform/.terraform.lock.hcl

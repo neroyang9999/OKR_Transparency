@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireApiAccess } from "@/lib/admin/api-access";
 import { readAdminConfig, type AdminConfig } from "@/lib/admin/config";
 import { readDraft, writeOwnerScopedDraft } from "@/lib/okr/drafts";
-import { filterDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "@/lib/okr/edit-types";
-import { translateDraftContent } from "../../../../lib/okr/translation";
+import { applyDraftObjectiveScope, filterDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "@/lib/okr/edit-types";
+import { translateDraftContent } from "@/lib/okr/translation";
 import { ownerScopeForMember, ownerScopeForTeam } from "@/lib/okr/owner-scope";
 import { authorizeDraftChange, canEditTeamOwner, resolveRequestAccess } from "@/lib/admin/permissions";
 
@@ -33,15 +33,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: body.ownerEmail ? "Member is not configured for this team" : "Team is not configured" }, { status: 403 });
     }
     const previous = await readDraft(draft.team, draft.periodId);
-    const previousForAuthorization = filterDraftByOwner(previous, ownerScope.aliases, ownerScope.owner);
-    const nextForAuthorization = normalizeDraft(draft, ownerScope.owner, true);
+    const previousForAuthorization = filterDraftByOwner(previous, ownerScope.aliases, ownerScope.owner, ownerScope);
+    const nextForAuthorization = normalizeDraft(applyDraftObjectiveScope(draft, ownerScope), ownerScope.owner, true);
     const authorization = authorizeOwnerScopedDraftChange(config, access, previousForAuthorization, nextForAuthorization, ownerScope.aliases);
     if (!authorization.ok) return NextResponse.json({ error: authorization.error }, { status: 403 });
 
-    const translatedDraft = await translateDraftContent(withExistingLocalizedContent(draft, previous));
-    const saved = await writeOwnerScopedDraft(translatedDraft, ownerScope.owner, ownerScope.aliases);
-    const responseDraft = filterDraftByOwner(saved, ownerScope.aliases, ownerScope.owner);
-    return NextResponse.json({ draft: responseDraft, validation: validateDraft(responseDraft) });
+    const translation = await translateDraftContent(withExistingLocalizedContent(nextForAuthorization, previous));
+    const saved = await writeOwnerScopedDraft(translation.draft, ownerScope);
+    const responseDraft = filterDraftByOwner(saved, ownerScope.aliases, ownerScope.owner, ownerScope);
+    return NextResponse.json({ draft: responseDraft, validation: validateDraft(responseDraft), translationWarnings: translation.warnings });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown draft save error" },

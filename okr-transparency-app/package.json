@@ -1,6 +1,6 @@
 {
   "name": "okr-transparency-app",
-  "version": "0.7.3",
+  "version": "0.7.7",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run --environment node src",
     "migrate:firestore": "node scripts/migrate-json-to-firestore.mjs",
+    "reset:firestore-okrs": "node scripts/reset-firestore-okrs.mjs",
     "repair:okr-graph": "node scripts/repair-okr-graph.mjs",
     "migrate:alignment-edges": "node scripts/migrate-alignment-edges.mjs"
   },

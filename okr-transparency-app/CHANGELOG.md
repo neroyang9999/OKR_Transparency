@@ -4,8 +4,27 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
-- Detect the language actually entered for Objective, KR, risk, and decision text and automatically generate the other Chinese or English version through GCP Cloud Translation.
-- Preserve manually edited translations, keep acronym-only content unchanged, and allow translation failures without blocking the original OKR save.
+## v0.7.7 - 2026-08-11
+
+- Separate team and member Objectives with explicit scope and owner-email fields so refilling one scope cannot overwrite the other.
+- Center each visual child group around its parent, indent child teams without changing organization ownership, and prevent nodes in shared columns from overlapping.
+- Show member Objectives after their team Objective, collapsed by default, and keep zoom controls fixed to the lower-left viewport while the map is dragged.
+- Allow explicitly enabled local credentials to remain on the same origin for stable local production-mode testing.
+
+## v0.7.6 - 2026-08-11
+
+- Keep each Objective under its configured organization hierarchy in the alignment map, while rendering explicit OKR alignment as a separate dashed arrow and leaving unaligned Objectives in their owning team.
+
+## v0.7.5 - 2026-08-11
+
+- Retry machine translation when source text is unchanged but the target-language value is missing.
+- Log Cloud Translation failures without exposing OKR content and show editors that the original was saved without a translation.
+
+## v0.7.4 - 2026-08-11
+
+- Enforce same-team Objective/KR parent relationships and reject missing, duplicate, or self-aligned draft IDs before publishing.
+- Build the active-period snapshot and period view from one candidate record set, and clear optional cross-team alignment when its target is removed.
+- Add a dry-run-first Firestore OKR reset command with raw backup and post-delete verification.
 
 ## v0.7.2 - 2026-08-10
 

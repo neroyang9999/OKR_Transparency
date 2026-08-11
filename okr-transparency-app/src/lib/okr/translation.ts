@@ -8,28 +8,35 @@ type PendingTranslation = {
   resolve: (value: string) => void;
 };
 
-export async function translateDraftContent(draft: OkrDraft): Promise<OkrDraft> {
-  const translate = createGoogleCloudTranslator();
-  return {
+type Translator = {
+  translate: (text: string, targetLanguage: TargetLanguage) => Promise<string>;
+  warnings: string[];
+};
+
+export async function translateDraftContent(draft: OkrDraft): Promise<{ draft: OkrDraft; warnings: string[] }> {
+  const translator = createGoogleCloudTranslator();
+  const translatedDraft = {
     ...draft,
     objectives: await Promise.all(draft.objectives.map(async (objective) => ({
       ...objective,
-      titleLocalized: await updateLocalizedText(objective.title, objective.titleLocalized, translate),
+      titleLocalized: await updateLocalizedText(objective.title, objective.titleLocalized, translator.translate),
       keyResults: await Promise.all(objective.keyResults.map(async (kr) => ({
         ...kr,
-        titleLocalized: await updateLocalizedText(kr.title, kr.titleLocalized, translate),
-        risksLocalized: await updateLocalizedText(kr.risks, kr.risksLocalized, translate),
-        decisionsNeededLocalized: await updateLocalizedText(kr.decisionsNeeded, kr.decisionsNeededLocalized, translate)
+        titleLocalized: await updateLocalizedText(kr.title, kr.titleLocalized, translator.translate),
+        risksLocalized: await updateLocalizedText(kr.risks, kr.risksLocalized, translator.translate),
+        decisionsNeededLocalized: await updateLocalizedText(kr.decisionsNeeded, kr.decisionsNeededLocalized, translator.translate)
       })))
     })))
   };
+  return { draft: translatedDraft, warnings: translator.warnings };
 }
 
-function createGoogleCloudTranslator() {
+function createGoogleCloudTranslator(): Translator {
   const queues: Record<TargetLanguage, PendingTranslation[]> = { zh: [], en: [] };
+  const warnings: string[] = [];
   let scheduled = false;
 
-  return (text: string, targetLanguage: TargetLanguage) => new Promise<string>((resolve) => {
+  const translate = (text: string, targetLanguage: TargetLanguage) => new Promise<string>((resolve) => {
     queues[targetLanguage].push({ text, resolve });
     if (scheduled) return;
     scheduled = true;
@@ -38,11 +45,22 @@ function createGoogleCloudTranslator() {
       await Promise.all((["zh", "en"] as const).map(async (target) => {
         const pending = queues[target].splice(0);
         if (pending.length === 0) return;
-        const translated = await translateBatch(pending.map((item) => item.text), target).catch(() => []);
+        const translated = await translateBatch(pending.map((item) => item.text), target).catch((error) => {
+          const message = `Machine translation to ${target} failed; original text was saved.`;
+          warnings.push(message);
+          console.error("Cloud Translation batch failed", {
+            targetLanguage: target,
+            itemCount: pending.length,
+            error: error instanceof Error ? error.message : "Unknown error"
+          });
+          return [];
+        });
         pending.forEach((item, index) => item.resolve(translated[index] ?? ""));
       }));
     });
   });
+
+  return { translate, warnings };
 }
 
 async function translateBatch(contents: string[], targetLanguage: TargetLanguage) {

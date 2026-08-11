@@ -5,6 +5,7 @@ import { authorizeDraftChange, resolveRequestAccess } from "@/lib/admin/permissi
 import { readDraft, writeOwnerScopedDraft } from "@/lib/okr/drafts";
 import type { OkrDraft } from "@/lib/okr/edit-types";
 import { PUT } from "./route";
+import { translateDraftContent } from "@/lib/okr/translation";
 
 vi.mock("@/lib/admin/api-access", () => ({ requireApiAccess: vi.fn() }));
 vi.mock("@/lib/admin/config", () => ({ readAdminConfig: vi.fn() }));
@@ -15,6 +16,7 @@ vi.mock("@/lib/admin/permissions", () => ({
 }));
 vi.mock("@/lib/okr/drafts", () => ({ readDraft: vi.fn(), writeOwnerScopedDraft: vi.fn() }));
 vi.mock("@/lib/okr/edit-types", () => ({
+  applyDraftObjectiveScope: vi.fn((draft) => draft),
   filterDraftByOwner: vi.fn((draft) => draft),
   normalizeDraft: vi.fn((draft) => draft),
   withExistingLocalizedContent: vi.fn((draft) => draft),
@@ -22,8 +24,9 @@ vi.mock("@/lib/okr/edit-types", () => ({
 }));
 vi.mock("@/lib/okr/owner-scope", () => ({
   ownerScopeForMember: vi.fn(),
-  ownerScopeForTeam: vi.fn(() => ({ owner: "TPM Lead", aliases: ["TPM Lead", "TPM Manager", "lead@unitxlabs.com"] }))
+  ownerScopeForTeam: vi.fn(() => ({ owner: "TPM Lead", aliases: ["TPM Lead", "TPM Manager", "lead@unitxlabs.com"], objectiveScope: "team" }))
 }));
+vi.mock("@/lib/okr/translation", () => ({ translateDraftContent: vi.fn() }));
 
 const teamObjective = objective("TPM-O1", "TPM Lead");
 const memberObjective = objective("TPM-YANG-O1", "Yang Luo");
@@ -43,6 +46,26 @@ describe("PUT /api/okrs/draft", () => {
     vi.mocked(authorizeDraftChange).mockReturnValue({ ok: true, error: "" });
     vi.mocked(readDraft).mockResolvedValue(currentDraft);
     vi.mocked(writeOwnerScopedDraft).mockResolvedValue(currentDraft);
+    vi.mocked(translateDraftContent).mockImplementation(async (draft) => ({ draft, warnings: [] }));
+  });
+
+  it("returns a visible warning while preserving the original draft when translation fails", async () => {
+    vi.mocked(translateDraftContent).mockResolvedValue({
+      draft: currentDraft,
+      warnings: ["Machine translation to zh failed; original text was saved."]
+    });
+
+    const response = await PUT(new NextRequest("http://localhost/api/okrs/draft", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(currentDraft)
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      translationWarnings: ["Machine translation to zh failed; original text was saved."]
+    });
+    expect(writeOwnerScopedDraft).toHaveBeenCalledWith(currentDraft, expect.objectContaining({ owner: "TPM Lead", objectiveScope: "team" }));
   });
 
   it("saves the team lead scope without claiming a member's OKRs", async () => {
@@ -55,8 +78,11 @@ describe("PUT /api/okrs/draft", () => {
     expect(response.status).toBe(200);
     expect(writeOwnerScopedDraft).toHaveBeenCalledWith(
       expect.objectContaining({ objectives: [expect.objectContaining({ id: "TPM-O1" })] }),
-      "TPM Lead",
-      expect.not.arrayContaining(["Yang Luo"])
+      expect.objectContaining({
+        owner: "TPM Lead",
+        aliases: expect.not.arrayContaining(["Yang Luo"]),
+        objectiveScope: "team"
+      })
     );
   });
 });

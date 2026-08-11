@@ -114,7 +114,12 @@ export default async function MapPage({
           )}
         </div>
       )}
-      <OkrMap records={teamScope.records} lang={lang} selectedTeam={teamScope.focusTeam} />
+      <OkrMap
+        records={teamScope.records}
+        teams={pageAccess.adminConfig.teams}
+        lang={lang}
+        selectedTeam={teamScope.focusTeam}
+      />
     </AppShell>
   );
 }

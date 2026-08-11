@@ -21,7 +21,8 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const showCredentials = identity.mode === "authjs" && process.env.NODE_ENV !== "production";
+  const showCredentials = identity.mode === "authjs"
+    && (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_LOCAL_CREDENTIALS === "true");
 
   useEffect(() => {
     const authOrigin = process.env.NEXT_PUBLIC_AUTH_ORIGIN;
@@ -29,6 +30,7 @@ export function LoginPanel({ variant, email }: LoginPanelProps) {
 
     const nextUrl = new URL(window.location.href);
     const targetOrigin = new URL(authOrigin);
+    if (window.location.origin === targetOrigin.origin) return;
     nextUrl.protocol = targetOrigin.protocol;
     nextUrl.host = targetOrigin.host;
     window.location.replace(nextUrl.toString());

@@ -1,5 +1,5 @@
 import { localizedValue } from "./bilingual";
-import type { ConfidenceLevel, LocalizedText, OkrRecord, OkrType } from "./types";
+import type { ConfidenceLevel, LocalizedText, ObjectiveScope, OkrRecord, OkrType } from "./types";
 
 export type EditableKr = {
   id: string;
@@ -30,6 +30,8 @@ export type EditableObjective = {
   weight: number;
   progress: number | null;
   alignedToId?: string;
+  objectiveScope?: ObjectiveScope;
+  ownerEmail?: string;
   status: "draft" | "published" | "locked";
   keyResults: EditableKr[];
 };
@@ -55,6 +57,8 @@ export function normalizeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwn
       ...objective,
       team: draft.team,
       owner: forceOwner ? owner : objective.owner.trim() || owner,
+      objectiveScope: objective.objectiveScope ?? "team",
+      ownerEmail: normalizeEmail(objective.ownerEmail),
       progress: normalizeNullablePercent(objective.progress),
       weight: normalizePercent(objective.weight, 100),
       keyResults: objective.keyResults.map((kr) => ({
@@ -92,6 +96,8 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
         weight: 100,
         progress: objective.score === null ? calculateProgress(children) : toPercent(objective.score),
         alignedToId: objective.aligned_to_id || undefined,
+        objectiveScope: objective.objective_scope ?? "team",
+        ownerEmail: normalizeEmail(objective.owner_email),
         status: "published",
         keyResults: children.map((kr, krIndex) => ({
           id: kr.okr_id || `${objective.okr_id}-KR${krIndex + 1}`,
@@ -114,12 +120,34 @@ export function recordsToDraft(records: OkrRecord[], team: string, periodId: str
   };
 }
 
-export function filterDraftByOwner(draft: OkrDraft, ownerAliases: string[], fallbackOwner: string): OkrDraft {
+export type DraftObjectiveScope = {
+  objectiveScope: ObjectiveScope;
+  ownerEmail?: string;
+};
+
+export function applyDraftObjectiveScope(draft: OkrDraft, scope: DraftObjectiveScope): OkrDraft {
+  return {
+    ...draft,
+    objectives: draft.objectives.map((objective) => ({
+      ...objective,
+      objectiveScope: scope.objectiveScope,
+      ownerEmail: scope.objectiveScope === "member" ? normalizeEmail(scope.ownerEmail) : undefined
+    }))
+  };
+}
+
+export function filterDraftByOwner(
+  draft: OkrDraft,
+  ownerAliases: string[],
+  fallbackOwner: string,
+  scope?: DraftObjectiveScope
+): OkrDraft {
   const aliases = ownerAliases.map(normalizeToken).filter(Boolean);
   const owner = fallbackOwner.trim() || ownerAliases[0] || draft.team;
   return normalizeDraft({
     ...draft,
     objectives: draft.objectives.filter((objective) => {
+      if (scope && !objectiveMatchesScope(objective, scope)) return false;
       if (aliases.length === 0) return false;
       return aliases.includes(normalizeToken(objective.owner)) ||
         objective.keyResults.some((kr) => aliases.includes(normalizeToken(kr.owner)));
@@ -132,7 +160,8 @@ export function mergeDraftByOwner(
   scopedDraft: OkrDraft,
   owner: string,
   ownerAliases: string[],
-  status: EditableObjective["status"] = "draft"
+  status: EditableObjective["status"] = "draft",
+  scope?: DraftObjectiveScope
 ): OkrDraft {
   const aliases = ownerAliases.map(normalizeToken).filter(Boolean);
   const normalizedScope = normalizeDraft(scopedDraft, owner, true);
@@ -140,6 +169,7 @@ export function mergeDraftByOwner(
     ...current,
     objectives: [
       ...current.objectives.filter((objective) => {
+        if (scope) return !objectiveMatchesScope(objective, scope);
         if (aliases.length === 0) return true;
         return !aliases.includes(normalizeToken(objective.owner)) &&
           !objective.keyResults.some((kr) => aliases.includes(normalizeToken(kr.owner)));
@@ -176,6 +206,8 @@ export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwn
       source_doc_url: "page-edit",
       last_update: today,
       aligned_to_id: objective.alignedToId,
+      objective_scope: objective.objectiveScope ?? "team",
+      owner_email: normalizeEmail(objective.ownerEmail),
       localized: compactLocalizedFields({
         objective: objective.titleLocalized,
         risks: collectLocalizedText(objective.keyResults.map((kr) => kr.risksLocalized)),
@@ -203,6 +235,8 @@ export function draftToRecords(draft: OkrDraft, teamOwner = draft.team, forceOwn
         decisions_needed: kr.decisionsNeeded,
         source_doc_url: "page-edit",
         last_update: today,
+        objective_scope: objective.objectiveScope ?? "team",
+        owner_email: normalizeEmail(objective.ownerEmail),
         localized: compactLocalizedFields({
           objective: objective.titleLocalized,
           kr: kr.titleLocalized,
@@ -259,9 +293,21 @@ export function withExistingLocalizedContent(draft: OkrDraft, existing: OkrDraft
 export function validateDraft(draft: OkrDraft): DraftValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const ids = new Set<string>();
+
+  const validateId = (id: string, label: string) => {
+    const normalizedId = id.trim();
+    if (!normalizedId) {
+      errors.push(`${label}: id is required`);
+      return;
+    }
+    if (ids.has(normalizedId)) errors.push(`${label}: duplicate id ${normalizedId}`);
+    ids.add(normalizedId);
+  };
 
   draft.objectives.forEach((objective, objectiveIndex) => {
     const label = `O${objectiveIndex + 1}`;
+    validateId(objective.id, label);
     if (!objective.title.trim()) errors.push(`${label}: Objective is required`);
     if (!objective.owner.trim()) errors.push(`${label}: Owner is required`);
     if (objective.keyResults.length === 0) errors.push(`${label}: at least one KR is required`);
@@ -278,9 +324,13 @@ export function validateDraft(draft: OkrDraft): DraftValidation {
     if (!topLevelTeams.has(draft.team) && !objective.alignedToId) {
       warnings.push(`${label}: upper-level alignment is recommended`);
     }
+    if (objective.alignedToId && objective.alignedToId === objective.id) {
+      errors.push(`${label}: Objective cannot align to itself`);
+    }
 
     objective.keyResults.forEach((kr, krIndex) => {
       const krLabel = `${label}-KR${krIndex + 1}`;
+      validateId(kr.id, krLabel);
       if (!kr.title.trim()) errors.push(`${krLabel}: KR title is required`);
       if (!kr.owner.trim()) errors.push(`${krLabel}: owner is required`);
       if (kr.progress !== null && !isPercent(kr.progress)) {
@@ -305,6 +355,7 @@ export function createEmptyObjective(team: string, periodId: string, owner = "")
     confidence: "Yellow",
     weight: 100,
     progress: null,
+    objectiveScope: "team",
     status: "draft",
     keyResults: [0, 1, 2].map((_, index) => createEmptyKr(objectiveId, index, owner, 3))
   };
@@ -361,6 +412,18 @@ function slug(value: string) {
 
 function normalizeToken(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizeEmail(value: string | undefined) {
+  const email = value?.trim().toLowerCase();
+  return email || undefined;
+}
+
+function objectiveMatchesScope(objective: EditableObjective, scope: DraftObjectiveScope) {
+  const objectiveScope = objective.objectiveScope ?? "team";
+  if (objectiveScope !== scope.objectiveScope) return false;
+  if (scope.objectiveScope === "team") return true;
+  return normalizeEmail(objective.ownerEmail) === normalizeEmail(scope.ownerEmail);
 }
 
 function collectText(items: string[]) {

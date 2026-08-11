@@ -78,7 +78,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 
 function credentialsLoginEnabled() {
-  return process.env.NODE_ENV !== "production";
+  return process.env.NODE_ENV !== "production" || process.env.OKR_ENABLE_LOCAL_CREDENTIALS === "true";
 }
 
 function getLocalAdminCredentials() {
