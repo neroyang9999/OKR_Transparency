@@ -5,8 +5,14 @@ import { Building2, ChevronRight, Layers3, ZoomIn, ZoomOut } from "lucide-react"
 import { useRef, useState, type PointerEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
+import type { AdminTeam } from "@/lib/admin/config";
 import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
-import { buildAlignmentViewModel, type ObjectiveAlignmentNode } from "@/lib/okr/alignment-view";
+import { buildAlignmentViewModel } from "@/lib/okr/alignment-view";
+import {
+  buildOrganizationAlignmentMap,
+  type ObjectiveAlignmentEdge,
+  type OrganizationMapNode as MapNode
+} from "@/lib/okr/organization-alignment-map";
 import type { OkrRecord } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
 
@@ -15,19 +21,6 @@ const cardHeight = 112;
 const columnGap = 420;
 const rowGap = 104;
 const canvasPadding = 80;
-const teamGroupOrder = ["Software", "Hardware", "Advanced Technology", "AP OPS"];
-
-type MapNode = {
-  id: string;
-  kind: "engineering" | "team" | "objective";
-  label: string;
-  team?: string;
-  objectiveNode?: ObjectiveAlignmentNode;
-  children: MapNode[];
-  objectiveCount: number;
-  keyResultCount: number;
-  averageProgress: number | null;
-};
 
 type PositionedNode = {
   node: MapNode;
@@ -41,11 +34,22 @@ type Connector = {
   to: PositionedNode;
 };
 
-export function OkrMap({ records, lang, selectedTeam }: { records: OkrRecord[]; lang: Lang; selectedTeam?: string }) {
+export function OkrMap({
+  records,
+  teams,
+  lang,
+  selectedTeam
+}: {
+  records: OkrRecord[];
+  teams: AdminTeam[];
+  lang: Lang;
+  selectedTeam?: string;
+}) {
   const model = buildAlignmentViewModel(records, selectedTeam);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-  const hierarchy = buildMapHierarchy(model.roots, lang);
-  const layout = buildMindMapLayout(hierarchy, collapsedIds);
+  const organizationMap = buildOrganizationAlignmentMap(model.roots, teams, lang);
+  const layout = buildMindMapLayout(organizationMap.roots, collapsedIds);
+  const alignmentConnectors = buildAlignmentConnectors(layout.nodes, organizationMap.alignmentEdges);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
@@ -117,6 +121,11 @@ export function OkrMap({ records, lang, selectedTeam }: { records: OkrRecord[]; 
             }}
           >
             <svg className="absolute inset-0 h-full w-full" width={layout.width} height={layout.height} aria-hidden>
+              <defs>
+                <marker id="alignment-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 8 4 L 0 8 z" fill="#3b82f6" />
+                </marker>
+              </defs>
               {layout.connectors.map((connector) => (
                 <path
                   key={`${connector.from.node.id}-${connector.to.node.id}`}
@@ -124,6 +133,17 @@ export function OkrMap({ records, lang, selectedTeam }: { records: OkrRecord[]; 
                   fill="none"
                   stroke="#cbd5e1"
                   strokeWidth="2"
+                />
+              ))}
+              {alignmentConnectors.map((connector) => (
+                <path
+                  key={`alignment:${connector.from.node.id}-${connector.to.node.id}`}
+                  d={alignmentConnectorPath(connector)}
+                  fill="none"
+                  stroke="#3b82f6"
+                  strokeDasharray="7 6"
+                  strokeWidth="2"
+                  markerEnd="url(#alignment-arrow)"
                 />
               ))}
             </svg>
@@ -137,6 +157,12 @@ export function OkrMap({ records, lang, selectedTeam }: { records: OkrRecord[]; 
                 onToggle={() => toggleCollapsed(item.node.id)}
               />
             ))}
+          </div>
+
+          <div className="absolute right-4 top-4 z-20 flex flex-wrap items-center gap-4 rounded-md border border-border bg-white/95 px-3 py-2 text-xs text-slate-600 shadow-subtle backdrop-blur">
+            <span className="inline-flex items-center gap-2"><span className="h-0.5 w-7 bg-slate-300" />{lang === "en" ? "Organization" : "组织归属"}</span>
+            <span className="inline-flex items-center gap-2"><span className="w-7 border-t-2 border-dashed border-blue-500" />{lang === "en" ? "OKR alignment" : "OKR 对齐"}</span>
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />{lang === "en" ? "Unaligned" : "未对齐"}</span>
           </div>
 
           <div className="absolute bottom-4 left-4 z-20 inline-flex items-center gap-2 rounded-md border border-border bg-white px-2 py-2 text-sm text-slate-500 shadow-subtle">
@@ -315,7 +341,9 @@ function ObjectiveNodeCard({ item, lang, collapsed, onToggle }: { item: Position
         )}
         <TypeBadge value={objective.type} />
         <ConfidenceBadge value={objective.confidence} />
-        {item.node.children.length > 0 && <Badge tone="blue">{item.node.children.length}</Badge>}
+        {item.node.alignmentChildCount > 0 && (
+          <Badge tone="blue">{lang === "en" ? `${item.node.alignmentChildCount} aligned` : `${item.node.alignmentChildCount} 个下级对齐`}</Badge>
+        )}
       </div>
     </div>
   );
@@ -404,78 +432,32 @@ function connectorPath({ from, to }: Connector) {
   return `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
 }
 
-function buildMapHierarchy(roots: ObjectiveAlignmentNode[], lang: Lang): MapNode[] {
-  if (roots.length === 0) return [];
-  const teamGroups = new Map<string, ObjectiveAlignmentNode[]>();
-
-  roots.forEach((root) => {
-    const team = root.objective.team || (lang === "en" ? "Other" : "其他");
-    teamGroups.set(team, [...(teamGroups.get(team) ?? []), root]);
-  });
-
-  const teamNodes = Array.from(teamGroups.entries())
-    .sort(([teamA], [teamB]) => teamGroupRank(teamA) - teamGroupRank(teamB) || teamA.localeCompare(teamB))
-    .map(([team, nodes]) => aggregateNode({
-      id: `team:${team}`,
-      kind: "team",
-      label: team,
-      team,
-      children: nodes.map(objectiveToMapNode)
-    }));
-
-  return [aggregateNode({
-    id: "engineering",
-    kind: "engineering",
-    label: "Engineering",
-    children: teamNodes
-  })];
-}
-
-function teamGroupRank(team: string) {
-  const index = teamGroupOrder.indexOf(team);
-  return index === -1 ? teamGroupOrder.length : index;
-}
-
-function objectiveToMapNode(node: ObjectiveAlignmentNode): MapNode {
-  const children = node.children.map(objectiveToMapNode);
-  return aggregateNode({
-    id: `objective:${node.objective.okr_id}`,
-    kind: "objective",
-    label: node.objective.objective,
-    team: node.objective.team,
-    objectiveNode: node,
-    children
+function buildAlignmentConnectors(nodes: PositionedNode[], edges: ObjectiveAlignmentEdge[]): Connector[] {
+  const nodeById = new Map(nodes.map((item) => [item.node.id, item]));
+  return edges.flatMap((edge) => {
+    const from = nodeById.get(edge.fromId);
+    const to = nodeById.get(edge.toId);
+    return from && to ? [{ from, to }] : [];
   });
 }
 
-function aggregateNode(base: Pick<MapNode, "id" | "kind" | "label" | "children"> & Partial<Pick<MapNode, "team" | "objectiveNode">>): MapNode {
-  const selfObjectiveCount = base.kind === "objective" ? 1 : 0;
-  const ownKeyResults = base.objectiveNode?.keyResults.length ?? 0;
-  const childObjectiveCount = base.children.reduce((sum, child) => sum + child.objectiveCount, 0);
-  const childKeyResultCount = base.children.reduce((sum, child) => sum + child.keyResultCount, 0);
-  const progressValues = collectProgressValues(base);
+function alignmentConnectorPath({ from, to }: Connector) {
+  if (Math.abs(from.x - to.x) < cardWidth / 2) {
+    const startX = from.x + cardWidth;
+    const startY = from.y + cardHeight / 2;
+    const endX = to.x + cardWidth;
+    const endY = to.y + cardHeight / 2;
+    const controlX = Math.max(startX, endX) + 64;
+    return `M ${startX} ${startY} C ${controlX} ${startY}, ${controlX} ${endY}, ${endX} ${endY}`;
+  }
 
-  return {
-    id: base.id,
-    kind: base.kind,
-    label: base.label,
-    team: base.team,
-    objectiveNode: base.objectiveNode,
-    children: base.children,
-    objectiveCount: selfObjectiveCount + childObjectiveCount,
-    keyResultCount: ownKeyResults + childKeyResultCount,
-    averageProgress: progressValues.length > 0
-      ? progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length
-      : null
-  };
-}
-
-function collectProgressValues(node: Pick<MapNode, "kind" | "children"> & Partial<Pick<MapNode, "objectiveNode">>): number[] {
-  const ownScore = node.kind === "objective" ? node.objectiveNode?.objective.score : null;
-  return [
-    ...(ownScore === null || ownScore === undefined ? [] : [ownScore]),
-    ...node.children.flatMap((child) => collectProgressValues(child))
-  ];
+  const sourceIsRight = from.x > to.x;
+  const startX = sourceIsRight ? from.x : from.x + cardWidth;
+  const endX = sourceIsRight ? to.x + cardWidth : to.x;
+  const startY = from.y + cardHeight / 2;
+  const endY = to.y + cardHeight / 2;
+  const midX = startX + (endX - startX) * 0.5;
+  return `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
 }
 
 function clampScale(value: number) {

@@ -7,6 +7,10 @@ All notable product changes are recorded here. This project follows Semantic Ver
 - Detect the language actually entered for Objective, KR, risk, and decision text and automatically generate the other Chinese or English version through GCP Cloud Translation.
 - Preserve manually edited translations, keep acronym-only content unchanged, and allow translation failures without blocking the original OKR save.
 
+## v0.7.6 - 2026-08-11
+
+- Keep each Objective under its configured organization hierarchy in the alignment map, while rendering explicit OKR alignment as a separate dashed arrow and leaving unaligned Objectives in their owning team.
+
 ## v0.7.5 - 2026-08-11
 
 - Retry machine translation when source text is unchanged but the target-language value is missing.
