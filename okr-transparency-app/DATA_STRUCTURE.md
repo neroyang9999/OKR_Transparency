@@ -73,6 +73,9 @@ Page editor
 树构建逻辑：
 
 - Objective 的 `parent_id` 为空；KR 的 `parent_id` 指向所属 Objective。
+- KR 与其 `parent_id` 指向的 Objective 必须属于同一个团队，禁止用 `parent_id` 表示跨团队关系。
+- 跨团队关系只允许出现在 Objective 的 `aligned_to_id`；被对齐节点删除时按 `ON DELETE SET NULL` 清空该字段并产生警告。
+- 默认周期发布时，`okrSnapshots/current.records` 与对应 `okrPeriodSnapshots/{periodId}.records` 来自同一个候选数组，不能分别合并生成。
 - Objective 的跨团队对齐写在 `aligned_to_id`，可以指向上级 Objective 或 KR。
 - 发布会检查重复 ID、缺失父节点、缺失对齐目标和循环引用。
 - 即使遇到历史脏数据，`buildOkrTree` 也会把异常记录作为 root 展示，不再静默丢弃。

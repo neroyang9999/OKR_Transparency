@@ -124,6 +124,17 @@ Objective, KR, risk, and decision text supports Chinese and English versions. Th
 
 Publishing validates the complete candidate graph before any public data changes. Structural Objective/KR relationships use `parent_id`; cross-team alignment uses `aligned_to_id`. Every publish stores a team-and-period version, and concurrent updates to the current Firestore snapshot are rejected instead of silently overwriting newer data.
 
+For the active period, one publication candidate is used for both `okrSnapshots/current` and `okrPeriodSnapshots/{periodId}` so the public and period views have the same records. Structural parents must be Objectives in the same team. When a republished parent team removes an alignment target, child-team Objectives are kept but their optional `aligned_to_id` is cleared with a warning (`ON DELETE SET NULL`).
+
+Production OKR data can be inspected and reset without touching admin configuration, users, feedback, or audit events:
+
+```powershell
+npm run reset:firestore-okrs -- --project=knowledge-base-496322
+npm run reset:firestore-okrs -- --project=knowledge-base-496322 --write --confirm=DELETE_PRODUCTION_OKR_DATA
+```
+
+The first command is always read-only. The write command backs up the raw Firestore documents under `data/firestore-reset-backups/`, deletes only OKR snapshots, period snapshots, drafts, progress notes, snapshot versions, and the legacy rollback snapshot, then verifies that none remain.
+
 KR publishing requires an owner, baseline, target, and risk/decision context for Yellow or Red status. Weekly KR updates can change actual value, progress, confidence, risk, next steps, and an evidence link in one action.
 
 Local data repair and migration commands:

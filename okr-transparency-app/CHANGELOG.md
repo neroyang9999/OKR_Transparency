@@ -7,6 +7,12 @@ All notable product changes are recorded here. This project follows Semantic Ver
 - Detect the language actually entered for Objective, KR, risk, and decision text and automatically generate the other Chinese or English version through GCP Cloud Translation.
 - Preserve manually edited translations, keep acronym-only content unchanged, and allow translation failures without blocking the original OKR save.
 
+## v0.7.4 - 2026-08-11
+
+- Enforce same-team Objective/KR parent relationships and reject missing, duplicate, or self-aligned draft IDs before publishing.
+- Build the active-period snapshot and period view from one candidate record set, and clear optional cross-team alignment when its target is removed.
+- Add a dry-run-first Firestore OKR reset command with raw backup and post-delete verification.
+
 ## v0.7.2 - 2026-08-10
 
 - Rename Integration Team / Integration Lead to System Team / System Leader and Platform Team / Platform Lead to Infra Team / Infra Leader without changing personnel assignments.

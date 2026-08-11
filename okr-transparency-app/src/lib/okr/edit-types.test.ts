@@ -44,6 +44,26 @@ describe("OKR edit draft helpers", () => {
     expect(result.errors).toEqual([]);
   });
 
+  it("rejects missing, duplicate, and self-aligned ids before saving", () => {
+    const result = validateDraft({
+      ...draft,
+      objectives: [
+        { ...draft.objectives[0], alignedToId: "SW-O1" },
+        {
+          ...draft.objectives[0],
+          id: "",
+          keyResults: [{ ...draft.objectives[0].keyResults[0], id: "SW-O1" }]
+        }
+      ]
+    });
+
+    expect(result.errors).toEqual(expect.arrayContaining([
+      "O1: Objective cannot align to itself",
+      "O2: id is required",
+      "O2-KR1: duplicate id SW-O1"
+    ]));
+  });
+
   it("converts nested draft data to flat OKR records", () => {
     const records = draftToRecords(draft);
     expect(records).toHaveLength(2);

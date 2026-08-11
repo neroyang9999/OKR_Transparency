@@ -44,6 +44,9 @@ export function validateOkrGraph(records: OkrRecord[]): OkrGraphValidation {
     }
     const parent = record.parent_id ? byId.get(record.parent_id) : undefined;
     if (record.kr && parent?.kr) errors.push(`${record.okr_id}: KR parent must be an Objective`);
+    if (record.kr && parent && parent.team !== record.team) {
+      errors.push(`${record.okr_id}: KR parent must belong to the same team`);
+    }
   });
 
   const checked = new Set<string>();

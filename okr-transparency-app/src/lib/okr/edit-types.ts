@@ -259,9 +259,21 @@ export function withExistingLocalizedContent(draft: OkrDraft, existing: OkrDraft
 export function validateDraft(draft: OkrDraft): DraftValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const ids = new Set<string>();
+
+  const validateId = (id: string, label: string) => {
+    const normalizedId = id.trim();
+    if (!normalizedId) {
+      errors.push(`${label}: id is required`);
+      return;
+    }
+    if (ids.has(normalizedId)) errors.push(`${label}: duplicate id ${normalizedId}`);
+    ids.add(normalizedId);
+  };
 
   draft.objectives.forEach((objective, objectiveIndex) => {
     const label = `O${objectiveIndex + 1}`;
+    validateId(objective.id, label);
     if (!objective.title.trim()) errors.push(`${label}: Objective is required`);
     if (!objective.owner.trim()) errors.push(`${label}: Owner is required`);
     if (objective.keyResults.length === 0) errors.push(`${label}: at least one KR is required`);
@@ -278,9 +290,13 @@ export function validateDraft(draft: OkrDraft): DraftValidation {
     if (!topLevelTeams.has(draft.team) && !objective.alignedToId) {
       warnings.push(`${label}: upper-level alignment is recommended`);
     }
+    if (objective.alignedToId && objective.alignedToId === objective.id) {
+      errors.push(`${label}: Objective cannot align to itself`);
+    }
 
     objective.keyResults.forEach((kr, krIndex) => {
       const krLabel = `${label}-KR${krIndex + 1}`;
+      validateId(kr.id, krLabel);
       if (!kr.title.trim()) errors.push(`${krLabel}: KR title is required`);
       if (!kr.owner.trim()) errors.push(`${krLabel}: owner is required`);
       if (kr.progress !== null && !isPercent(kr.progress)) {

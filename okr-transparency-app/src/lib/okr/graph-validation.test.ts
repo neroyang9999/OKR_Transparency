@@ -24,6 +24,15 @@ describe("OKR graph validation", () => {
     ]));
   });
 
+  it("rejects cross-team structural parents", () => {
+    const result = validateOkrGraph([
+      record("SW-O1", ""),
+      { ...record("QA-KR1", "SW-O1"), team: "QA Team", kr: "QA result" }
+    ]);
+
+    expect(result.errors).toContain("QA-KR1: KR parent must belong to the same team");
+  });
+
   it("keeps advanced KR details optional while still tracking required ownership", () => {
     const incomplete = { ...record("KR1", "O1"), kr: "Measure result", baseline: "", target: "", confidence: "Yellow" as const };
     expect(validateOkrGraph([record("O1", ""), incomplete]).errors).toEqual([]);

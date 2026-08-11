@@ -9,6 +9,7 @@ data/okr-drafts.json
 data/okr-period-snapshots.json
 data/okr-feedback.json
 data/repair-backups/
+data/firestore-reset-backups/
 coverage
 deploy/terraform/.terraform
 deploy/terraform/.terraform.lock.hcl
