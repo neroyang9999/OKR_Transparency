@@ -28,6 +28,18 @@ it("turns missing operational state into actionable attention items", () => {
   expect(summary.attention.map((item) => item.id)).toEqual(expect.arrayContaining(["single-admin", "unpublished-teams"]));
 });
 
+it("hides stale weekly-update health when progress notes are disabled", () => {
+  const staleKr = { ...objective, okr_id: "SW-KR1", parent_id: "SW-O1", kr: "Ship", last_update: "2026-01-01" };
+  const summary = getAdminRuntimeSummary(
+    { ...config, settings: { ...config.settings, allowProgressNotes: false } },
+    [],
+    [objective, staleKr]
+  );
+
+  expect(summary.quality.staleCount).toBe(0);
+  expect(summary.attention.some((item) => item.id === "stale-krs")).toBe(false);
+});
+
 it("describes the impact of restoring a version", () => {
   const current = [{ ...objective, owner: "Current Lead" }, { ...objective, okr_id: "SW-O2", objective: "Remove me" }];
   const target = [{ ...objective, owner: "Previous Lead" }, { ...objective, okr_id: "SW-O3", objective: "Restore me" }];

@@ -63,7 +63,7 @@ export default async function HomePage({
 
   const [data, progressNotes] = await Promise.all([
     getOkrTreeResponse(),
-    readProgressNotes()
+    adminConfig.settings.allowProgressNotes ? readProgressNotes() : Promise.resolve([])
   ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
@@ -176,19 +176,26 @@ export default async function HomePage({
               ))}
             </div>
           )}
-          {(qualityStats.missingOwnerCount > 0 || qualityStats.staleCount > 0) && (
+          {(qualityStats.missingOwnerCount > 0 || (adminConfig.settings.allowProgressNotes && qualityStats.staleCount > 0)) && (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <span className="font-semibold">{lang === "en" ? "Data quality attention" : "数据质量待处理"}</span>
               <span className="ml-2">
                 {lang === "en"
-                  ? `${qualityStats.missingOwnerCount} KRs missing an owner, ${qualityStats.staleCount} stale.`
-                  : `${qualityStats.missingOwnerCount} 个 KR 缺少负责人，${qualityStats.staleCount} 个超过 14 天未更新。`}
+                  ? [
+                      qualityStats.missingOwnerCount > 0 ? `${qualityStats.missingOwnerCount} KRs missing an owner` : "",
+                      adminConfig.settings.allowProgressNotes && qualityStats.staleCount > 0 ? `${qualityStats.staleCount} stale` : ""
+                    ].filter(Boolean).join(", ") + "."
+                  : [
+                      qualityStats.missingOwnerCount > 0 ? `${qualityStats.missingOwnerCount} 个 KR 缺少负责人` : "",
+                      adminConfig.settings.allowProgressNotes && qualityStats.staleCount > 0 ? `${qualityStats.staleCount} 个超过 14 天未更新` : ""
+                    ].filter(Boolean).join("，") + "。"}
               </span>
             </div>
           )}
           <OkrDetailDrawer
             records={periodRecords}
             progressNotes={progressNotes}
+            showProgressNotes={adminConfig.settings.allowProgressNotes}
             selectedPeriod={selectedPeriod}
             selectedDetailId={detail}
             lang={lang}

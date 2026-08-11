@@ -44,7 +44,9 @@ export function buildActionCenter(input: {
 
   return {
     ownedKrs,
-    staleKrs: ownedKrs.filter((item) => item.isStale).sort(compareOldestActivity),
+    staleKrs: input.config.settings.allowProgressNotes
+      ? ownedKrs.filter((item) => item.isStale).sort(compareOldestActivity)
+      : [],
     attentionKrs: ownedKrs
       .filter(({ record }) => record.confidence !== "Green" || Boolean(record.risks.trim()) || Boolean(record.decisions_needed.trim()))
       .sort(compareAttention),

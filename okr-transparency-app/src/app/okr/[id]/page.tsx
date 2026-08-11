@@ -40,7 +40,10 @@ export default async function OkrDetailPage({
 
   const parent = record.parent_id ? snapshot.records.find((item) => item.okr_id === record.parent_id) : null;
   const children = snapshot.records.filter((item) => item.parent_id === record.okr_id);
-  const progressNotes = await readProgressNotesForObjective(record.team, pageAccess.adminConfig.defaultPeriodId, record.okr_id);
+  const showProgressNotes = pageAccess.adminConfig.settings.allowProgressNotes;
+  const progressNotes = showProgressNotes
+    ? await readProgressNotesForObjective(record.team, pageAccess.adminConfig.defaultPeriodId, record.okr_id)
+    : [];
   const title = record.kr || record.objective;
   const populatedDetailFields = getPopulatedOkrDetailFields(record);
 
@@ -82,15 +85,17 @@ export default async function OkrDetailPage({
 
       <div className={`mt-5 grid gap-5 ${populatedDetailFields.length > 0 ? "xl:grid-cols-[1fr_360px]" : ""}`}>
         <section className="space-y-5">
-          <DetailSection title={lang === "en" ? "Weekly Progress History" : "周进展完整历史"}>
-            {progressNotes.length === 0 ? (
-              <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                {lang === "en" ? "No weekly progress records yet." : "还没有周进展记录。"}
-              </div>
-            ) : (
-              <WeeklyHistory notes={progressNotes} lang={lang} />
-            )}
-          </DetailSection>
+          {showProgressNotes && (
+            <DetailSection title={lang === "en" ? "Weekly Progress History" : "周进展完整历史"}>
+              {progressNotes.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  {lang === "en" ? "No weekly progress records yet." : "还没有周进展记录。"}
+                </div>
+              ) : (
+                <WeeklyHistory notes={progressNotes} lang={lang} />
+              )}
+            </DetailSection>
+          )}
 
           {children.length > 0 && (
             <DetailSection title={record.kr ? (lang === "en" ? "Linked Items" : "关联项") : "KR"}>
