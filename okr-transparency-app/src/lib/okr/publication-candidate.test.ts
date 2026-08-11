@@ -44,6 +44,31 @@ describe("publication candidate", () => {
     expect(next.records.map((record) => record.okr_id)).toEqual(["TPM-B-O1", "TPM-B-O1-KR1", "TPM-A-O2", "TPM-A-O2-KR1"]);
     expect(validateOkrGraph(next.records).errors).toEqual([]);
   });
+
+  it("refills a member scope without deleting a same-owner team Objective", () => {
+    const current = [
+      { ...objective("TPM-TEAM-O1", "TPM Team"), owner: "TPM Lead", objective_scope: "team" as const },
+      { ...kr("TPM-TEAM-O1-KR1", "TPM-TEAM-O1", "TPM Team"), owner: "TPM Lead", objective_scope: "team" as const },
+      { ...objective("TPM-MEMBER-O1", "TPM Team"), owner: "TPM Lead", objective_scope: "member" as const, owner_email: "lead@unitxlabs.com" },
+      { ...kr("TPM-MEMBER-O1-KR1", "TPM-MEMBER-O1", "TPM Team"), owner: "TPM Lead", objective_scope: "member" as const, owner_email: "lead@unitxlabs.com" }
+    ];
+    const published = [
+      { ...objective("TPM-MEMBER-O2", "TPM Team"), owner: "TPM Lead", objective_scope: "member" as const, owner_email: "lead@unitxlabs.com" },
+      { ...kr("TPM-MEMBER-O2-KR1", "TPM-MEMBER-O2", "TPM Team"), owner: "TPM Lead", objective_scope: "member" as const, owner_email: "lead@unitxlabs.com" }
+    ];
+    const next = buildPublicationCandidate(current, published, {
+      team: "TPM Team",
+      objectiveScope: "member",
+      ownerEmail: "lead@unitxlabs.com"
+    });
+
+    expect(next.records.map((record) => record.okr_id)).toEqual([
+      "TPM-TEAM-O1",
+      "TPM-TEAM-O1-KR1",
+      "TPM-MEMBER-O2",
+      "TPM-MEMBER-O2-KR1"
+    ]);
+  });
 });
 
 function objective(okr_id: string, team: string): OkrRecord {

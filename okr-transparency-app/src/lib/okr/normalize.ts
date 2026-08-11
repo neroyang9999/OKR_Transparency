@@ -1,8 +1,10 @@
 import {
   confidenceLevels,
+  objectiveScopes,
   okrLevels,
   okrTypes,
   type ConfidenceLevel,
+  type ObjectiveScope,
   type OkrRecord,
   type OkrType,
   type ValidationResult
@@ -31,6 +33,7 @@ export function normalizeAndValidate(rows: RawOkrRecord[]): ValidationResult {
     const confidence = value(row.confidence);
     const scoreText = value(row.score);
     const score = scoreText ? Number(scoreText) : null;
+    const objectiveScope = value(row.objective_scope) || "team";
 
     if (!okrLevels.includes(level as OkrRecord["level"])) {
       errors.push(`${rowLabel}: invalid level "${level}"`);
@@ -40,6 +43,9 @@ export function normalizeAndValidate(rows: RawOkrRecord[]): ValidationResult {
     }
     if (!confidenceLevels.includes(confidence as ConfidenceLevel)) {
       errors.push(`${rowLabel}: invalid confidence "${confidence}"`);
+    }
+    if (!objectiveScopes.includes(objectiveScope as ObjectiveScope)) {
+      errors.push(`${rowLabel}: invalid objective_scope "${objectiveScope}"`);
     }
     if (score !== null && (!Number.isFinite(score) || score < 0 || score > 1)) {
       errors.push(`${rowLabel}: score must be empty or a number between 0 and 1`);
@@ -83,7 +89,9 @@ export function normalizeAndValidate(rows: RawOkrRecord[]): ValidationResult {
       decisions_needed: value(row.decisions_needed),
       source_doc_url: source,
       last_update: lastUpdate,
-      aligned_to_id: alignedToId || undefined
+      aligned_to_id: alignedToId || undefined,
+      objective_scope: objectiveScope as ObjectiveScope,
+      owner_email: value(row.owner_email) || undefined
     });
   });
 

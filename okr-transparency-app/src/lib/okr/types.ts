@@ -1,10 +1,12 @@
 export const okrLevels = ["Engineering", "Team"] as const;
 export const okrTypes = ["Committed", "Aspirational", "Learning"] as const;
 export const confidenceLevels = ["Green", "Yellow", "Red"] as const;
+export const objectiveScopes = ["team", "member"] as const;
 
 export type OkrLevel = (typeof okrLevels)[number];
 export type OkrType = (typeof okrTypes)[number];
 export type ConfidenceLevel = (typeof confidenceLevels)[number];
+export type ObjectiveScope = (typeof objectiveScopes)[number];
 
 export type ContentLanguage = "zh" | "en" | "neutral";
 export type TranslationOrigin = "manual" | "machine";
@@ -44,6 +46,8 @@ export type OkrRecord = {
   source_doc_url: string;
   last_update: string;
   aligned_to_id?: string;
+  objective_scope?: ObjectiveScope;
+  owner_email?: string;
   localized?: OkrLocalizedFields;
 };
 

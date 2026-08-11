@@ -15,7 +15,7 @@ vi.mock("@/lib/admin/permissions", () => ({
 vi.mock("@/lib/okr/drafts", () => ({ publishDraft: vi.fn() }));
 vi.mock("@/lib/okr/owner-scope", () => ({
   ownerScopeForMember: vi.fn(),
-  ownerScopeForTeam: vi.fn(() => ({ owner: "TPM Lead", aliases: ["TPM Lead", "TPM Manager", "lead@unitxlabs.com"] }))
+  ownerScopeForTeam: vi.fn(() => ({ owner: "TPM Lead", aliases: ["TPM Lead", "TPM Manager", "lead@unitxlabs.com"], objectiveScope: "team" }))
 }));
 vi.mock("@/lib/okr/store", () => ({ SnapshotConflictError: class SnapshotConflictError extends Error {} }));
 

@@ -4,8 +4,12 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
-- Detect the language actually entered for Objective, KR, risk, and decision text and automatically generate the other Chinese or English version through GCP Cloud Translation.
-- Preserve manually edited translations, keep acronym-only content unchanged, and allow translation failures without blocking the original OKR save.
+## v0.7.7 - 2026-08-11
+
+- Separate team and member Objectives with explicit scope and owner-email fields so refilling one scope cannot overwrite the other.
+- Center each visual child group around its parent, indent child teams without changing organization ownership, and prevent nodes in shared columns from overlapping.
+- Show member Objectives after their team Objective, collapsed by default, and keep zoom controls fixed to the lower-left viewport while the map is dragged.
+- Allow explicitly enabled local credentials to remain on the same origin for stable local production-mode testing.
 
 ## v0.7.6 - 2026-08-11
 

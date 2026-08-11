@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
+import { applyDraftObjectiveScope, draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
 
 const draft: OkrDraft = {
   version: 1,
@@ -70,6 +70,19 @@ describe("OKR edit draft helpers", () => {
     expect(records[0]).toMatchObject({ okr_id: "SW-O1", parent_id: "", aligned_to_id: "ENG-O1", kr: "", score: 0.5 });
     expect(records[1]).toMatchObject({ okr_id: "SW-O1-KR1", parent_id: "SW-O1", score: 0.5 });
     expect(records[1]).not.toHaveProperty("aligned_to_id");
+    expect(records[0]).toMatchObject({ objective_scope: "team" });
+  });
+
+  it("persists member scope and email on the Objective and all of its KRs", () => {
+    const memberDraft = applyDraftObjectiveScope(draft, {
+      objectiveScope: "member",
+      ownerEmail: "MEMBER@UNITXLABS.COM"
+    });
+    const records = draftToRecords(memberDraft);
+
+    expect(records).toHaveLength(2);
+    expect(records.every((record) => record.objective_scope === "member")).toBe(true);
+    expect(records.every((record) => record.owner_email === "member@unitxlabs.com")).toBe(true);
   });
 
   it("uses KR weighted progress for objective records", () => {
@@ -240,5 +253,31 @@ describe("OKR edit draft helpers", () => {
     const teamDraft = filterDraftByOwner(mixedDraft, ["Software Lead"], "Software Lead");
 
     expect(teamDraft.objectives.map((objective) => objective.id)).toEqual(["SW-O1"]);
+  });
+
+  it("keeps team and member Objectives separate even when they have the same owner", () => {
+    const sameOwnerDraft: OkrDraft = {
+      ...draft,
+      objectives: [
+        { ...draft.objectives[0], objectiveScope: "team" },
+        { ...draft.objectives[0], id: "SW-MEMBER-O1", objectiveScope: "member", ownerEmail: "lead@unitxlabs.com" }
+      ]
+    };
+    const teamScope = { objectiveScope: "team" as const };
+    const memberScope = { objectiveScope: "member" as const, ownerEmail: "lead@unitxlabs.com" };
+
+    expect(filterDraftByOwner(sameOwnerDraft, ["Software Lead"], "Software Lead", teamScope).objectives.map((objective) => objective.id)).toEqual(["SW-O1"]);
+    expect(filterDraftByOwner(sameOwnerDraft, ["Software Lead"], "Software Lead", memberScope).objectives.map((objective) => objective.id)).toEqual(["SW-MEMBER-O1"]);
+
+    const replaced = mergeDraftByOwner(
+      sameOwnerDraft,
+      { ...sameOwnerDraft, objectives: [{ ...sameOwnerDraft.objectives[1], title: "Refilled member Objective" }] },
+      "Software Lead",
+      ["Software Lead"],
+      "draft",
+      memberScope
+    );
+    expect(replaced.objectives.find((objective) => objective.id === "SW-O1")?.title).toBe("Improve software quality");
+    expect(replaced.objectives.find((objective) => objective.id === "SW-MEMBER-O1")?.title).toBe("Refilled member Objective");
   });
 });

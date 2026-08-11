@@ -52,6 +52,7 @@ describe("organization alignment map", () => {
     expect(aligned.alignmentEdges).toEqual([
       { fromId: "objective:TPM-O1", toId: "objective:SW-O1" }
     ]);
+    expect(child(child(aligned.roots[0], "team:Software"), "team:TPM Team").visualIndent).toBe(1);
   });
 
   it("applies the same organization rule to every Software child team", () => {
@@ -78,6 +79,31 @@ describe("organization alignment map", () => {
 
     expect(map.roots[0].children.map((node) => node.id)).toEqual(["team:Software", "team:Hardware"]);
   });
+
+  it("places member Objectives after their team Objective and collapses them by default", () => {
+    const map = buildMap([
+      record("SW-O1", "Software"),
+      record("TPM-O1", "TPM Team", "SW-O1"),
+      record("TPM-M1-O1", "TPM Team", "TPM-O1", "member", "member@unitxlabs.com")
+    ]);
+    const teamObjective = child(child(child(map.roots[0], "team:Software"), "team:TPM Team"), "objective:TPM-O1");
+
+    expect(teamObjective.children.map((node) => node.id)).toEqual(["objective:TPM-M1-O1"]);
+    expect(map.defaultCollapsedIds).toContain("objective:TPM-O1");
+  });
+
+  it("keeps an unaligned member Objective in a collapsed member group", () => {
+    const map = buildMap([
+      record("SW-O1", "Software"),
+      record("TPM-O1", "TPM Team", "SW-O1"),
+      record("TPM-M1-O1", "TPM Team", "", "member", "member@unitxlabs.com")
+    ]);
+    const tpm = child(child(map.roots[0], "team:Software"), "team:TPM Team");
+    const memberGroup = child(tpm, "member-group:TPM Team");
+
+    expect(memberGroup.children.map((node) => node.id)).toEqual(["objective:TPM-M1-O1"]);
+    expect(map.defaultCollapsedIds).toContain("member-group:TPM Team");
+  });
 });
 
 function buildMap(records: OkrRecord[]) {
@@ -103,11 +129,19 @@ function team(id: string, name: string, parentTeam = ""): AdminTeam {
   return { id, name, parentTeam, owner: `${name} Lead`, color: "blue", enabled: true };
 }
 
-function record(okrId: string, teamName: string, alignedToId = ""): OkrRecord {
+function record(
+  okrId: string,
+  teamName: string,
+  alignedToId = "",
+  objectiveScope: OkrRecord["objective_scope"] = "team",
+  ownerEmail = ""
+): OkrRecord {
   return {
     okr_id: okrId,
     parent_id: "",
     aligned_to_id: alignedToId,
+    objective_scope: objectiveScope,
+    owner_email: ownerEmail || undefined,
     level: "Team",
     team: teamName,
     objective: `${teamName} objective`,

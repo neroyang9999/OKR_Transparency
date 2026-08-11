@@ -17,6 +17,7 @@ describe("OKR owner scopes", () => {
     const scope = ownerScopeForTeam(config, "TPM Team");
 
     expect(scope?.owner).toBe("Team Leader");
+    expect(scope?.objectiveScope).toBe("team");
     expect(scope?.aliases).toEqual(expect.arrayContaining(["TPM Lead", "Team Leader", "lead@unitxlabs.com"]));
     expect(scope?.aliases).not.toContain("Yang Luo");
   });
@@ -24,7 +25,9 @@ describe("OKR owner scopes", () => {
   it("resolves a member only inside the configured team", () => {
     expect(ownerScopeForMember(config, "TPM Team", "YANG.LUO@UNITXLABS.COM")).toEqual({
       owner: "Yang Luo",
-      aliases: ["Yang Luo", "yang.luo@unitxlabs.com"]
+      aliases: ["Yang Luo", "yang.luo@unitxlabs.com"],
+      objectiveScope: "member",
+      ownerEmail: "yang.luo@unitxlabs.com"
     });
     expect(ownerScopeForMember(config, "QA Team", "yang.luo@unitxlabs.com")).toBeNull();
   });

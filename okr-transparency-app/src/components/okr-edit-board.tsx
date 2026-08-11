@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
-import { calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
+import { applyDraftObjectiveScope, calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
 import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
@@ -45,7 +45,13 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const canEditDraft = ownerScoped ? policy.canEdit : policy.canPublish;
   const canPublishDraft = ownerScoped ? canEditDraft : policy.canPublish;
   const defaultAlignmentId = ownerScoped ? alignmentOptions[0]?.id : undefined;
-  const [draft, setDraft] = useState(() => withDefaultAlignment(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), defaultAlignmentId));
+  const objectiveScope = ownerScoped
+    ? { objectiveScope: "member" as const, ownerEmail }
+    : { objectiveScope: "team" as const };
+  const [draft, setDraft] = useState(() => withDefaultAlignment(
+    applyDraftObjectiveScope(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), objectiveScope),
+    defaultAlignmentId
+  ));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -96,6 +102,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         ...current.objectives,
         {
           ...createEmptyObjective(current.team, current.periodId, fixedOwner),
+          ...objectiveScope,
           alignedToId: defaultAlignmentId
         }
       ]
@@ -240,8 +247,9 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                     disabled={objectiveLocked}
                   />
                 </div>
-                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="mt-3 grid gap-2 md:grid-cols-4">
                   <ReadOnlyField label={copy.owner} value={fixedOwner} />
+                  <ReadOnlyField label={lang === "en" ? "Scope" : "目标范围"} value={ownerScoped ? (lang === "en" ? "Member Objective" : "成员 Objective") : (lang === "en" ? "Team Objective" : "团队 Objective")} />
                   <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} />
                   <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} />
                 </div>

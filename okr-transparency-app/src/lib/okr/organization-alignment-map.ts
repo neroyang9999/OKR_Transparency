@@ -6,10 +6,11 @@ const preferredTopLevelOrder = ["Software", "Hardware", "Advanced Technology", "
 
 export type OrganizationMapNode = {
   id: string;
-  kind: "engineering" | "team" | "objective";
+  kind: "engineering" | "team" | "objective" | "member-group";
   label: string;
   team?: string;
   objectiveNode?: ObjectiveAlignmentNode;
+  visualIndent?: number;
   children: OrganizationMapNode[];
   alignmentChildCount: number;
   objectiveCount: number;
@@ -25,6 +26,7 @@ export type ObjectiveAlignmentEdge = {
 export type OrganizationAlignmentMap = {
   roots: OrganizationMapNode[];
   alignmentEdges: ObjectiveAlignmentEdge[];
+  defaultCollapsedIds: string[];
 };
 
 export function buildOrganizationAlignmentMap(
@@ -32,7 +34,7 @@ export function buildOrganizationAlignmentMap(
   teams: AdminTeam[],
   lang: Lang
 ): OrganizationAlignmentMap {
-  if (alignmentRoots.length === 0) return { roots: [], alignmentEdges: [] };
+  if (alignmentRoots.length === 0) return { roots: [], alignmentEdges: [], defaultCollapsedIds: [] };
 
   const objectiveNodes = flattenObjectiveNodes(alignmentRoots);
   const objectivesByTeam = new Map<string, ObjectiveAlignmentNode[]>();
@@ -54,24 +56,27 @@ export function buildOrganizationAlignmentMap(
     .sort();
 
   const teamNodes = [
-    ...configuredRootTeams.map((team) => buildTeamNode(team, enabledTeams, visibleTeamNames, objectivesByTeam)),
+    ...configuredRootTeams.map((team) => buildTeamNode(team, enabledTeams, visibleTeamNames, objectivesByTeam, lang)),
     ...unconfiguredTeams.map((team) => aggregateNode({
       id: `team:${team}`,
       kind: "team",
       label: team,
       team,
-      children: (objectivesByTeam.get(team) ?? []).map(objectiveToMapNode)
+      children: buildObjectiveChildren(team, objectivesByTeam.get(team) ?? [], lang)
     }))
   ];
 
-  return {
-    roots: [aggregateNode({
+  const roots = [aggregateNode({
       id: "engineering",
       kind: "engineering",
       label: "Engineering",
       children: teamNodes
-    })],
-    alignmentEdges: collectAlignmentEdges(alignmentRoots)
+    })];
+
+  return {
+    roots,
+    alignmentEdges: collectAlignmentEdges(alignmentRoots),
+    defaultCollapsedIds: collectDefaultCollapsedIds(roots)
   };
 }
 
@@ -113,15 +118,17 @@ function buildTeamNode(
   team: AdminTeam,
   teams: AdminTeam[],
   visibleTeamNames: Set<string>,
-  objectivesByTeam: Map<string, ObjectiveAlignmentNode[]>
+  objectivesByTeam: Map<string, ObjectiveAlignmentNode[]>,
+  lang: Lang
 ): OrganizationMapNode {
-  const objectiveChildren = (objectivesByTeam.get(team.name) ?? [])
-    .sort((a, b) => a.objective.okr_id.localeCompare(b.objective.okr_id))
-    .map(objectiveToMapNode);
+  const objectiveChildren = buildObjectiveChildren(team.name, objectivesByTeam.get(team.name) ?? [], lang);
   const teamChildren = teams
     .filter((candidate) => candidate.parentTeam === team.name && visibleTeamNames.has(candidate.name))
     .sort(compareTeams)
-    .map((candidate) => buildTeamNode(candidate, teams, visibleTeamNames, objectivesByTeam));
+    .map((candidate) => ({
+      ...buildTeamNode(candidate, teams, visibleTeamNames, objectivesByTeam, lang),
+      visualIndent: 1
+    }));
 
   return aggregateNode({
     id: `team:${team.name}`,
@@ -149,7 +156,7 @@ function collectAlignmentEdges(roots: ObjectiveAlignmentNode[]) {
   return edges;
 }
 
-function objectiveToMapNode(node: ObjectiveAlignmentNode): OrganizationMapNode {
+function objectiveToMapNode(node: ObjectiveAlignmentNode, children: OrganizationMapNode[] = []): OrganizationMapNode {
   return aggregateNode({
     id: `objective:${node.objective.okr_id}`,
     kind: "objective",
@@ -157,13 +164,54 @@ function objectiveToMapNode(node: ObjectiveAlignmentNode): OrganizationMapNode {
     team: node.objective.team,
     objectiveNode: node,
     alignmentChildCount: node.children.length,
-    children: []
+    children
   });
+}
+
+function buildObjectiveChildren(team: string, nodes: ObjectiveAlignmentNode[], lang: Lang) {
+  const teamObjectives = nodes
+    .filter((node) => (node.objective.objective_scope ?? "team") === "team")
+    .sort((a, b) => a.objective.okr_id.localeCompare(b.objective.okr_id));
+  const displayedMemberIds = new Set<string>();
+  const objectives = teamObjectives.map((node) => {
+    const memberChildren = node.children
+      .filter((child) => child.objective.team === team && child.objective.objective_scope === "member")
+      .sort((a, b) => a.objective.okr_id.localeCompare(b.objective.okr_id));
+    memberChildren.forEach((child) => displayedMemberIds.add(child.objective.okr_id));
+    return objectiveToMapNode(node, memberChildren.map((child) => objectiveToMapNode(child)));
+  });
+  const remainingMembers = nodes
+    .filter((node) => node.objective.objective_scope === "member" && !displayedMemberIds.has(node.objective.okr_id))
+    .sort((a, b) => a.objective.okr_id.localeCompare(b.objective.okr_id));
+
+  if (remainingMembers.length === 0) return objectives;
+  return [
+    ...objectives,
+    aggregateNode({
+      id: `member-group:${team}`,
+      kind: "member-group",
+      label: lang === "en" ? "Member Objectives (unaligned)" : "成员 Objective（未对齐）",
+      team,
+      children: remainingMembers.map((node) => objectiveToMapNode(node))
+    })
+  ];
+}
+
+function collectDefaultCollapsedIds(roots: OrganizationMapNode[]) {
+  const ids: string[] = [];
+  const visit = (node: OrganizationMapNode) => {
+    if (node.kind === "member-group" || (node.kind === "objective" && node.children.some((child) => child.objectiveNode?.objective.objective_scope === "member"))) {
+      ids.push(node.id);
+    }
+    node.children.forEach(visit);
+  };
+  roots.forEach(visit);
+  return ids;
 }
 
 function aggregateNode(
   base: Pick<OrganizationMapNode, "id" | "kind" | "label" | "children">
-    & Partial<Pick<OrganizationMapNode, "team" | "objectiveNode" | "alignmentChildCount">>
+    & Partial<Pick<OrganizationMapNode, "team" | "objectiveNode" | "alignmentChildCount" | "visualIndent">>
 ): OrganizationMapNode {
   const selfObjectiveCount = base.kind === "objective" ? 1 : 0;
   const ownKeyResults = base.objectiveNode?.keyResults.length ?? 0;
@@ -177,6 +225,7 @@ function aggregateNode(
     label: base.label,
     team: base.team,
     objectiveNode: base.objectiveNode,
+    visualIndent: base.visualIndent,
     children: base.children,
     alignmentChildCount: base.alignmentChildCount ?? 0,
     objectiveCount: selfObjectiveCount + childObjectiveCount,

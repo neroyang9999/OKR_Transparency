@@ -267,6 +267,8 @@ function objectiveWithoutKrs(objective: EditableObjective) {
     weight: objective.weight,
     progress: objective.progress,
     alignedToId: objective.alignedToId,
+    objectiveScope: objective.objectiveScope,
+    ownerEmail: objective.ownerEmail,
     status: objective.status
   };
 }

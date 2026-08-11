@@ -11,6 +11,7 @@ import { validateOkrGraph, validateOkrRecordQuality } from "./graph-validation";
 import { buildPublicationCandidate } from "./publication-candidate";
 import { readSnapshotVersion, writeSnapshotVersion } from "./snapshot-versions";
 import { canonicalOwnerName, canonicalTeamName, legacyTeamNamesFor } from "../team-names";
+import type { OkrOwnerScope } from "./owner-scope";
 
 const dataDir = path.join(process.cwd(), "data");
 const draftPath = path.join(dataDir, "okr-drafts.json");
@@ -82,19 +83,19 @@ export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceO
   return nextDraft;
 }
 
-export async function writeOwnerScopedDraft(draft: OkrDraft, owner: string, ownerAliases: string[]) {
+export async function writeOwnerScopedDraft(draft: OkrDraft, ownerScope: OkrOwnerScope) {
   const current = await readDraft(draft.team, draft.periodId);
   const nextDraft: OkrDraft = {
-    ...mergeDraftByOwner(current, draft, owner, ownerAliases),
+    ...mergeDraftByOwner(current, draft, ownerScope.owner, ownerScope.aliases, "draft", ownerScope),
     updatedAt: new Date().toISOString(),
   };
 
-  return writeDraft(nextDraft, owner, false, true);
+  return writeDraft(nextDraft, ownerScope.owner, false, true);
 }
 
-export async function publishDraft(team: string, periodId: string, teamOwner = team, ownerScope?: { owner: string; aliases: string[] }, actor = teamOwner): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
+export async function publishDraft(team: string, periodId: string, teamOwner = team, ownerScope?: OkrOwnerScope, actor = teamOwner): Promise<{ snapshot: OkrSnapshot; errors: string[]; warnings: string[] }> {
   const draft = await readDraft(team, periodId);
-  const publishableDraft = ownerScope ? filterDraftByOwner(draft, ownerScope.aliases, ownerScope.owner) : draft;
+  const publishableDraft = ownerScope ? filterDraftByOwner(draft, ownerScope.aliases, ownerScope.owner, ownerScope) : draft;
   const validation = validateDraft(publishableDraft);
   if (validation.errors.length > 0) {
     return { snapshot: await readOkrSnapshot(), ...validation };
@@ -114,7 +115,9 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
     : currentPeriodRecords ?? [];
   const candidate = buildPublicationCandidate(currentRecords, publishedRecords, {
     team,
-    ownerAliases: ownerScope?.aliases
+    ownerAliases: ownerScope?.aliases,
+    objectiveScope: ownerScope?.objectiveScope,
+    ownerEmail: ownerScope?.ownerEmail
   });
   const nextPeriodRecords = candidate.records;
   const nextRecords = periodId === defaultPeriodId ? nextPeriodRecords : current.records;
@@ -151,7 +154,7 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
   await writePeriodRecords(periodId, nextPeriodRecords);
   await writeDraft({
     ...(ownerScope
-      ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published")
+      ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published", ownerScope)
       : {
           ...draft,
           objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
@@ -324,7 +327,13 @@ function periodDocumentPath(periodId: string) {
 }
 
 function canonicalizeRecord(record: OkrSnapshot["records"][number]) {
-  return { ...record, team: canonicalTeamName(record.team), owner: canonicalOwnerName(record.owner) };
+  return {
+    ...record,
+    team: canonicalTeamName(record.team),
+    owner: canonicalOwnerName(record.owner),
+    objective_scope: record.objective_scope ?? "team",
+    owner_email: record.owner_email?.trim().toLowerCase() || undefined
+  };
 }
 
 function canonicalizeDraft(draft: OkrDraft): OkrDraft {
@@ -336,6 +345,8 @@ function canonicalizeDraft(draft: OkrDraft): OkrDraft {
       ...objective,
       team,
       owner: canonicalOwnerName(objective.owner),
+      objectiveScope: objective.objectiveScope ?? "team",
+      ownerEmail: objective.ownerEmail?.trim().toLowerCase() || undefined,
       keyResults: objective.keyResults.map((kr) => ({ ...kr, owner: canonicalOwnerName(kr.owner) }))
     }))
   };

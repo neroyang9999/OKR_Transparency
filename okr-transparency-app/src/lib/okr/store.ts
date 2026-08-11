@@ -90,7 +90,9 @@ function canonicalizeSnapshot(snapshot: OkrSnapshot): OkrSnapshot {
     records: snapshot.records.map((record) => ({
       ...record,
       team: canonicalTeamName(record.team),
-      owner: canonicalOwnerName(record.owner)
+      owner: canonicalOwnerName(record.owner),
+      objective_scope: record.objective_scope ?? "team",
+      owner_email: record.owner_email?.trim().toLowerCase() || undefined
     }))
   };
 }

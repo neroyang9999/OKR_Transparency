@@ -3,6 +3,8 @@ import type { OkrRecord } from "./types";
 export type PublishScope = {
   team: string;
   ownerAliases?: string[];
+  objectiveScope?: OkrRecord["objective_scope"];
+  ownerEmail?: string;
 };
 
 export function buildPublicationCandidate(
@@ -13,6 +15,13 @@ export function buildPublicationCandidate(
   const aliases = (scope.ownerAliases ?? []).map(normalizeToken).filter(Boolean);
   const removesRecord = (record: OkrRecord) => {
     if (record.team !== scope.team) return false;
+    if (scope.objectiveScope) {
+      if ((record.objective_scope ?? "team") !== scope.objectiveScope) return false;
+      if (scope.objectiveScope === "member") {
+        return normalizeToken(record.owner_email ?? "") === normalizeToken(scope.ownerEmail ?? "");
+      }
+      return true;
+    }
     if (aliases.length === 0) return true;
     return aliases.includes(normalizeToken(record.owner));
   };

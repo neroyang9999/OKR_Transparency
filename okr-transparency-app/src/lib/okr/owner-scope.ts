@@ -1,16 +1,21 @@
 import type { AdminConfig, AdminUser } from "@/lib/admin/config";
 import { resolveTeamOwner } from "../admin/team-owners";
+import type { ObjectiveScope } from "./types";
 
 export type OkrOwnerScope = {
   owner: string;
   aliases: string[];
+  objectiveScope: ObjectiveScope;
+  ownerEmail?: string;
 };
 
 export function ownerScopeForUser(user: AdminUser): OkrOwnerScope {
   const owner = user.displayName || user.email;
   return {
     owner,
-    aliases: unique([owner, ...user.ownerAliases, user.email])
+    aliases: unique([owner, ...user.ownerAliases, user.email]),
+    objectiveScope: "member",
+    ownerEmail: user.email.trim().toLowerCase()
   };
 }
 
@@ -36,6 +41,7 @@ export function ownerScopeForTeam(config: AdminConfig, team: string): OkrOwnerSc
 
   return {
     owner: owner?.displayName ?? configuredTeam.owner,
+    objectiveScope: "team",
     aliases: unique([
       configuredTeam.owner,
       ...(owner ? ownerScopeForUser(owner).aliases : []),

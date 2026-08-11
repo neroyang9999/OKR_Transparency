@@ -16,6 +16,7 @@ vi.mock("@/lib/admin/permissions", () => ({
 }));
 vi.mock("@/lib/okr/drafts", () => ({ readDraft: vi.fn(), writeOwnerScopedDraft: vi.fn() }));
 vi.mock("@/lib/okr/edit-types", () => ({
+  applyDraftObjectiveScope: vi.fn((draft) => draft),
   filterDraftByOwner: vi.fn((draft) => draft),
   normalizeDraft: vi.fn((draft) => draft),
   withExistingLocalizedContent: vi.fn((draft) => draft),
@@ -23,7 +24,7 @@ vi.mock("@/lib/okr/edit-types", () => ({
 }));
 vi.mock("@/lib/okr/owner-scope", () => ({
   ownerScopeForMember: vi.fn(),
-  ownerScopeForTeam: vi.fn(() => ({ owner: "TPM Lead", aliases: ["TPM Lead", "TPM Manager", "lead@unitxlabs.com"] }))
+  ownerScopeForTeam: vi.fn(() => ({ owner: "TPM Lead", aliases: ["TPM Lead", "TPM Manager", "lead@unitxlabs.com"], objectiveScope: "team" }))
 }));
 vi.mock("@/lib/okr/translation", () => ({ translateDraftContent: vi.fn() }));
 
@@ -64,7 +65,7 @@ describe("PUT /api/okrs/draft", () => {
     expect(await response.json()).toMatchObject({
       translationWarnings: ["Machine translation to zh failed; original text was saved."]
     });
-    expect(writeOwnerScopedDraft).toHaveBeenCalledWith(currentDraft, "TPM Lead", expect.any(Array));
+    expect(writeOwnerScopedDraft).toHaveBeenCalledWith(currentDraft, expect.objectContaining({ owner: "TPM Lead", objectiveScope: "team" }));
   });
 
   it("saves the team lead scope without claiming a member's OKRs", async () => {
@@ -77,8 +78,11 @@ describe("PUT /api/okrs/draft", () => {
     expect(response.status).toBe(200);
     expect(writeOwnerScopedDraft).toHaveBeenCalledWith(
       expect.objectContaining({ objectives: [expect.objectContaining({ id: "TPM-O1" })] }),
-      "TPM Lead",
-      expect.not.arrayContaining(["Yang Luo"])
+      expect.objectContaining({
+        owner: "TPM Lead",
+        aliases: expect.not.arrayContaining(["Yang Luo"]),
+        objectiveScope: "team"
+      })
     );
   });
 });
