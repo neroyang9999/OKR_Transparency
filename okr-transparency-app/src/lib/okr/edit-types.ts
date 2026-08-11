@@ -357,7 +357,7 @@ export function createEmptyObjective(team: string, periodId: string, owner = "")
     progress: null,
     objectiveScope: "team",
     status: "draft",
-    keyResults: [0, 1, 2].map((_, index) => createEmptyKr(objectiveId, index, owner, 3))
+    keyResults: [createEmptyKr(objectiveId, 0, owner)]
   };
 }
 

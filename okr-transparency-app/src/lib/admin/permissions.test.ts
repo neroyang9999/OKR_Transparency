@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type { AdminConfig } from "./config";
 import { isIapAuthenticationRequired, verifyIapJwt } from "../iap-auth";
@@ -92,6 +92,28 @@ describe("role-based OKR permissions", () => {
   beforeEach(() => {
     vi.mocked(isIapAuthenticationRequired).mockReturnValue(false);
     vi.mocked(verifyIapJwt).mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("uses the configured local admin only when the development bypass is explicitly enabled", async () => {
+    vi.stubEnv("OKR_DEV_BYPASS_AUTH", "true");
+    vi.stubEnv("OKR_DEV_USER_EMAIL", "admin@company.com");
+
+    const access = await resolveRequestAccess(new NextRequest("http://127.0.0.1:3101/api/okrs"), config);
+
+    expect(access).toMatchObject({ email: "admin@company.com", role: "super_admin" });
+  });
+
+  it("never enables the development bypass in production", async () => {
+    vi.stubEnv("OKR_DEV_BYPASS_AUTH", "true");
+    vi.stubEnv("NODE_ENV", "production");
+
+    const access = await resolveRequestAccess(new NextRequest("https://okr.example.com/api/okrs"), config);
+
+    expect(access).toBeNull();
   });
 
   it("resolves configured Google users case-insensitively and rejects disabled users", () => {

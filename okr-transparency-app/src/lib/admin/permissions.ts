@@ -48,6 +48,9 @@ export async function resolveRequestAccess(request: NextRequest, config: AdminCo
   if (iapAccess) return iapAccess;
   if (iapRequired) return null;
 
+  const developmentAccess = getAccessForSessionUser(config, getDevelopmentSessionUser());
+  if (developmentAccess) return developmentAccess;
+
   const session = await getAuthSession();
   return getAccessForSessionUser(config, {
     email: session?.user?.email ?? "",
@@ -61,6 +64,9 @@ export async function getCurrentSessionUser(): Promise<SessionUser | null> {
   if (iapUser) return iapUser;
   if (isIapAuthenticationRequired()) return null;
 
+  const developmentUser = getDevelopmentSessionUser();
+  if (developmentUser) return developmentUser;
+
   const session = await getAuthSession();
   const email = normalizeToken(session?.user?.email ?? "");
   if (!email) return null;
@@ -68,6 +74,17 @@ export async function getCurrentSessionUser(): Promise<SessionUser | null> {
     email,
     name: session?.user?.name ?? email,
     image: session?.user?.image ?? undefined
+  };
+}
+
+function getDevelopmentSessionUser(): SessionUser | null {
+  if (process.env.NODE_ENV === "production" || process.env.OKR_DEV_BYPASS_AUTH !== "true") return null;
+
+  const email = normalizeToken(process.env.OKR_DEV_USER_EMAIL ?? "admin@company.com");
+  if (!email) return null;
+  return {
+    email,
+    name: "Local Admin"
   };
 }
 
