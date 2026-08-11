@@ -31,6 +31,18 @@ describe("bilingual OKR content", () => {
     expect(translate).not.toHaveBeenCalled();
   });
 
+  it("retries when the source is unchanged but the target translation is missing", async () => {
+    const translate = vi.fn(async () => "提升质量");
+    const updated = await updateLocalizedText("Improve quality", {
+      en: "Improve quality",
+      enOrigin: "manual",
+      detectedLanguage: "en"
+    }, translate);
+
+    expect(translate).toHaveBeenCalledWith("Improve quality", "zh");
+    expect(updated).toMatchObject({ en: "Improve quality", zh: "提升质量", zhOrigin: "machine" });
+  });
+
   it("keeps neutral identifiers identical in both languages", async () => {
     const translated = await updateLocalizedText("EOL P0/P1", undefined, vi.fn());
     expect(localizedValue("", translated, "zh")).toBe("EOL P0/P1");

@@ -7,6 +7,11 @@ All notable product changes are recorded here. This project follows Semantic Ver
 - Detect the language actually entered for Objective, KR, risk, and decision text and automatically generate the other Chinese or English version through GCP Cloud Translation.
 - Preserve manually edited translations, keep acronym-only content unchanged, and allow translation failures without blocking the original OKR save.
 
+## v0.7.5 - 2026-08-11
+
+- Retry machine translation when source text is unchanged but the target-language value is missing.
+- Log Cloud Translation failures without exposing OKR content and show editors that the original was saved without a translation.
+
 ## v0.7.4 - 2026-08-11
 
 - Enforce same-team Objective/KR parent relationships and reject missing, duplicate, or self-aligned draft IDs before publishing.
