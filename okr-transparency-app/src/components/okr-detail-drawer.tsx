@@ -17,6 +17,7 @@ import { ProgressNoteCard } from "@/components/progress-note-card";
 type OkrDetailDrawerProps = {
   records: OkrRecord[];
   progressNotes: ProgressNote[];
+  showProgressNotes: boolean;
   selectedPeriod: string;
   selectedDetailId?: string;
   lang: Lang;
@@ -25,6 +26,7 @@ type OkrDetailDrawerProps = {
 export function OkrDetailDrawer({
   records,
   progressNotes,
+  showProgressNotes,
   selectedPeriod,
   selectedDetailId,
   lang
@@ -52,11 +54,11 @@ export function OkrDetailDrawer({
   const parent = record.parent_id ? recordById.get(record.parent_id) : null;
   const children = records.filter((item) => item.parent_id === record.okr_id);
   const noteTarget = record;
-  const notes = progressNotes.filter((note) =>
+  const notes = showProgressNotes ? progressNotes.filter((note) =>
     note.team === noteTarget.team &&
     note.periodId === selectedPeriod &&
     note.objectiveId === noteTarget.okr_id
-  );
+  ) : [];
   const title = record.kr || record.objective;
   const fullHref = hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang);
   const populatedDetailFields = getPopulatedOkrDetailFields(record);
@@ -136,7 +138,7 @@ export function OkrDetailDrawer({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {record.kr && (
+          {showProgressNotes && record.kr && (
             <ProgressNoteCard
               team={record.team}
               periodId={selectedPeriod}
@@ -151,38 +153,42 @@ export function OkrDetailDrawer({
               syncPublishedState
             />
           )}
-          <SectionTitle
-            title={record.kr && parent ? copy.parentWeeklyHistory : copy.weeklyHistory}
-            count={notes.length}
-          />
-          {notes.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-              {copy.noNotes}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {notes.map((note) => (
-                <article key={`${note.objectiveId}-${note.weekStart}`} className="rounded-md border border-border bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
-                      <CalendarDays className="h-4 w-4 text-blue-500" />
-                      {copy.weekOf} {note.weekStart}
-                    </div>
-                    <StatusPill status={note.status} lang={lang} />
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-800">{note.summary}</p>
-                  {(note.risks || note.nextSteps) && (
-                    <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
-                      {note.risks && <CompactField label={copy.risks} value={note.risks} lang={lang} />}
-                      {note.nextSteps && <CompactField label={copy.nextSteps} value={note.nextSteps} lang={lang} />}
-                    </div>
-                  )}
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    {note.updatedBy} · {note.updatedAt.slice(0, 10)}
-                  </div>
-                </article>
-              ))}
-            </div>
+          {showProgressNotes && (
+            <>
+              <SectionTitle
+                title={record.kr && parent ? copy.parentWeeklyHistory : copy.weeklyHistory}
+                count={notes.length}
+              />
+              {notes.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+                  {copy.noNotes}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notes.map((note) => (
+                    <article key={`${note.objectiveId}-${note.weekStart}`} className="rounded-md border border-border bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+                          <CalendarDays className="h-4 w-4 text-blue-500" />
+                          {copy.weekOf} {note.weekStart}
+                        </div>
+                        <StatusPill status={note.status} lang={lang} />
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-800">{note.summary}</p>
+                      {(note.risks || note.nextSteps) && (
+                        <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                          {note.risks && <CompactField label={copy.risks} value={note.risks} lang={lang} />}
+                          {note.nextSteps && <CompactField label={copy.nextSteps} value={note.nextSteps} lang={lang} />}
+                        </div>
+                      )}
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        {note.updatedBy} · {note.updatedAt.slice(0, 10)}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {populatedDetailFields.length > 0 && (

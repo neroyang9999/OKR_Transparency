@@ -76,6 +76,22 @@ describe("action center", () => {
     expect(result.staleKrs).toHaveLength(0);
   });
 
+  it("hides stale update work when weekly progress is disabled", () => {
+    const access = accessFromAdminUser(config.users[1]);
+    const result = buildActionCenter({
+      config: { ...config, settings: { ...config.settings, allowProgressNotes: false } },
+      access,
+      periodId: "2026-q3",
+      records,
+      progressNotes: [],
+      drafts: [],
+      now: new Date("2026-07-14T12:00:00.000Z")
+    });
+
+    expect(result.staleKrs).toHaveLength(0);
+    expect(result.attentionKrs.map((item) => item.record.okr_id)).toEqual(["SW-KR1"]);
+  });
+
   it("shows pending drafts only inside a team leader's publish scope", () => {
     const access = accessFromAdminUser(config.users[0]);
     const result = buildActionCenter({

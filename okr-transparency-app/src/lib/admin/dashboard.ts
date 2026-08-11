@@ -22,7 +22,10 @@ export type AdminRuntimeSummary = {
 export function getAdminRuntimeSummary(config: AdminConfig, events: AdminEvent[], records: OkrRecord[]): AdminRuntimeSummary {
   const enabledTeams = config.teams.filter((team) => team.enabled);
   const publishedTeams = new Set(records.map((record) => record.team));
-  const quality = getOkrQualityStats(records);
+  const measuredQuality = getOkrQualityStats(records);
+  const quality = config.settings.allowProgressNotes
+    ? measuredQuality
+    : { ...measuredQuality, staleCount: 0 };
   const attention: AdminAttentionItem[] = [];
   const activePeriod = config.periods.find((period) => period.status === "active");
   const enabledAdmins = config.users.filter((user) => user.enabled && user.role === "super_admin");

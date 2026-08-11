@@ -4,6 +4,7 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+- Hide weekly progress entry points, history, overdue actions, and stale-update health warnings when weekly progress is disabled, while preserving existing progress data and APIs.
 - Hide empty optional OKR detail fields while preserving populated historical and weekly-update values.
 
 ## v0.7.7 - 2026-08-11

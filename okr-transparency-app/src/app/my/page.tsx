@@ -35,7 +35,7 @@ export default async function MyActionsPage({
   const [storedPeriodRecords, snapshot, progressNotes, drafts] = await Promise.all([
     readPeriodRecords(periodId),
     readOkrSnapshot(),
-    readProgressNotes(),
+    adminConfig.settings.allowProgressNotes ? readProgressNotes() : Promise.resolve([]),
     Promise.all(reviewTeams.map((team) => readDraft(team.name, periodId)))
   ]);
   const data = buildActionCenter({
@@ -59,7 +59,9 @@ export default async function MyActionsPage({
               {copy.eyebrow}
             </div>
             <h1 className="mt-2 text-2xl font-semibold text-slate-950">{copy.title}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.subtitle}</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {adminConfig.settings.allowProgressNotes ? copy.subtitle : copy.subtitleWithoutProgress}
+            </p>
           </div>
           <Badge tone="blue">{periodLabel}</Badge>
         </div>
@@ -67,7 +69,9 @@ export default async function MyActionsPage({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryTile icon={Target} label={copy.myKrs} value={data.ownedKrs.length} />
-        <SummaryTile icon={CalendarClock} label={copy.stale} value={data.staleKrs.length} tone={data.staleKrs.length > 0 ? "amber" : "slate"} />
+        {adminConfig.settings.allowProgressNotes && (
+          <SummaryTile icon={CalendarClock} label={copy.stale} value={data.staleKrs.length} tone={data.staleKrs.length > 0 ? "amber" : "slate"} />
+        )}
         <SummaryTile icon={AlertTriangle} label={copy.attention} value={data.attentionKrs.length} tone={data.attentionKrs.length > 0 ? "rose" : "slate"} />
         <SummaryTile icon={ClipboardCheck} label={copy.review} value={data.pendingReviews.length} />
       </div>
@@ -77,9 +81,11 @@ export default async function MyActionsPage({
           {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} />}
         </ActionSection>
 
-        <ActionSection title={copy.stale} description={copy.staleDescription} empty={copy.noStale} items={data.staleKrs}>
-          {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} emphasizeUpdate />}
-        </ActionSection>
+        {adminConfig.settings.allowProgressNotes && (
+          <ActionSection title={copy.stale} description={copy.staleDescription} empty={copy.noStale} items={data.staleKrs}>
+            {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} emphasizeUpdate />}
+          </ActionSection>
+        )}
 
         <ActionSection title={copy.attention} description={copy.attentionDescription} empty={copy.noAttention} items={data.attentionKrs}>
           {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} showContext />}
@@ -221,6 +227,7 @@ const copies = {
     eyebrow: "个人行动视图",
     title: "我的行动中心",
     subtitle: "只聚合与你直接相关的 KR、超期更新、风险决策和待审核草稿，减少在多个团队页面之间查找。",
+    subtitleWithoutProgress: "只聚合与你直接相关的 KR、风险决策和待审核草稿，减少在多个团队页面之间查找。",
     myKrs: "我的 KR",
     myKrsDescription: "当前周期由你负责的关键结果。",
     stale: "待更新",
@@ -246,6 +253,7 @@ const copies = {
     eyebrow: "Personal action view",
     title: "My Action Center",
     subtitle: "See only the KRs, overdue updates, risks, decisions, and draft reviews that need your attention.",
+    subtitleWithoutProgress: "See only the KRs, risks, decisions, and draft reviews that need your attention.",
     myKrs: "My KRs",
     myKrsDescription: "Key results you own in the active period.",
     stale: "Update due",
