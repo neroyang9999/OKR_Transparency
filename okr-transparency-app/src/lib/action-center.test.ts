@@ -82,14 +82,52 @@ describe("action center", () => {
       config: { ...config, settings: { ...config.settings, allowProgressNotes: false } },
       access,
       periodId: "2026-q3",
-      records,
+      records: [{ ...records[0], last_update: "2026-06-30" }],
       progressNotes: [],
       drafts: [],
       now: new Date("2026-07-14T12:00:00.000Z")
     });
 
     expect(result.staleKrs).toHaveLength(0);
+    expect(result.updateDueKrs.map((item) => item.record.okr_id)).toEqual(["SW-KR1"]);
     expect(result.attentionKrs.map((item) => item.record.okr_id)).toEqual(["SW-KR1"]);
+  });
+
+  it("shows other teams aligned to an owned KR", () => {
+    const access = accessFromAdminUser(config.users[1]);
+    const result = buildActionCenter({
+      config,
+      access,
+      periodId: "2026-q3",
+      records: [
+        records[0],
+        objective("APP-O1", "Application", "App Lead", "SW-KR1"),
+        objective("HW-O1", "Hardware", "HW Lead", "SW-KR3"),
+        objective("SW-O1-CHILD", "Software", "Other", "SW-KR1")
+      ],
+      progressNotes: [],
+      drafts: []
+    });
+
+    expect(result.alignmentUpdates.map((item) => item.source.okr_id)).toEqual(["APP-O1"]);
+    expect(result.alignmentUpdates[0].target.okr_id).toBe("SW-KR1");
+  });
+
+  it("shows alignments into the user's team scope", () => {
+    const access = accessFromAdminUser(config.users[0]);
+    const result = buildActionCenter({
+      config,
+      access,
+      periodId: "2026-q3",
+      records: [
+        kr("SW-KR4", "Software", "Other", "Green", "2026-07-12"),
+        objective("APP-O1", "Application", "App Lead", "SW-KR4")
+      ],
+      progressNotes: [],
+      drafts: []
+    });
+
+    expect(result.alignmentUpdates.map((item) => item.source.okr_id)).toEqual(["APP-O1"]);
   });
 
   it("shows pending drafts only inside a team leader's publish scope", () => {
@@ -150,5 +188,16 @@ function draft(team: string, status: "draft" | "published"): OkrDraft {
       status,
       keyResults: []
     }]
+  };
+}
+
+function objective(id: string, team: string, owner: string, alignedToId: string): OkrRecord {
+  return {
+    ...kr(id, team, owner, "Green", "2026-07-13"),
+    parent_id: "",
+    objective: `${id} Objective`,
+    kr: "",
+    score: null,
+    aligned_to_id: alignedToId
   };
 }

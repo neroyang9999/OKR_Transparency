@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BriefcaseBusiness, CalendarClock, ClipboardCheck, Target } from "lucide-react";
+import { AlertTriangle, ArrowRight, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardCheck, GitBranch, Target } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
 import { ConfidenceBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
-import { buildActionCenter, type ActionCenterKr } from "@/lib/action-center";
+import { buildActionCenter, type ActionCenterKr, type AlignmentUpdate, type PendingReview } from "@/lib/action-center";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import { hrefWithLang, normalizeLang, translateText, type Lang } from "@/lib/i18n";
@@ -48,10 +48,16 @@ export default async function MyActionsPage({
   });
   const copy = copies[lang];
   const periodLabel = adminConfig.periods.find((period) => period.id === periodId)?.shortLabel ?? periodId;
+  const attentionIds = new Set(data.attentionKrs.map((item) => item.record.okr_id));
+  const updateDueIds = new Set(data.updateDueKrs.map((item) => item.record.okr_id));
+  const priorityKrs = data.ownedKrs.filter((item) => updateDueIds.has(item.record.okr_id) || attentionIds.has(item.record.okr_id));
+  const actionCount = priorityKrs.length + data.pendingReviews.length;
+  const hasMappedKrs = data.ownedKrs.length > 0;
 
   return (
     <AppShell active="myActions">
-      <section className="rounded-lg border border-border bg-white px-5 py-5 shadow-subtle">
+      <section className="overflow-hidden rounded-xl border border-blue-100 bg-gradient-to-br from-white via-white to-blue-50 shadow-subtle">
+        <div className="px-5 py-5 md:px-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
@@ -59,63 +65,96 @@ export default async function MyActionsPage({
               {copy.eyebrow}
             </div>
             <h1 className="mt-2 text-2xl font-semibold text-slate-950">{copy.title}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {adminConfig.settings.allowProgressNotes ? copy.subtitle : copy.subtitleWithoutProgress}
-            </p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.subtitle}</p>
           </div>
           <Badge tone="blue">{periodLabel}</Badge>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-4 rounded-lg border border-slate-200/80 bg-white/90 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ${actionCount > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {actionCount > 0 ? <CalendarClock className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            </div>
+            <div>
+              <div className="font-semibold text-slate-950">
+                {actionCount > 0 ? copy.actionHeadline(actionCount) : copy.clearHeadline}
+              </div>
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                {actionCount > 0
+                  ? copy.actionSummary(data.updateDueKrs.length, data.attentionKrs.length, data.pendingReviews.length)
+                  : hasMappedKrs ? copy.clearSummary : copy.noOwnedSummary}
+              </p>
+            </div>
+          </div>
+          {actionCount > 0 && (
+            <a href="#todo" className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800">
+              {copy.viewTodo}<ArrowRight className="h-4 w-4" />
+            </a>
+          )}
+        </div>
         </div>
       </section>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryTile icon={Target} label={copy.myKrs} value={data.ownedKrs.length} />
-        {adminConfig.settings.allowProgressNotes && (
-          <SummaryTile icon={CalendarClock} label={copy.stale} value={data.staleKrs.length} tone={data.staleKrs.length > 0 ? "amber" : "slate"} />
-        )}
+        <SummaryTile icon={CalendarClock} label={copy.stale} value={data.updateDueKrs.length} tone={data.updateDueKrs.length > 0 ? "amber" : "slate"} />
         <SummaryTile icon={AlertTriangle} label={copy.attention} value={data.attentionKrs.length} tone={data.attentionKrs.length > 0 ? "rose" : "slate"} />
-        <SummaryTile icon={ClipboardCheck} label={copy.review} value={data.pendingReviews.length} />
+        <SummaryTile icon={GitBranch} label={copy.alignedWithMe} value={data.alignmentUpdates.length} />
+        <SummaryTile icon={ClipboardCheck} label={copy.review} value={data.pendingReviews.length} tone={data.pendingReviews.length > 0 ? "blue" : "slate"} />
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <ActionSection title={copy.myKrs} description={copy.myKrsDescription} empty={copy.noOwnedKrs} items={data.ownedKrs}>
-          {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} />}
-        </ActionSection>
+      {!hasMappedKrs && (
+        <div className="mt-5 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+            <div><span className="font-semibold">{copy.mappingTitle}</span><span className="ml-1">{copy.mappingDescription}</span></div>
+          </div>
+          <Link
+            href={hrefWithLang("/my/setup", lang)}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-amber-950 px-3 text-sm font-medium text-white hover:bg-amber-900"
+          >
+            {copy.mappingAction}<ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      )}
 
-        {adminConfig.settings.allowProgressNotes && (
-          <ActionSection title={copy.stale} description={copy.staleDescription} empty={copy.noStale} items={data.staleKrs}>
-            {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} emphasizeUpdate />}
-          </ActionSection>
-        )}
-
-        <ActionSection title={copy.attention} description={copy.attentionDescription} empty={copy.noAttention} items={data.attentionKrs}>
-          {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} showContext />}
-        </ActionSection>
-
-        <section className="rounded-lg border border-border bg-white shadow-subtle">
-          <SectionHeader title={copy.review} description={copy.reviewDescription} count={data.pendingReviews.length} />
-          {data.pendingReviews.length === 0 ? (
-            <EmptyState text={copy.noReview} />
-          ) : (
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+        <section id="todo" className="scroll-mt-24 rounded-lg border border-border bg-white shadow-subtle">
+          <SectionHeader title={copy.todo} description={copy.todoDescription} count={actionCount} />
+          {actionCount === 0 ? <EmptyState text={copy.noTodo} /> : (
             <div className="divide-y divide-border">
+              {priorityKrs.map((item) => (
+                <KrActionRow
+                  key={item.record.okr_id}
+                  item={item}
+                  accessEmail={access.email}
+                  periodId={periodId}
+                  lang={lang}
+                  emphasizeUpdate={updateDueIds.has(item.record.okr_id)}
+                  showUpdateDue={updateDueIds.has(item.record.okr_id)}
+                  showContext={attentionIds.has(item.record.okr_id)}
+                />
+              ))}
               {data.pendingReviews.map((review) => (
-                <div key={review.team} className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-slate-950">{review.team}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {copy.draftObjectives(review.draftObjectiveCount)} · {formatDate(review.updatedAt, lang)}
-                    </div>
-                  </div>
-                  <Link
-                    href={teamEditHref(review.team, periodId, lang)}
-                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                  >
-                    {copy.reviewAction}<ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
+                <ReviewActionRow key={review.team} review={review} periodId={periodId} lang={lang} />
               ))}
             </div>
           )}
         </section>
+
+        <section className="rounded-lg border border-border bg-white shadow-subtle">
+          <SectionHeader title={copy.alignmentUpdates} description={copy.alignmentDescription} count={data.alignmentUpdates.length} />
+          {data.alignmentUpdates.length === 0 ? <EmptyState text={copy.noAlignment} /> : (
+            <div className="divide-y divide-border">
+              {data.alignmentUpdates.map((item) => <AlignmentRow key={item.source.okr_id} item={item} lang={lang} />)}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="mt-5">
+        <ActionSection title={copy.myKrs} description={copy.myKrsDescription} empty={copy.noOwnedKrs} items={data.ownedKrs}>
+          {(item) => <KrActionRow key={item.record.okr_id} item={item} accessEmail={access.email} periodId={periodId} lang={lang} showUpdateDue={updateDueIds.has(item.record.okr_id)} />}
+        </ActionSection>
       </div>
     </AppShell>
   );
@@ -160,13 +199,61 @@ function SectionHeader({ title, description, count }: { title: string; descripti
   );
 }
 
-function KrActionRow({ item, accessEmail, periodId, lang, emphasizeUpdate = false, showContext = false }: {
+function ReviewActionRow({ review, periodId, lang }: { review: PendingReview; periodId: string; lang: Lang }) {
+  const copy = copies[lang];
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Badge tone="blue">{copy.reviewBadge}</Badge>
+          <div className="truncate text-sm font-semibold text-slate-950">{review.team}</div>
+        </div>
+        <div className="mt-1.5 text-xs text-muted-foreground">
+          {copy.draftObjectives(review.draftObjectiveCount)} · {formatDate(review.updatedAt, lang)}
+        </div>
+      </div>
+      <Link
+        href={teamEditHref(review.team, periodId, lang)}
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+      >
+        {copy.reviewAction}<ArrowRight className="h-4 w-4" />
+      </Link>
+    </div>
+  );
+}
+
+function AlignmentRow({ item, lang }: { item: AlignmentUpdate; lang: Lang }) {
+  const copy = copies[lang];
+  const sourceTitle = translateText(item.source.objective, lang, item.source.localized?.objective);
+  const targetTitle = item.target.kr
+    ? translateText(item.target.kr, lang, item.target.localized?.kr)
+    : translateText(item.target.objective, lang, item.target.localized?.objective);
+  return (
+    <article className="px-5 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <Badge tone="blue">{item.source.team}</Badge>
+        <span className="shrink-0 text-xs text-muted-foreground">{item.lastActivityAt ? formatDate(item.lastActivityAt, lang) : ""}</span>
+      </div>
+      <p className="mt-2 text-sm font-semibold leading-6 text-slate-950">{sourceTitle}</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">{copy.alignedTo(targetTitle)}</p>
+      <Link
+        href={alignmentHref(item.source.team, lang)}
+        className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-900"
+      >
+        {copy.viewAlignment}<ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </article>
+  );
+}
+
+function KrActionRow({ item, accessEmail, periodId, lang, emphasizeUpdate = false, showContext = false, showUpdateDue = false }: {
   item: ActionCenterKr;
   accessEmail: string;
   periodId: string;
   lang: Lang;
   emphasizeUpdate?: boolean;
   showContext?: boolean;
+  showUpdateDue?: boolean;
 }) {
   const copy = copies[lang];
   const record = item.record;
@@ -175,7 +262,7 @@ function KrActionRow({ item, accessEmail, periodId, lang, emphasizeUpdate = fals
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="gray">{record.team}</Badge>
         <ConfidenceBadge value={record.confidence} />
-        {item.isStale && <Badge tone="yellow">{copy.overdue}</Badge>}
+        {showUpdateDue && <Badge tone="yellow">{copy.overdue}</Badge>}
       </div>
       <Link href={hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang)} className="mt-2 block text-sm font-semibold leading-6 text-slate-950 hover:text-blue-700">
         {translateText(record.kr, lang, record.localized?.kr)}
@@ -216,6 +303,10 @@ function teamEditHref(team: string, periodId: string, lang: Lang) {
   return hrefWithLang(`/?team=${encodeURIComponent(team)}&period=${encodeURIComponent(periodId)}&mode=edit`, lang);
 }
 
+function alignmentHref(team: string, lang: Lang) {
+  return hrefWithLang(`/map?team=${encodeURIComponent(team)}`, lang);
+}
+
 function formatDate(value: string, lang: Lang) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -226,52 +317,76 @@ const copies = {
   zh: {
     eyebrow: "个人行动视图",
     title: "我的行动中心",
-    subtitle: "只聚合与你直接相关的 KR、超期更新、风险决策和待审核草稿，减少在多个团队页面之间查找。",
-    subtitleWithoutProgress: "只聚合与你直接相关的 KR、风险决策和待审核草稿，减少在多个团队页面之间查找。",
+    subtitle: "先处理本周期该更新、该确认和该审核的事项，再了解哪些团队正在与你对齐。",
+    actionHeadline: (count: number) => `本周期有 ${count} 项需要你处理`,
+    actionSummary: (stale: number, attention: number, reviews: number) => `${stale} 个 KR 待更新 · ${attention} 个风险或决策 · ${reviews} 个草稿待审核`,
+    clearHeadline: "本周期暂时没有待办",
+    clearSummary: "你的更新、风险决策和审核事项都已处理。",
+    noOwnedSummary: "暂未匹配到你负责的 KR；仍会展示你权限范围内的审核事项。",
+    viewTodo: "查看待办",
     myKrs: "我的 KR",
-    myKrsDescription: "当前周期由你负责的关键结果。",
+    myKrsDescription: "当前周期由你负责的关键结果，作为快速参考保留在这里。",
     stale: "待更新",
-    staleDescription: "超过 7 天没有记录活动的 KR。",
     attention: "风险与决策",
-    attentionDescription: "Yellow/Red 或仍有风险、待决策事项的 KR。",
+    alignedWithMe: "与我对齐",
     review: "待审核",
-    reviewDescription: "你有发布权限且存在未发布草稿的团队。",
+    todo: "优先待办",
+    todoDescription: "合并更新、风险决策和审核，避免同一个 KR 在多个区域重复出现。",
+    noTodo: "当前没有需要你处理的事项。",
+    alignmentUpdates: "对齐动态",
+    alignmentDescription: "其他团队当前对齐到你负责或所在团队目标的 Objective。",
+    noAlignment: "当前没有其他团队对齐到你的目标。",
+    alignedTo: (target: string) => `对齐到你的「${target}」`,
+    viewAlignment: "查看对齐关系",
+    mappingTitle: "未识别到你的 KR。",
+    mappingDescription: "你可以前往填写入口，选择有权限的团队建立本人 KR。",
+    mappingAction: "去填写 KR",
     noOwnedKrs: "当前周期没有匹配到你负责的 KR。",
-    noStale: "很好，当前没有超过 7 天未更新的 KR。",
-    noAttention: "当前没有需要你处理的风险或决策事项。",
-    noReview: "当前没有待审核草稿。",
     overdue: "超过 7 天",
     lastActivity: "最近活动",
     neverUpdated: "尚未更新",
     riskLabel: "风险",
     decisionLabel: "待决策",
     updateAction: "更新进展",
+    reviewBadge: "待审核",
     reviewAction: "查看草稿",
     draftObjectives: (count: number) => `${count} 个草稿 Objective`
   },
   en: {
     eyebrow: "Personal action view",
     title: "My Action Center",
-    subtitle: "See only the KRs, overdue updates, risks, decisions, and draft reviews that need your attention.",
-    subtitleWithoutProgress: "See only the KRs, risks, decisions, and draft reviews that need your attention.",
+    subtitle: "Handle updates, decisions, and reviews first, then see which teams are aligned with your goals.",
+    actionHeadline: (count: number) => `${count} item${count === 1 ? "" : "s"} need your attention`,
+    actionSummary: (stale: number, attention: number, reviews: number) => `${stale} KRs need updates · ${attention} risks or decisions · ${reviews} draft reviews`,
+    clearHeadline: "Nothing needs your attention",
+    clearSummary: "Your updates, risks, decisions, and reviews are clear for now.",
+    noOwnedSummary: "No owned KRs were matched; reviews inside your permission scope are still shown.",
+    viewTodo: "View to-do",
     myKrs: "My KRs",
-    myKrsDescription: "Key results you own in the active period.",
+    myKrsDescription: "Key results you own in the active period, kept here as a quick reference.",
     stale: "Update due",
-    staleDescription: "KRs with no recorded activity for more than 7 days.",
     attention: "Risks & decisions",
-    attentionDescription: "Yellow/Red KRs or KRs with open risks and decisions.",
+    alignedWithMe: "Aligned with me",
     review: "Review queue",
-    reviewDescription: "Unpublished drafts inside your publish scope.",
+    todo: "Priority to-do",
+    todoDescription: "Updates, risks, decisions, and reviews in one queue without duplicate KRs.",
+    noTodo: "Nothing currently needs your attention.",
+    alignmentUpdates: "Alignment updates",
+    alignmentDescription: "Objectives from other teams currently aligned to goals you own or your team owns.",
+    noAlignment: "No other teams are currently aligned to your goals.",
+    alignedTo: (target: string) => `Aligned to your “${target}”`,
+    viewAlignment: "View alignment",
+    mappingTitle: "No owned KRs were identified.",
+    mappingDescription: "Open the KR entry page and choose a team you can edit to add your KRs.",
+    mappingAction: "Add KRs",
     noOwnedKrs: "No owned KRs were found in the active period.",
-    noStale: "All owned KRs have been updated within 7 days.",
-    noAttention: "No risks or decisions currently need your attention.",
-    noReview: "No drafts are waiting for review.",
     overdue: "Over 7 days",
     lastActivity: "Last activity",
     neverUpdated: "Never updated",
     riskLabel: "Risk",
     decisionLabel: "Decision",
     updateAction: "Update progress",
+    reviewBadge: "Review",
     reviewAction: "Review draft",
     draftObjectives: (count: number) => `${count} draft Objective${count === 1 ? "" : "s"}`
   }
