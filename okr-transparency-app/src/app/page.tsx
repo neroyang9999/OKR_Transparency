@@ -12,13 +12,14 @@ import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { resolveTeamOwner, selectableTeamOwners } from "@/lib/admin/team-owners";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
-import { OkrEditBoard, type AlignmentOption } from "@/components/okr-edit-board";
+import { OkrEditBoard } from "@/components/okr-edit-board";
 import { type AdminConfig, type AdminUser } from "@/lib/admin/config";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
 import { getOkrQualityStats } from "@/lib/okr/graph-validation";
 import { filterDraftByOwner } from "@/lib/okr/edit-types";
+import type { AlignmentOption } from "@/lib/okr/alignment-options";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { ownerScopeForTeam, ownerScopeForUser } from "@/lib/okr/owner-scope";
@@ -504,6 +505,7 @@ function getAlignmentOptions(
         team: record.team,
         owner: record.owner,
         title: record.kr || record.objective,
+        parentId: record.kr ? record.parent_id : undefined,
         parentTitle: record.kr ? parent?.objective ?? record.objective : undefined,
         progress: record.score === null ? null : Math.round(record.score * 100),
         confidence: record.confidence

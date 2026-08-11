@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { ArrowDown, Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { applyDraftObjectiveScope, calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
 import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
+import { alignmentOptionMatchesQuery, filterAlignmentOptionGroups, flattenAlignmentOptionGroups, type AlignmentOption } from "@/lib/okr/alignment-options";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Period } from "@/lib/periods";
@@ -24,22 +25,12 @@ type OkrEditBoardProps = {
   periods: Period[];
 };
 
-export type AlignmentOption = {
-  id: string;
-  kind: "O" | "KR";
-  team: string;
-  owner: string;
-  title: string;
-  parentTitle?: string;
-  progress: number | null;
-  confidence: string;
-};
-
 const confidenceOptions: ConfidenceLevel[] = ["Green", "Yellow", "Red"];
 const typeOptions: OkrType[] = ["Committed", "Aspirational", "Learning"];
 
 export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy, ownerEmail, title, periods }: OkrEditBoardProps) {
   const router = useRouter();
+  const boardRef = useRef<HTMLDivElement>(null);
   const fixedOwner = teamOwner.trim() || initialDraft.team;
   const ownerScoped = Boolean(ownerEmail);
   const canEditDraft = ownerScoped ? policy.canEdit : policy.canPublish;
@@ -55,6 +46,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [publishAttempted, setPublishAttempted] = useState(false);
+  const [touchedFields, setTouchedFields] = useState<Set<string>>(() => new Set());
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const copy = lang === "en" ? en : zh;
   const showAlignment = ownerScoped || draft.team !== "Software";
@@ -70,6 +63,29 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   function changeDraft(updater: (current: OkrDraft) => OkrDraft) {
     setSaveState("dirty");
     setDraft(updater);
+  }
+
+  function markFieldTouched(fieldKey: string) {
+    setTouchedFields((current) => {
+      if (current.has(fieldKey)) return current;
+      const next = new Set(current);
+      next.add(fieldKey);
+      return next;
+    });
+  }
+
+  function requestPublish() {
+    setPublishAttempted(true);
+    setMessage("");
+    if (validation.errors.length > 0) {
+      window.requestAnimationFrame(() => {
+        const firstError = boardRef.current?.querySelector<HTMLElement>('[data-validation-error="true"]');
+        firstError?.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstError?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    setPublishConfirmOpen(true);
   }
 
   function updateObjective(objectiveId: string, patch: Partial<EditableObjective>) {
@@ -172,7 +188,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   }
 
   return (
-    <div className="min-w-0">
+    <div ref={boardRef} className="min-w-0">
       <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-white px-5 py-4 shadow-subtle md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">{title ?? `${draft.team} OKR`}</h1>
@@ -202,8 +218,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           </button>
           <button
             type="button"
-            onClick={() => setPublishConfirmOpen(true)}
-            disabled={saveState === "saving" || validation.errors.length > 0 || !canPublishDraft}
+            onClick={requestPublish}
+            disabled={saveState === "saving" || !canPublishDraft}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send className="h-4 w-4" />
@@ -212,11 +228,16 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         </div>
       </div>
 
-      {(validation.errors.length > 0 || validation.warnings.length > 0 || message) && (
+      {(message || (publishAttempted && validation.errors.length > 0)) && (
         <div className="mb-4 rounded-lg border border-border bg-white px-4 py-3 shadow-subtle">
           {message && <div className="text-sm font-medium text-slate-800">{message}</div>}
-          <MessageList title={copy.errors} items={validation.errors} tone="red" />
-          <MessageList title={copy.warnings} items={validation.warnings} tone="yellow" />
+          {publishAttempted && validation.errors.length > 0 && (
+            <>
+              <div className="text-sm font-semibold text-rose-700">{copy.fixBeforePublish(validation.errors.length)}</div>
+              <div className="mt-1 text-xs text-slate-500">{copy.firstIssueFocused}</div>
+              <MessageList items={validation.errors.map((item) => localizeValidationItem(item, copy))} tone="red" />
+            </>
+          )}
         </div>
       )}
 
@@ -224,6 +245,18 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         {draft.objectives.map((objective, objectiveIndex) => {
           const objectiveProgress = calculateObjectiveProgress(objective.keyResults);
           const objectiveLocked = !canEditDraft;
+          const objectiveTitleKey = `${objective.id}:title`;
+          const objectiveTitleError = !objective.title.trim() && (publishAttempted || touchedFields.has(objectiveTitleKey))
+            ? copy.requiredObjective
+            : undefined;
+          const hasNoKrs = objective.keyResults.length === 0;
+          const hasIncompleteTitles = !objective.title.trim() || hasNoKrs || objective.keyResults.some((kr) => !kr.title.trim());
+          const krWeightTotal = objective.keyResults.reduce((sum, kr) => sum + (Number.isFinite(kr.weight) ? kr.weight : 0), 0);
+          const hasKrWeightError = objective.keyResults.length > 0 && Math.abs(krWeightTotal - 100) > 0.2;
+          const alignmentWarning = Boolean(
+            objective.title.trim()
+            && validation.warnings.some((warning) => warning.startsWith(`O${objectiveIndex + 1}:`) && warning.includes("alignment"))
+          );
           return (
           <article key={objective.id} className="overflow-hidden rounded-lg border border-blue-400 bg-white shadow-subtle">
             <div className="grid gap-3 px-5 py-5 lg:grid-cols-[1fr_120px_120px_44px]">
@@ -233,8 +266,10 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                     value={objective.alignedToId}
                     options={alignmentOptions}
                     copy={copy}
+                    sourceLabel={`O${objectiveIndex + 1}`}
                     onChange={(alignedToId) => updateObjective(objective.id, { alignedToId })}
                     disabled={objectiveLocked}
+                    warning={alignmentWarning ? copy.alignmentSuggestion : undefined}
                   />
                 )}
                 <div className="flex items-start gap-3">
@@ -242,9 +277,11 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                   <Textarea
                     value={objective.title}
                     onChange={(value) => updateObjective(objective.id, { title: value })}
+                    onBlur={() => markFieldTouched(objectiveTitleKey)}
                     placeholder={copy.objectivePlaceholder}
                     className="text-xl font-semibold"
                     disabled={objectiveLocked}
+                    error={objectiveTitleError}
                   />
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-4">
@@ -278,9 +315,11 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                           <Textarea
                             value={kr.title}
                             onChange={(value) => updateKr(objective.id, kr.id, { title: value })}
+                            onBlur={() => markFieldTouched(`${kr.id}:title`)}
                             placeholder={copy.krPlaceholder}
                             className="font-medium"
                             disabled={!canEditDraft && !isEditableOwner(kr.owner, policy.editableOwnerAliases)}
+                            error={!kr.title.trim() && (publishAttempted || touchedFields.has(`${kr.id}:title`)) ? copy.requiredKr : undefined}
                           />
                         </div>
                       </div>
@@ -308,12 +347,30 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                 <Plus className="h-4 w-4" />
                 {copy.addKr}
               </button>
+              {publishAttempted && hasNoKrs && (
+                <div
+                  tabIndex={-1}
+                  data-validation-error="true"
+                  className="mx-5 mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 outline-none focus:ring-2 focus:ring-rose-200"
+                >
+                  {copy.atLeastOneKr}
+                </div>
+              )}
+              {publishAttempted && hasKrWeightError && (
+                <div
+                  tabIndex={-1}
+                  data-validation-error="true"
+                  className="mx-5 mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 outline-none focus:ring-2 focus:ring-rose-200"
+                >
+                  {copy.krWeightTotal(krWeightTotal)}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between bg-blue-50 px-5 py-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Lock className="h-4 w-4" />
-                {copy.draftOnly}
+                {!publishAttempted && hasIncompleteTitles ? copy.completeToPublish : copy.draftOnly}
               </div>
               <div className="text-sm font-medium text-slate-500">{saveState === "saved" ? copy.saved : copy.autoSaving}</div>
             </div>
@@ -354,6 +411,14 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {copy.confirmPublishDescription}
             </p>
+            {validation.warnings.length > 0 && (
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                <div className="text-sm font-semibold text-amber-800">{copy.warnings}</div>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-700">
+                  {validation.warnings.map((item) => <li key={item}>{localizeValidationItem(item, copy)}</li>)}
+                </ul>
+              </div>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
@@ -382,147 +447,300 @@ function AlignmentPicker({
   value,
   options,
   copy,
+  sourceLabel,
   onChange,
-  disabled = false
+  disabled = false,
+  warning
 }: {
   value?: string;
   options: AlignmentOption[];
   copy: typeof zh;
+  sourceLabel: string;
   onChange: (value?: string) => void;
   disabled?: boolean;
+  warning?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
   const selected = options.find((option) => option.id === value);
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = normalizedQuery
-    ? options.filter((option) =>
-        [option.id, option.kind, option.team, option.owner, option.title, option.parentTitle ?? ""]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
-      )
-    : options;
+  const groups = useMemo(() => filterAlignmentOptionGroups(options, query), [options, query]);
+  const visibleOptions = useMemo(() => flattenAlignmentOptionGroups(groups), [groups]);
+  const optionIndexById = new Map(visibleOptions.map((option, index) => [option.id, index]));
+  const activeOptionId = activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
+
+  useEffect(() => {
+    if (!open) return;
+    searchInputRef.current?.focus();
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  function openPicker() {
+    const initialOptions = flattenAlignmentOptionGroups(filterAlignmentOptionGroups(options));
+    const selectedIndex = initialOptions.findIndex((option) => option.id === value);
+    setQuery("");
+    setActiveIndex(selectedIndex >= 0 ? selectedIndex : initialOptions.length > 0 ? 0 : -1);
+    setOpen(true);
+  }
+
+  function updateQuery(nextQuery: string) {
+    const nextOptions = flattenAlignmentOptionGroups(filterAlignmentOptionGroups(options, nextQuery));
+    const selectedIndex = nextOptions.findIndex((option) => option.id === value);
+    const matchingIndex = nextOptions.findIndex((option) => alignmentOptionMatchesQuery(option, nextQuery));
+    setQuery(nextQuery);
+    setActiveIndex(nextQuery.trim() && matchingIndex >= 0
+      ? matchingIndex
+      : selectedIndex >= 0 ? selectedIndex : nextOptions.length > 0 ? 0 : -1);
+  }
+
+  function choose(option?: AlignmentOption) {
+    onChange(option?.id);
+    setQuery("");
+    setOpen(false);
+  }
+
+  function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+      return;
+    }
+    if (visibleOptions.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((current) => current < 0 ? 0 : (current + 1) % visibleOptions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((current) => current <= 0 ? visibleOptions.length - 1 : current - 1);
+    } else if (event.key === "Enter" && activeIndex >= 0) {
+      event.preventDefault();
+      choose(visibleOptions[activeIndex]);
+    }
+  }
 
   return (
-    <div className="relative mb-3 max-w-3xl rounded-md border border-dashed border-blue-200 bg-blue-50/40 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-blue-500">
+    <div ref={pickerRef} className="mb-4 max-w-3xl rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-blue-600">
           <Link2 className="h-4 w-4" />
-          {copy.addAlignment}
+          {copy.alignmentLabel}
         </span>
-        {selected ? (
-          <span className="group relative inline-flex min-w-0 items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-blue-700 shadow-sm">
-            <span>{selected.team}</span>
-            <span className="text-blue-300">/</span>
-            <span>{selected.owner}</span>
-            <span className="rounded bg-white px-1.5 py-0.5 text-xs">{selected.kind}</span>
-            <span className="max-w-80 truncate">{selected.title}</span>
+        <div className="ml-auto flex items-center gap-2">
+          {selected && !disabled && (
             <button
               type="button"
-              onClick={() => onChange(undefined)}
-              className="ml-1 rounded-full text-blue-400 hover:text-blue-700"
+              onClick={() => choose(undefined)}
+              className="text-xs font-medium text-slate-500 hover:text-slate-800"
               aria-label={copy.clearAlignment}
             >
-              <X className="h-3 w-3" />
+              {copy.clearAlignment}
             </button>
-            <AlignmentCard option={selected} copy={copy} />
-          </span>
-        ) : (
-          <span className="text-slate-500">{copy.noAlignment}</span>
-        )}
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          disabled={disabled}
-          className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-blue-100 bg-white px-2 text-xs font-medium text-blue-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300"
-        >
-          <Search className="h-3.5 w-3.5" />
-          {selected ? copy.changeAlignment : copy.chooseAlignment}
-        </button>
+          )}
+          <button
+            type="button"
+            onClick={() => open ? setOpen(false) : openPicker()}
+            disabled={disabled}
+            aria-expanded={open}
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-blue-200 bg-white px-2.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            <Search className="h-3.5 w-3.5" />
+            {selected ? copy.changeAlignment : copy.chooseAlignment}
+          </button>
+        </div>
       </div>
 
+      {selected ? (
+        <AlignmentSelectionCard option={selected} copy={copy} />
+      ) : (
+        <div className="mt-2 rounded-md border border-dashed border-blue-200 bg-white/70 px-3 py-2">
+          <div className="text-sm font-medium text-slate-700">{copy.unalignedState}</div>
+          <div className="mt-0.5 text-xs text-slate-500">{copy.alignmentOptional}</div>
+        </div>
+      )}
+
+      {warning && !selected && <div className="mt-2 text-xs font-medium text-amber-700">{warning}</div>}
+
       {open && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-md border border-border bg-white p-2 shadow-lg">
+        <div className="mt-3 rounded-lg border border-blue-200 bg-white p-3 shadow-lg">
+          <div className="mb-2">
+            <div className="text-sm font-semibold text-slate-900">{copy.chooseFor(sourceLabel)}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{copy.hierarchyHint}</div>
+          </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
+              ref={searchInputRef}
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              autoFocus
+              onChange={(event) => updateQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
               disabled={disabled}
               placeholder={copy.searchAlignment}
+              role="combobox"
+              aria-label={copy.searchAlignment}
+              aria-expanded={open}
+              aria-controls={listboxId}
+              aria-activedescendant={activeOptionId}
+              aria-autocomplete="list"
               className="h-10 w-full rounded-md border border-border bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400"
             />
           </div>
-          <div className="mt-2 max-h-64 overflow-auto">
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                onChange(undefined);
-                setQuery("");
-                setOpen(false);
-              }}
-              className="flex w-full items-center rounded px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50"
-            >
-              {copy.noAlignment}
-            </button>
-            {filtered.length === 0 ? (
+          <div id={listboxId} role="listbox" aria-label={copy.alignmentListLabel} className="mt-2 max-h-80 overflow-auto rounded-md border border-slate-100">
+            {visibleOptions.length === 0 ? (
               <div className="px-3 py-4 text-sm text-slate-400">{copy.noAlignmentResults}</div>
             ) : (
-              filtered.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onChange(option.id);
-                    setQuery("");
-                    setOpen(false);
-                  }}
-                  className="group relative flex w-full items-start gap-3 rounded px-3 py-2 text-left hover:bg-blue-50"
-                >
-                  <span className="mt-0.5 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">{option.kind}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-900">{option.title}</span>
-                    <span className="mt-1 block truncate text-xs text-slate-500">{option.team} / {option.owner} · {option.id}</span>
-                  </span>
-                  <AlignmentCard option={option} copy={copy} compact />
-                </button>
-              ))
+              groups.map((group) => {
+                const groupLabel = group.objective?.title ?? group.parentTitle ?? copy.otherKeyResults;
+                return (
+                  <div key={group.key} role="group" aria-label={groupLabel} className="border-b border-slate-100 last:border-b-0">
+                    {group.objective && (
+                      <AlignmentOptionRow
+                        option={group.objective}
+                        copy={copy}
+                        optionIndex={optionIndexById.get(group.objective.id) ?? -1}
+                        listboxId={listboxId}
+                        activeIndex={activeIndex}
+                        selectedId={value}
+                        onActivate={setActiveIndex}
+                        onChoose={choose}
+                      />
+                    )}
+                    {group.keyResults.length > 0 && (
+                      <div className="ml-6 border-l-2 border-blue-100 bg-slate-50/40 pl-2">
+                        {!group.objective && group.parentTitle && (
+                          <div className="px-3 pb-1 pt-2 text-xs font-medium text-slate-500">{copy.parentObjective}: {group.parentTitle}</div>
+                        )}
+                        {group.keyResults.map((option) => (
+                          <AlignmentOptionRow
+                            key={option.id}
+                            option={option}
+                            copy={copy}
+                            optionIndex={optionIndexById.get(option.id) ?? -1}
+                            listboxId={listboxId}
+                            activeIndex={activeIndex}
+                            selectedId={value}
+                            onActivate={setActiveIndex}
+                            onChoose={choose}
+                            nested
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => choose(undefined)}
+            className="mt-2 w-full rounded-md px-3 py-2 text-left hover:bg-slate-50"
+          >
+            <span className="block text-sm font-medium text-slate-600">{copy.temporarilyUnaligned}</span>
+            <span className="mt-0.5 block text-xs text-slate-400">{copy.temporarilyUnalignedHint}</span>
+          </button>
         </div>
       )}
     </div>
   );
 }
 
-function AlignmentCard({ option, copy, compact = false }: { option: AlignmentOption; copy: typeof zh; compact?: boolean }) {
+function AlignmentSelectionCard({ option, copy }: { option: AlignmentOption; copy: typeof zh }) {
   return (
-    <span className={cn(
-      "pointer-events-none absolute left-8 top-full z-40 hidden w-[420px] rounded-lg border border-border bg-white p-4 text-left text-slate-700 shadow-xl group-hover:block",
-      compact && "left-16 top-10"
-    )}>
-      <span className="flex items-center justify-between gap-3">
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-slate-950">{option.team} / {option.owner}</span>
-          <span className="mt-1 block text-xs text-slate-500">{option.id} · {option.kind}</span>
-        </span>
-        <Badge tone={option.confidence === "Green" ? "green" : option.confidence === "Red" ? "red" : "yellow"}>{option.confidence}</Badge>
-      </span>
-      <span className="mt-3 block text-sm font-semibold leading-6 text-slate-900">{option.title}</span>
-      {option.parentTitle && (
-        <span className="mt-2 block rounded bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-          {copy.parentObjective}: {option.parentTitle}
-        </span>
-      )}
-      <span className="mt-3 flex items-center gap-3 text-xs text-slate-500">
-        <span>{copy.progress}: {option.progress === null ? "N/A" : `${option.progress}%`}</span>
-      </span>
-    </span>
+    <div className="mt-2 flex items-start gap-3 rounded-md border border-blue-100 bg-white px-3 py-3 shadow-sm">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600"><ArrowDown className="h-4 w-4" /></span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span className="font-semibold text-blue-700">{option.team}</span>
+          <span>/</span>
+          <span>{option.owner}</span>
+          <span className="rounded bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">{option.kind === "O" ? copy.objectiveKind : copy.krKind}</span>
+        </div>
+        {option.kind === "KR" && option.parentTitle && (
+          <div className="mt-2 text-xs leading-5 text-slate-500">{copy.parentObjective}: {option.parentTitle}</div>
+        )}
+        <div className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-900">{option.title}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span>{copy.progress}: {option.progress === null ? "N/A" : `${option.progress}%`}</span>
+          <Badge tone={alignmentTone(option.confidence)}>{option.confidence}</Badge>
+        </div>
+      </div>
+    </div>
   );
+}
+
+function AlignmentOptionRow({
+  option,
+  copy,
+  optionIndex,
+  listboxId,
+  activeIndex,
+  selectedId,
+  onActivate,
+  onChoose,
+  nested = false
+}: {
+  option: AlignmentOption;
+  copy: typeof zh;
+  optionIndex: number;
+  listboxId: string;
+  activeIndex: number;
+  selectedId?: string;
+  onActivate: (index: number) => void;
+  onChoose: (option: AlignmentOption) => void;
+  nested?: boolean;
+}) {
+  const isActive = optionIndex === activeIndex;
+  const isSelected = option.id === selectedId;
+  return (
+    <button
+      id={`${listboxId}-option-${optionIndex}`}
+      type="button"
+      role="option"
+      tabIndex={-1}
+      aria-selected={isSelected}
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseEnter={() => onActivate(optionIndex)}
+      onClick={() => onChoose(option)}
+      className={cn(
+        "flex w-full items-start gap-3 px-3 py-2.5 text-left",
+        nested ? "rounded-md" : "",
+        isActive ? "bg-blue-50" : "hover:bg-slate-50",
+        isSelected && "ring-1 ring-inset ring-blue-300"
+      )}
+    >
+      <span className={cn(
+        "mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold",
+        option.kind === "O" ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-700"
+      )}>
+        {option.kind === "O" ? copy.objectiveKind : copy.krKind}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">{option.title}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+          {!nested && <span>{option.team} / {option.owner}</span>}
+          {nested && <span>{option.owner}</span>}
+          <span>·</span>
+          <span>{copy.progress}: {option.progress === null ? "N/A" : `${option.progress}%`}</span>
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <Badge tone={alignmentTone(option.confidence)}>{option.confidence}</Badge>
+        {isSelected && <Check className="h-4 w-4 text-blue-600" />}
+      </span>
+    </button>
+  );
+}
+
+function alignmentTone(confidence: string): "green" | "red" | "yellow" {
+  return confidence === "Green" ? "green" : confidence === "Red" ? "red" : "yellow";
 }
 
 async function saveDraft(
@@ -555,7 +773,7 @@ async function saveDraft(
 
   const translationWarnings = body.translationWarnings ?? [];
   setSaveState("saved");
-  setMessage(translationWarnings.length > 0 ? `${savedMessage} · ${translationFailedMessage}` : savedMessage);
+  setMessage(translationWarnings.length > 0 ? `${savedMessage} · ${translationFailedMessage}` : "");
   return { ok: true, translationWarnings };
 }
 
@@ -592,28 +810,59 @@ function StatusPill({ state, copy }: { state: "saved" | "saving" | "dirty" | "er
   return <Badge tone="green"><Check className="mr-1 h-3 w-3" />{copy.saved}</Badge>;
 }
 
-function MessageList({ title, items, tone }: { title: string; items: string[]; tone: "red" | "yellow" }) {
+function MessageList({ items, tone }: { items: string[]; tone: "red" | "yellow" }) {
   if (items.length === 0) return null;
   return (
     <div className={cn("mt-2 text-sm", tone === "red" ? "text-rose-700" : "text-amber-700")}>
-      <div className="font-semibold">{title}</div>
-      <ul className="mt-1 list-disc space-y-1 pl-5">
+      <ul className="list-disc space-y-1 pl-5">
         {items.slice(0, 5).map((item) => <li key={item}>{item}</li>)}
       </ul>
     </div>
   );
 }
 
-function Textarea({ value, onChange, placeholder, className, disabled = false }: { value: string; onChange: (value: string) => void; placeholder: string; className?: string; disabled?: boolean }) {
+function localizeValidationItem(item: string, copy: typeof zh) {
+  const replacements = [
+    [": Objective is required", `: ${copy.requiredObjective}`],
+    [": KR title is required", `: ${copy.requiredKr}`],
+    [": at least one KR is required", `: ${copy.atLeastOneKr}`],
+    [": KR weights must add up to 100%", `: ${copy.krWeightsMustTotal}`],
+    [": Owner is required", `: ${copy.ownerRequired}`],
+    [": owner is required", `: ${copy.ownerRequired}`],
+    [": upper-level alignment is recommended", `: ${copy.alignmentSuggestion}`]
+  ] as const;
+  const replacement = replacements.find(([suffix]) => item.endsWith(suffix));
+  return replacement ? `${item.slice(0, -replacement[0].length)}${replacement[1]}` : item;
+}
+
+function Textarea({ value, onChange, onBlur, placeholder, className, disabled = false, error }: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  placeholder: string;
+  className?: string;
+  disabled?: boolean;
+  error?: string;
+}) {
   return (
-    <textarea
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      disabled={disabled}
-      placeholder={placeholder}
-      rows={2}
-      className={cn("min-h-12 w-full resize-y rounded-md border border-transparent bg-transparent px-2 py-1 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-200 focus:bg-blue-50", className)}
-    />
+    <div className="min-w-0 flex-1">
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        disabled={disabled}
+        placeholder={placeholder}
+        rows={2}
+        aria-invalid={Boolean(error)}
+        data-validation-error={error ? "true" : undefined}
+        className={cn(
+          "min-h-12 w-full resize-y rounded-md border bg-transparent px-2 py-1 text-slate-900 outline-none placeholder:text-slate-400 focus:bg-blue-50",
+          error ? "border-rose-300 bg-rose-50/40 focus:border-rose-400" : "border-transparent focus:border-blue-200",
+          className
+        )}
+      />
+      {error && <div className="mt-1 px-2 text-xs font-medium text-rose-700">{error}</div>}
+    </div>
   );
 }
 
@@ -684,13 +933,22 @@ const zh = {
   exit: "退出编辑",
   save: "保存",
   publish: "发布",
-  addAlignment: "添加对齐",
+  alignmentLabel: "上级对齐",
   chooseAlignment: "选择",
   changeAlignment: "更换",
-  noAlignment: "不对齐上级 OKR",
   clearAlignment: "清除对齐",
+  unalignedState: "当前尚未对齐上级 OKR",
+  alignmentOptional: "建议补充对齐关系，但不影响发布。",
+  chooseFor: (sourceLabel: string) => `为 ${sourceLabel} 选择上级对齐目标`,
+  hierarchyHint: "Objective 与其 Key Result 按层级展示，选择 KR 时会保留所属 Objective。",
   searchAlignment: "搜索上级团队的 Objective 或 KR",
   noAlignmentResults: "没有匹配的 OKR",
+  alignmentListLabel: "上级 OKR 候选项",
+  temporarilyUnaligned: "暂不对齐",
+  temporarilyUnalignedHint: "可以继续填写，并在发布前或之后补充。",
+  objectiveKind: "O",
+  krKind: "KR",
+  otherKeyResults: "其他 Key Result",
   parentObjective: "所属 Objective",
   alignedTo: "对齐",
   objectivePlaceholder: "添加 Objective：写清楚本周期最重要的目标",
@@ -706,12 +964,22 @@ const zh = {
   deleteObjective: "删除 Objective",
   deleteKr: "删除 KR",
   draftOnly: "草稿会自动保存，发布后才会影响公开 OKR 页面。",
+  completeToPublish: "填写 Objective 和至少 1 个 Key Result 后可发布，草稿会自动保存。",
   saved: "已保存",
   autoSaving: "保存中",
   unsaved: "未保存",
   saveError: "保存失败",
   errors: "必须修复",
   warnings: "建议检查",
+  requiredObjective: "请填写 Objective",
+  requiredKr: "请填写 Key Result",
+  atLeastOneKr: "请至少添加 1 个 Key Result",
+  krWeightsMustTotal: "KR 权重合计需为 100%",
+  ownerRequired: "请选择 Owner",
+  alignmentSuggestion: "建议选择对齐的上级 OKR（不影响发布）",
+  fixBeforePublish: (count: number) => `还有 ${count} 项需要完善`,
+  firstIssueFocused: "已定位到第一处问题，修复后可继续发布。",
+  krWeightTotal: (total: number) => `当前 KR 权重合计 ${Math.round(total * 10) / 10}%，发布前需为 100%。`,
   published: "已发布到 OKR 页面",
   translationFailed: "机翻失败，原文已保存；请稍后再次保存",
   publishFailed: "发布失败",
@@ -729,13 +997,22 @@ const en: typeof zh = {
   exit: "Exit edit",
   save: "Save",
   publish: "Publish",
-  addAlignment: "Add alignment",
+  alignmentLabel: "Upper-level alignment",
   chooseAlignment: "Choose",
   changeAlignment: "Change",
-  noAlignment: "No upper-level alignment",
   clearAlignment: "Clear alignment",
+  unalignedState: "Not aligned to an upper-level OKR yet",
+  alignmentOptional: "Alignment is recommended but does not block publishing.",
+  chooseFor: (sourceLabel: string) => `Choose an upper-level alignment for ${sourceLabel}`,
+  hierarchyHint: "Objectives and Key Results are grouped together. A selected KR keeps its parent Objective visible.",
   searchAlignment: "Search upper-level Objective or KR",
   noAlignmentResults: "No matching OKR",
+  alignmentListLabel: "Upper-level OKR options",
+  temporarilyUnaligned: "Leave unaligned for now",
+  temporarilyUnalignedHint: "Continue editing and add the alignment later.",
+  objectiveKind: "O",
+  krKind: "KR",
+  otherKeyResults: "Other Key Results",
   parentObjective: "Parent Objective",
   alignedTo: "Aligned to",
   objectivePlaceholder: "Add Objective: describe the most important goal for this period",
@@ -751,12 +1028,22 @@ const en: typeof zh = {
   deleteObjective: "Delete Objective",
   deleteKr: "Delete KR",
   draftOnly: "Drafts are auto-saved. Publishing updates the public OKR page.",
+  completeToPublish: "Complete the Objective and at least one Key Result to publish. Drafts are auto-saved.",
   saved: "Saved",
   autoSaving: "Saving",
   unsaved: "Unsaved",
   saveError: "Save failed",
   errors: "Must fix",
   warnings: "Check",
+  requiredObjective: "Enter an Objective",
+  requiredKr: "Enter a Key Result",
+  atLeastOneKr: "Add at least one Key Result",
+  krWeightsMustTotal: "KR weights must add up to 100%",
+  ownerRequired: "Select an owner",
+  alignmentSuggestion: "Consider aligning to an upper-level OKR (does not block publishing)",
+  fixBeforePublish: (count: number) => `${count} ${count === 1 ? "item needs" : "items need"} attention`,
+  firstIssueFocused: "The first issue is in focus. Fix it to continue publishing.",
+  krWeightTotal: (total: number) => `KR weights currently total ${Math.round(total * 10) / 10}%; they must total 100% before publishing.`,
   published: "Published to OKR page",
   translationFailed: "Machine translation failed; the original text was saved. Please save again later",
   publishFailed: "Publish failed",

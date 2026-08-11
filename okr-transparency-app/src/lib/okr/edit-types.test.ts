@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDraftObjectiveScope, draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
+import { applyDraftObjectiveScope, createEmptyObjective, draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
 
 const draft: OkrDraft = {
   version: 1,
@@ -39,6 +39,13 @@ const draft: OkrDraft = {
 };
 
 describe("OKR edit draft helpers", () => {
+  it("starts a new objective with one KR that owns the full weight", () => {
+    const objective = createEmptyObjective("QA Team", "2026-q3", "QA Lead");
+
+    expect(objective.keyResults).toHaveLength(1);
+    expect(objective.keyResults[0]).toMatchObject({ owner: "QA Lead", title: "", weight: 100 });
+  });
+
   it("validates a complete draft", () => {
     const result = validateDraft(draft);
     expect(result.errors).toEqual([]);
