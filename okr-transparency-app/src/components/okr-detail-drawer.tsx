@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
+import { getPopulatedOkrDetailFields } from "@/lib/okr/detail-fields";
 import type { ProgressNote } from "@/lib/okr/progress-notes";
 import type { ConfidenceLevel, LocalizedText, OkrRecord } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ export function OkrDetailDrawer({
   );
   const title = record.kr || record.objective;
   const fullHref = hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang);
+  const populatedDetailFields = getPopulatedOkrDetailFields(record);
 
   function close() {
     const params = new URLSearchParams(searchParams.toString());
@@ -183,26 +185,28 @@ export function OkrDetailDrawer({
             </div>
           )}
 
-          <div className="mt-5 rounded-md border border-border">
-            <button
-              type="button"
-              onClick={() => setFieldsOpen((current) => !current)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-950 hover:bg-slate-50"
-            >
-              {copy.currentFields}
-              <ChevronDown className={cn("h-4 w-4 text-slate-500 transition", fieldsOpen && "rotate-180")} />
-            </button>
-            {fieldsOpen && (
-              <div className="grid gap-3 border-t border-border p-4 text-sm md:grid-cols-2">
-                <CompactField label={t(lang, "baseline")} value={record.baseline} lang={lang} />
-                <CompactField label={t(lang, "target")} value={record.target} lang={lang} />
-                <CompactField label={t(lang, "actual")} value={record.actual} lang={lang} />
-                <CompactField label={t(lang, "dependencies")} value={record.dependencies} lang={lang} />
-                <CompactField label={t(lang, "risks")} value={record.risks} lang={lang} localized={record.localized?.risks} />
-                <CompactField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} localized={record.localized?.decisionsNeeded} />
-              </div>
-            )}
-          </div>
+          {populatedDetailFields.length > 0 && (
+            <div className="mt-5 rounded-md border border-border">
+              <button
+                type="button"
+                onClick={() => setFieldsOpen((current) => !current)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-950 hover:bg-slate-50"
+              >
+                {copy.currentFields}
+                <ChevronDown className={cn("h-4 w-4 text-slate-500 transition", fieldsOpen && "rotate-180")} />
+              </button>
+              {fieldsOpen && (
+                <div className="grid gap-3 border-t border-border p-4 text-sm md:grid-cols-2">
+                  {populatedDetailFields.includes("baseline") && <CompactField label={t(lang, "baseline")} value={record.baseline} lang={lang} />}
+                  {populatedDetailFields.includes("target") && <CompactField label={t(lang, "target")} value={record.target} lang={lang} />}
+                  {populatedDetailFields.includes("actual") && <CompactField label={t(lang, "actual")} value={record.actual} lang={lang} />}
+                  {populatedDetailFields.includes("dependencies") && <CompactField label={t(lang, "dependencies")} value={record.dependencies} lang={lang} />}
+                  {populatedDetailFields.includes("risks") && <CompactField label={t(lang, "risks")} value={record.risks} lang={lang} localized={record.localized?.risks} />}
+                  {populatedDetailFields.includes("decisions_needed") && <CompactField label={t(lang, "decisionsNeeded")} value={record.decisions_needed} lang={lang} localized={record.localized?.decisionsNeeded} />}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-5">
             {record.kr ? (

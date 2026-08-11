@@ -4,6 +4,8 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+- Hide empty optional OKR detail fields while preserving populated historical and weekly-update values.
+
 ## v0.7.7 - 2026-08-11
 
 - Separate team and member Objectives with explicit scope and owner-email fields so refilling one scope cannot overwrite the other.
