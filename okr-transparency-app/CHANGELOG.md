@@ -4,6 +4,10 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.7.9 - 2026-08-12
+
+- Redesign My Action Center around a prioritized update, risk, alignment, and review inbox, with clear owner-mapping guidance.
+- Add a permission-aware KR entry page that routes members and management roles into the correct editor scope.
 - Hide weekly progress entry points, history, overdue actions, and stale-update health warnings when weekly progress is disabled, while preserving existing progress data and APIs.
 - Hide empty optional OKR detail fields while preserving populated historical and weekly-update values.
 

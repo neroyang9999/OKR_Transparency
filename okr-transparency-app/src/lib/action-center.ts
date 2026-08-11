@@ -18,10 +18,18 @@ export type PendingReview = {
   draftObjectiveCount: number;
 };
 
+export type AlignmentUpdate = {
+  source: OkrRecord;
+  target: OkrRecord;
+  lastActivityAt: string;
+};
+
 export type ActionCenterData = {
   ownedKrs: ActionCenterKr[];
   staleKrs: ActionCenterKr[];
+  updateDueKrs: ActionCenterKr[];
   attentionKrs: ActionCenterKr[];
+  alignmentUpdates: AlignmentUpdate[];
   pendingReviews: PendingReview[];
 };
 
@@ -37,19 +45,41 @@ export function buildActionCenter(input: {
   const now = input.now ?? new Date();
   const aliases = input.access.ownerAliases.map(normalizeToken).filter(Boolean);
   const periodNotes = input.progressNotes.filter((note) => note.periodId === input.periodId);
+  const recordById = new Map(input.records.map((record) => [record.okr_id, record]));
   const ownedKrs = input.records
     .filter((record) => Boolean(record.kr) && aliases.includes(normalizeToken(record.owner)))
     .map((record) => buildKrItem(record, periodNotes, now))
     .sort(compareKrs);
+  const relevantTeams = new Set(input.access.teams);
+  const staleKrs = input.config.settings.allowProgressNotes
+    ? ownedKrs.filter((item) => item.isStale).sort(compareOldestActivity)
+    : [];
+  const cycleStart = parsePeriodStart(input.periodId);
+  const cycleMissingKrs = cycleStart === null ? [] : ownedKrs
+    .filter((item) => {
+      const lastUpdate = parseTimestamp(item.record.last_update);
+      return lastUpdate === null || lastUpdate < cycleStart;
+    })
+    .sort(compareOldestActivity);
 
   return {
     ownedKrs,
-    staleKrs: input.config.settings.allowProgressNotes
-      ? ownedKrs.filter((item) => item.isStale).sort(compareOldestActivity)
-      : [],
+    staleKrs,
+    updateDueKrs: input.config.settings.allowProgressNotes ? staleKrs : cycleMissingKrs,
     attentionKrs: ownedKrs
       .filter(({ record }) => record.confidence !== "Green" || Boolean(record.risks.trim()) || Boolean(record.decisions_needed.trim()))
       .sort(compareAttention),
+    alignmentUpdates: input.records
+      .filter((record) => !record.kr && Boolean(record.aligned_to_id))
+      .map((source) => ({ source, target: recordById.get(source.aligned_to_id ?? "") }))
+      .filter((item): item is { source: OkrRecord; target: OkrRecord } => Boolean(item.target))
+      .filter(({ source, target }) =>
+        source.team !== target.team && (
+          aliases.includes(normalizeToken(target.owner)) || relevantTeams.has(target.team)
+        )
+      )
+      .map(({ source, target }) => ({ source, target, lastActivityAt: normalizeDate(source.last_update) }))
+      .sort((left, right) => right.lastActivityAt.localeCompare(left.lastActivityAt) || left.source.team.localeCompare(right.source.team)),
     pendingReviews: input.drafts
       .filter((draft) => getTeamEditPolicy(input.config, draft.team, input.access).canPublish)
       .map((draft) => ({
@@ -103,4 +133,15 @@ function parseTimestamp(value: string) {
 
 function normalizeToken(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizeDate(value: string) {
+  const timestamp = parseTimestamp(value);
+  return timestamp === null ? "" : new Date(timestamp).toISOString();
+}
+
+function parsePeriodStart(periodId: string) {
+  const match = /^(\d{4})-q([1-4])$/i.exec(periodId.trim());
+  if (!match) return null;
+  return Date.UTC(Number(match[1]), (Number(match[2]) - 1) * 3, 1);
 }
