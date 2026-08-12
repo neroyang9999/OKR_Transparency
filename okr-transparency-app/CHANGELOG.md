@@ -4,6 +4,9 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.7.10 - 2026-08-12
+
+- Hide the large unaligned-objectives warning list while preserving alignment data, summary metrics, map nodes, and publishing behavior.
 - Add a paste-to-draft assistant that recognizes Objective/KR hierarchy, preserves the full pasted text, previews corrections, and supports append or confirmed replacement without auto-publishing.
 
 ## v0.7.9 - 2026-08-12
