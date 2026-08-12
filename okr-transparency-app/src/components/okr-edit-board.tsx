@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowDown, Check, CircleAlert, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
+import { ArrowDown, Check, CircleAlert, ClipboardPaste, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { applyDraftObjectiveScope, calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
@@ -13,6 +13,7 @@ import { alignmentOptionMatchesQuery, filterAlignmentOptionGroups, flattenAlignm
 import { hrefWithLang, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Period } from "@/lib/periods";
+import { applyPastedOkrs, parsePastedOkrs, type PastedOkrApplyMode, type PastedOkrObjective } from "@/lib/okr/paste-import";
 
 type OkrEditBoardProps = {
   initialDraft: OkrDraft;
@@ -158,6 +159,16 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
     }));
   }
 
+  function importPastedObjectives(objectives: PastedOkrObjective[], mode: PastedOkrApplyMode) {
+    changeDraft((current) => withDefaultAlignment(
+      applyPastedOkrs(current, objectives, fixedOwner, mode, undefined, objectiveScope),
+      defaultAlignmentId
+    ));
+    setPublishAttempted(false);
+    setTouchedFields(new Set());
+    setMessage(copy.importApplied(objectives.length));
+  }
+
   async function publish() {
     setPublishConfirmOpen(false);
     setSaveState("saving");
@@ -208,6 +219,12 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
             <X className="h-4 w-4" />
             {copy.exit}
           </Link>
+          <PasteImportButton
+            copy={copy}
+            disabled={!canEditDraft}
+            existingObjectiveCount={draft.objectives.length}
+            onApply={importPastedObjectives}
+          />
           <button
             type="button"
             onClick={() => saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved, copy.translationFailed)}
@@ -440,6 +457,203 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         </div>
       )}
     </div>
+  );
+}
+
+function PasteImportButton({
+  copy,
+  disabled,
+  existingObjectiveCount,
+  onApply
+}: {
+  copy: typeof zh;
+  disabled: boolean;
+  existingObjectiveCount: number;
+  onApply: (objectives: PastedOkrObjective[], mode: PastedOkrApplyMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [sourceText, setSourceText] = useState("");
+  const [preview, setPreview] = useState<PastedOkrObjective[]>([]);
+  const [ignoredLines, setIgnoredLines] = useState<string[]>([]);
+  const [mode, setMode] = useState<PastedOkrApplyMode>("append");
+  const [error, setError] = useState("");
+
+  const krCount = preview.reduce((total, objective) => total + objective.keyResults.length, 0);
+  const previewIsComplete = preview.length > 0 && preview.every((objective) => (
+    objective.title.trim() && objective.keyResults.length > 0 && objective.keyResults.every((kr) => kr.trim())
+  ));
+
+  function close() {
+    setOpen(false);
+    setSourceText("");
+    setPreview([]);
+    setIgnoredLines([]);
+    setMode("append");
+    setError("");
+  }
+
+  function analyze() {
+    const result = parsePastedOkrs(sourceText);
+    setIgnoredLines(result.ignoredLines);
+    setPreview(result.objectives);
+    setError(result.objectives.length > 0 ? "" : copy.noObjectivesFound);
+  }
+
+  function updateObjectiveTitle(objectiveIndex: number, title: string) {
+    setPreview((current) => current.map((objective, index) => (
+      index === objectiveIndex ? { ...objective, title } : objective
+    )));
+  }
+
+  function updateKrTitle(objectiveIndex: number, krIndex: number, title: string) {
+    setPreview((current) => current.map((objective, index) => (
+      index === objectiveIndex
+        ? { ...objective, keyResults: objective.keyResults.map((kr, itemIndex) => itemIndex === krIndex ? title : kr) }
+        : objective
+    )));
+  }
+
+  function apply() {
+    if (!previewIsComplete) {
+      setError(copy.completeImportPreview);
+      return;
+    }
+    if (mode === "replace" && existingObjectiveCount > 0 && !window.confirm(copy.confirmReplaceDraft)) return;
+    onApply(preview, mode);
+    close();
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+      >
+        <ClipboardPaste className="h-4 w-4" />
+        {copy.pasteImport}
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paste-import-title"
+        >
+          <button type="button" className="absolute inset-0" onClick={close} aria-label={copy.cancel} />
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="paste-import-title" className="text-lg font-semibold text-slate-950">{copy.pasteImportTitle}</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{copy.pasteImportDescription}</p>
+              </div>
+              <button type="button" onClick={close} className="grid h-8 w-8 place-items-center rounded-md text-slate-400 hover:bg-slate-100" aria-label={copy.cancel}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-sm font-semibold text-slate-700">
+              {copy.sourceText}
+              <textarea
+                value={sourceText}
+                onChange={(event) => setSourceText(event.target.value)}
+                rows={9}
+                placeholder={copy.pastePlaceholder}
+                className="mt-2 w-full resize-y rounded-md border border-border px-3 py-2 font-mono text-sm leading-6 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={analyze}
+                disabled={!sourceText.trim()}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <Search className="h-4 w-4" />
+                {copy.analyzeText}
+              </button>
+            </div>
+
+            {error && <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+
+            {preview.length > 0 && (
+              <div className="mt-5 border-t border-border pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-slate-950">{copy.importPreview}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{copy.importSummary(preview.length, krCount)}</p>
+                  </div>
+                  {ignoredLines.length > 0 && (
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500" title={ignoredLines.join("\n")}>
+                      {copy.ignoredLines(ignoredLines.length)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  {preview.map((objective, objectiveIndex) => (
+                    <div key={objectiveIndex} className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-2 rounded-full bg-blue-500 px-2.5 py-1 text-xs font-semibold text-white">O{objectiveIndex + 1}</span>
+                        <textarea
+                          value={objective.title}
+                          onChange={(event) => updateObjectiveTitle(objectiveIndex, event.target.value)}
+                          rows={2}
+                          className="min-h-12 flex-1 resize-y rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-400"
+                        />
+                      </div>
+                      <div className="mt-3 space-y-2 pl-10">
+                        {objective.keyResults.map((kr, krIndex) => (
+                          <div key={krIndex} className="flex items-start gap-3">
+                            <span className="mt-2 min-w-10 text-xs font-semibold text-blue-700">KR{krIndex + 1}</span>
+                            <textarea
+                              value={kr}
+                              onChange={(event) => updateKrTitle(objectiveIndex, krIndex, event.target.value)}
+                              rows={2}
+                              className="min-h-12 flex-1 resize-y rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400"
+                            />
+                          </div>
+                        ))}
+                        {objective.keyResults.length === 0 && <div className="text-sm text-rose-700">{copy.atLeastOneKr}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {existingObjectiveCount > 0 && (
+                  <fieldset className="mt-5 rounded-lg border border-border p-4">
+                    <legend className="px-1 text-sm font-semibold text-slate-700">{copy.importMode}</legend>
+                    <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-700">
+                      <input type="radio" name="paste-import-mode" value="append" checked={mode === "append"} onChange={() => setMode("append")} className="mt-1" />
+                      <span><strong>{copy.appendDraft}</strong><span className="mt-0.5 block text-xs text-slate-500">{copy.appendDraftDescription}</span></span>
+                    </label>
+                    <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm text-slate-700">
+                      <input type="radio" name="paste-import-mode" value="replace" checked={mode === "replace"} onChange={() => setMode("replace")} className="mt-1" />
+                      <span><strong>{copy.replaceDraft}</strong><span className="mt-0.5 block text-xs text-rose-600">{copy.replaceDraftDescription}</span></span>
+                    </label>
+                  </fieldset>
+                )}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2 border-t border-border pt-4">
+              <button type="button" onClick={close} className="h-9 rounded-md px-3 text-sm font-medium text-slate-600 hover:bg-slate-100">{copy.cancel}</button>
+              <button
+                type="button"
+                onClick={apply}
+                disabled={!previewIsComplete}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <ClipboardPaste className="h-4 w-4" />
+                {copy.applyToDraft}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -961,6 +1175,25 @@ const zh = {
   weight: "权重",
   addKr: "添加 Key Result",
   addObjective: "添加 Objective",
+  pasteImport: "粘贴导入",
+  pasteImportTitle: "从文本导入 OKR",
+  pasteImportDescription: "粘贴包含 O1、O2 和 KR1、KR2 标记的文本。系统只识别层级，括号中的负责人等内容会原样保留。",
+  sourceText: "原始文本",
+  pastePlaceholder: "例如：\nO1: Improve software quality\n• KR1: Reduce escaped issues [Xiaojun]",
+  analyzeText: "分析文本",
+  noObjectivesFound: "没有识别到 Objective，请检查是否包含 O1:、O2: 等标记。",
+  completeImportPreview: "请补齐每个 Objective 和 Key Result 后再应用。",
+  importPreview: "识别预览",
+  importSummary: (objectives: number, krs: number) => `识别到 ${objectives} 个 Objective、${krs} 个 KR，可直接修改识别结果。`,
+  ignoredLines: (count: number) => `忽略 ${count} 行非 OKR 文本`,
+  importMode: "如何处理当前草稿",
+  appendDraft: "追加到当前草稿（推荐）",
+  appendDraftDescription: "保留已有 Objective，并在末尾加入识别结果。",
+  replaceDraft: "替换当前草稿",
+  replaceDraftDescription: "删除当前编辑范围内的 Objective，只保留本次识别结果。",
+  confirmReplaceDraft: "确认替换当前草稿？当前编辑范围内已有的 Objective 将被删除，随后自动保存。",
+  applyToDraft: "应用到草稿",
+  importApplied: (count: number) => `已将 ${count} 个 Objective 应用到草稿，正在自动保存。`,
   deleteObjective: "删除 Objective",
   deleteKr: "删除 KR",
   draftOnly: "草稿会自动保存，发布后才会影响公开 OKR 页面。",
@@ -1025,6 +1258,25 @@ const en: typeof zh = {
   weight: "Weight",
   addKr: "Add Key Result",
   addObjective: "Add Objective",
+  pasteImport: "Paste import",
+  pasteImportTitle: "Import OKRs from text",
+  pasteImportDescription: "Paste text containing O1, O2 and KR1, KR2 markers. Only hierarchy is detected; owner annotations in brackets remain in the text.",
+  sourceText: "Source text",
+  pastePlaceholder: "Example:\nO1: Improve software quality\n• KR1: Reduce escaped issues [Xiaojun]",
+  analyzeText: "Analyze text",
+  noObjectivesFound: "No Objectives found. Check that the text contains markers such as O1: and O2:.",
+  completeImportPreview: "Complete every Objective and Key Result before applying.",
+  importPreview: "Import preview",
+  importSummary: (objectives: number, krs: number) => `${objectives} Objectives and ${krs} KRs found. You can edit the result before applying it.`,
+  ignoredLines: (count: number) => `${count} non-OKR ${count === 1 ? "line" : "lines"} ignored`,
+  importMode: "How to update this draft",
+  appendDraft: "Append to current draft (recommended)",
+  appendDraftDescription: "Keep existing Objectives and add the parsed result at the end.",
+  replaceDraft: "Replace current draft",
+  replaceDraftDescription: "Remove Objectives in the current edit scope and keep only this result.",
+  confirmReplaceDraft: "Replace the current draft? Existing Objectives in this edit scope will be removed and the draft will auto-save.",
+  applyToDraft: "Apply to draft",
+  importApplied: (count: number) => `${count} ${count === 1 ? "Objective has" : "Objectives have"} been applied. Auto-saving now.`,
   deleteObjective: "Delete Objective",
   deleteKr: "Delete KR",
   draftOnly: "Drafts are auto-saved. Publishing updates the public OKR page.",
