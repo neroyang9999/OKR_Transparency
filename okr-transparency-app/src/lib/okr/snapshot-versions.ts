@@ -4,6 +4,8 @@ import { documentIdFromParts } from "../storage/document-ids";
 import { listFirestoreCollection, readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
 import type { OkrRecord } from "./types";
+import { readAdminConfig, type AdminConfig } from "../admin/config";
+import { resolveAdminTeamName } from "../admin/team-rename";
 
 const dataDir = path.join(process.cwd(), "data");
 const versionsPath = path.join(dataDir, "okr-snapshot-versions.json");
@@ -43,16 +45,35 @@ export async function writeSnapshotVersion(input: Omit<SnapshotVersion, "id" | "
 
 export async function listSnapshotVersions(limit = 50) {
   if (isFirestoreStorageEnabled()) {
-    return listFirestoreCollection<SnapshotVersion>("okrSnapshotVersions", limit, "createdAt desc");
+    const [versions, config] = await Promise.all([
+      listFirestoreCollection<SnapshotVersion>("okrSnapshotVersions", limit, "createdAt desc"),
+      readAdminConfig()
+    ]);
+    return versions.map((version) => resolveSnapshotVersionTeam(version, config));
   }
-  return (await readVersionFile()).versions.slice(0, limit);
+  const [file, config] = await Promise.all([readVersionFile(), readAdminConfig()]);
+  return file.versions.slice(0, limit).map((version) => resolveSnapshotVersionTeam(version, config));
 }
 
 export async function readSnapshotVersion(id: string) {
   if (isFirestoreStorageEnabled()) {
-    return readFirestoreDocument<SnapshotVersion>(`okrSnapshotVersions/${id}`);
+    const [version, config] = await Promise.all([
+      readFirestoreDocument<SnapshotVersion>(`okrSnapshotVersions/${id}`),
+      readAdminConfig()
+    ]);
+    return version ? resolveSnapshotVersionTeam(version, config) : null;
   }
-  return (await readVersionFile()).versions.find((version) => version.id === id) ?? null;
+  const [file, config] = await Promise.all([readVersionFile(), readAdminConfig()]);
+  const version = file.versions.find((item) => item.id === id);
+  return version ? resolveSnapshotVersionTeam(version, config) : null;
+}
+
+function resolveSnapshotVersionTeam(version: SnapshotVersion, config: AdminConfig): SnapshotVersion {
+  return {
+    ...version,
+    team: resolveAdminTeamName(config, version.team),
+    records: version.records.map((record) => ({ ...record, team: resolveAdminTeamName(config, record.team) }))
+  };
 }
 
 async function readVersionFile(): Promise<SnapshotVersionFile> {

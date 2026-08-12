@@ -50,8 +50,19 @@ describe("admin config v2", () => {
       ["integration-team", "System Team", "System Leader"],
       ["platform-team", "Infra Team", "Infra Leader"]
     ]);
+    expect(config.teams.map((team) => team.aliases)).toEqual([["Integration Team"], ["Platform Team"]]);
     expect(config.users[0].teams).toEqual(["System Team", "Infra Team"]);
     expect(config.users[0].ownerAliases).toEqual(expect.arrayContaining(["System Leader", "Infra Leader"]));
+  });
+
+  it("rejects a team name that collides with another team's legacy alias", () => {
+    const config = normalizeAdminConfig({});
+    const invalid = {
+      ...config,
+      teams: config.teams.map((team) => team.id === "software" ? { ...team, name: "Integration Team" } : team)
+    };
+
+    expect(validateAdminConfig(invalid)).toContain("Team name or alias System Team is used by more than one team");
   });
 
   it("keeps team leadership as a separate responsibility for a super administrator", () => {

@@ -22,6 +22,7 @@ export type AdminPeriod = {
 export type AdminTeam = {
   id: string;
   name: string;
+  aliases?: string[];
   owner: string;
   parentTeam: string;
   color: string;
@@ -134,6 +135,16 @@ export function validateAdminConfig(config: AdminConfig) {
   addDuplicateErrors(periodIds, "period", errors);
   addDuplicateErrors(teamIds, "team id", errors);
   addDuplicateErrors(teamNames, "team", errors);
+  const teamNameOwners = new Map<string, string>();
+  config.teams.forEach((team) => {
+    [team.name, ...(team.aliases ?? [])].forEach((name) => {
+      const key = canonicalTeamName(name).toLocaleLowerCase();
+      if (!key) return;
+      const existingOwner = teamNameOwners.get(key);
+      if (existingOwner && existingOwner !== team.id) errors.push(`Team name or alias ${name} is used by more than one team`);
+      teamNameOwners.set(key, team.id);
+    });
+  });
   addDuplicateErrors(emails, "user email", errors);
 
   if (config.periods.length === 0) errors.push("At least one period is required");
@@ -288,7 +299,8 @@ function normalizePeriod(period: LegacyPeriod, index: number): AdminPeriod {
 function normalizeTeams(input: LegacyTeam[]) {
   const usedIds = new Set<string>();
   return input.map((team, index): AdminTeam => {
-    const name = canonicalTeamName(String(team.name ?? `Team ${index + 1}`)) || `Team ${index + 1}`;
+    const rawName = String(team.name ?? `Team ${index + 1}`).trim() || `Team ${index + 1}`;
+    const name = canonicalTeamName(rawName) || `Team ${index + 1}`;
     const baseId = String(team.id ?? slugify(name) ?? `team-${index + 1}`).trim();
     let id = baseId;
     let suffix = 2;
@@ -297,6 +309,10 @@ function normalizeTeams(input: LegacyTeam[]) {
     return {
       id,
       name,
+      aliases: unique([
+        ...(Array.isArray(team.aliases) ? team.aliases.map((alias) => String(alias).trim()) : []),
+        ...(rawName !== name ? [rawName] : [])
+      ].filter((alias) => alias && alias !== name)),
       owner: canonicalOwnerName(String(team.owner ?? "")),
       parentTeam: canonicalTeamName(String(team.parentTeam ?? "")),
       color: normalizeTeamColor(team.color),

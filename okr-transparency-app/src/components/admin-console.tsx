@@ -14,6 +14,7 @@ import {
   Lock,
   LogOut,
   MessageSquareText,
+  Pencil,
   Plus,
   RotateCcw,
   Save,
@@ -31,6 +32,7 @@ import { getAdminRuntimeSummary, type VersionRecordChange } from "@/lib/admin/da
 import { filterAdminUsers, matchesAdminRoleCategory } from "@/lib/admin/user-filter";
 import { resolveTeamOwner, selectableTeamOwners } from "@/lib/admin/team-owners";
 import { deleteAdminTeam, teamDeleteBlockReason } from "@/lib/admin/team-delete";
+import { renameAdminTeam, teamRenameError } from "@/lib/admin/team-rename";
 import type { UserFeedback } from "@/lib/feedback";
 import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import type { OkrRecord, OkrTreeResponse } from "@/lib/okr/types";
@@ -545,8 +547,11 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
   const [selectedId, setSelectedId] = useState(config.teams[0]?.id ?? "");
   const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [renameTeamId, setRenameTeamId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const selected = config.teams.find((team) => team.id === selectedId) ?? config.teams[0];
   const deleteTarget = deleteTeamId ? config.teams.find((team) => team.id === deleteTeamId) ?? null : null;
+  const renameTarget = renameTeamId ? config.teams.find((team) => team.id === renameTeamId) ?? null : null;
 
   function addTeam() {
     const sequence = config.teams.length + 1;
@@ -571,6 +576,22 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
     setConfig(nextConfig);
     setSelectedId(nextConfig.teams[0]?.id ?? "");
     closeDeleteConfirmation();
+  }
+
+  function openRenameConfirmation() {
+    setRenameTeamId(selected.id);
+    setRenameValue("");
+  }
+
+  function closeRenameConfirmation() {
+    setRenameTeamId(null);
+    setRenameValue("");
+  }
+
+  function confirmRenameTeam() {
+    if (!renameTarget || teamRenameError(config, renameTarget.id, renameValue)) return;
+    setConfig(renameAdminTeam(config, renameTarget.id, renameValue));
+    closeRenameConfirmation();
   }
 
   if (!selected) return <Panel><EmptyState text="暂无团队" /></Panel>;
@@ -598,7 +619,9 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold text-slate-950">{selected.name}</h3><p className="mt-1 text-sm text-muted-foreground">维护负责人、上级团队和展示状态。</p></div>{config.defaultTeam === selected.name ? <StatusBadge tone="blue">默认团队</StatusBadge> : <button type="button" onClick={() => setConfig({ ...config, defaultTeam: selected.name })} className="h-8 rounded-md border border-border px-3 text-xs font-medium text-slate-700">设为默认</button>}</div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <TextField label="团队名称" value={selected.name} disabled={!isNew} onChange={(name) => renameTeam(config, setConfig, selected.id, name)} hint={isNew ? "保存后名称将作为 OKR 团队标识。" : "现有团队名称关联已发布 OKR，不在后台直接重命名。"} />
+          {isNew
+            ? <TextField label="团队名称" value={selected.name} onChange={(name) => renameTeam(config, setConfig, selected.id, name)} hint="保存后名称将作为 OKR 团队标识。" />
+            : <div><div className="flex items-end gap-2"><div className="min-w-0 flex-1"><TextField label="团队名称" value={selected.name} disabled onChange={() => undefined} /></div><button type="button" onClick={openRenameConfirmation} className="inline-flex h-9 shrink-0 items-center rounded-md border border-border px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><Pencil className="mr-1.5 h-4 w-4" />修改名称</button></div><p className="mt-1 text-xs leading-5 text-slate-500">修改前需二次确认；团队层级、成员归属和历史 OKR 关联会保留。</p></div>}
           <div><SelectField label="负责人" value={owner?.displayName ?? ""} options={ownerOptions} onChange={(owner) => assignTeamOwner(config, setConfig, selected.id, owner)} placeholder="选择现有成员" /><p className={cn("mt-1 text-xs leading-5", owner ? "text-slate-500" : "text-amber-700")}>{owner ? "仅显示已启用且信息完整的现有成员。" : "当前没有有效负责人，请从现有成员中重新选择。"}</p></div>
           <SelectField label="上级团队" value={selected.parentTeam} options={parentOptions} onChange={(parentTeam) => updateTeam(config, setConfig, selected.id, { parentTeam })} placeholder="无上级团队" allowEmpty />
           <div><div className="text-xs font-medium text-slate-500">团队颜色</div><div className="mt-2 flex gap-2">{teamColors.map((color) => <button key={color} type="button" onClick={() => updateTeam(config, setConfig, selected.id, { color })} aria-label={`选择 ${color}`} className={cn("h-7 w-7 rounded-full ring-offset-2", teamColorClass(color), selected.color === color && "ring-2 ring-slate-950")} />)}</div></div>
@@ -608,8 +631,12 @@ function TeamStructure({ config, setConfig }: AdminSectionProps) {
           <div className="flex items-center gap-2"><button type="button" onClick={openDeleteConfirmation} disabled={Boolean(deleteBlockReason)} title={deleteBlockReason || "永久删除团队配置"} className="inline-flex h-9 items-center rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 className="mr-1.5 h-4 w-4" />永久删除</button><button type="button" onClick={() => updateTeam(config, setConfig, selected.id, { enabled: !selected.enabled })} className={cn("h-9 rounded-md px-3 text-sm font-medium", selected.enabled ? "border border-border text-slate-700" : "bg-emerald-600 text-white")}>{selected.enabled ? "停用团队" : "重新启用"}</button></div>
         </div>
       </Panel>
-    </div>{deleteTarget && <TeamDeleteDialog teamName={deleteTarget.name} confirmation={deleteConfirmation} setConfirmation={setDeleteConfirmation} onCancel={closeDeleteConfirmation} onConfirm={confirmDeleteTeam} />}</>
+    </div>{renameTarget && <TeamRenameDialog teamName={renameTarget.name} value={renameValue} setValue={setRenameValue} error={renameValue.trim() ? teamRenameError(config, renameTarget.id, renameValue) : null} disabled={Boolean(teamRenameError(config, renameTarget.id, renameValue))} onCancel={closeRenameConfirmation} onConfirm={confirmRenameTeam} />}{deleteTarget && <TeamDeleteDialog teamName={deleteTarget.name} confirmation={deleteConfirmation} setConfirmation={setDeleteConfirmation} onCancel={closeDeleteConfirmation} onConfirm={confirmDeleteTeam} />}</>
   );
+}
+
+function TeamRenameDialog({ teamName, value, setValue, error, disabled, onCancel, onConfirm }: { teamName: string; value: string; setValue: (value: string) => void; error: string | null; disabled: boolean; onCancel: () => void; onConfirm: () => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-label={`修改 ${teamName} 名称`}><div className="w-full max-w-md rounded-xl border border-amber-200 bg-white p-6 shadow-2xl"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700"><AlertTriangle className="h-5 w-5" /></div><div><h3 className="text-lg font-semibold text-slate-950">确认修改团队名称</h3><p className="mt-2 text-sm leading-6 text-slate-600">将 <strong>{teamName}</strong> 修改为新名称。团队层级、成员与负责人归属会同步更新，旧名称会保留为历史数据别名。</p></div></div><label className="mt-5 block"><span className="text-xs font-medium text-slate-600">新团队名称</span><input autoFocus value={value} placeholder={`当前名称：${teamName}`} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !disabled) onConfirm(); }} className="mt-2 h-10 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-amber-400" /></label>{error && <p className="mt-2 text-xs text-rose-600">{error}</p>}<p className="mt-3 text-xs leading-5 text-slate-500">确认后仍需点击页面顶部“保存修改”才会生效。</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onCancel} className="h-9 rounded-md border border-border px-4 text-sm font-medium text-slate-700">取消</button><button type="button" onClick={onConfirm} disabled={disabled} className="h-9 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300">确认修改名称</button></div></div></div>;
 }
 
 function TeamDeleteDialog({ teamName, confirmation, setConfirmation, onCancel, onConfirm }: { teamName: string; confirmation: string; setConfirmation: (value: string) => void; onCancel: () => void; onConfirm: () => void }) {

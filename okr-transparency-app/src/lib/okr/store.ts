@@ -5,6 +5,8 @@ import { buildOkrTree, getOkrStats } from "./tree";
 import { FirestorePreconditionError, readFirestoreDocumentWithMetadata, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
 import { canonicalOwnerName, canonicalTeamName } from "../team-names";
+import { readAdminConfig, type AdminConfig } from "../admin/config";
+import { resolveAdminTeamName } from "../admin/team-rename";
 
 const dataDir = path.join(process.cwd(), "data");
 const snapshotPath = path.join(dataDir, "okr-snapshot.json");
@@ -16,15 +18,18 @@ export async function readOkrSnapshot(): Promise<OkrSnapshot> {
 
 export async function readOkrSnapshotState(): Promise<{ snapshot: OkrSnapshot; revision: string }> {
   if (isFirestoreStorageEnabled()) {
-    const result = await readFirestoreDocumentWithMetadata<OkrSnapshot>(snapshotDocumentPath);
-    if (result) return { snapshot: canonicalizeSnapshot(result.value), revision: result.updateTime };
+    const [result, config] = await Promise.all([
+      readFirestoreDocumentWithMetadata<OkrSnapshot>(snapshotDocumentPath),
+      readAdminConfig()
+    ]);
+    if (result) return { snapshot: canonicalizeSnapshot(result.value, config), revision: result.updateTime };
     return { snapshot: emptySnapshot(), revision: "missing" };
   }
 
   try {
-    const [snapshotText, stat] = await Promise.all([fs.readFile(snapshotPath, "utf8"), fs.stat(snapshotPath)]);
+    const [snapshotText, stat, config] = await Promise.all([fs.readFile(snapshotPath, "utf8"), fs.stat(snapshotPath), readAdminConfig()]);
     return {
-      snapshot: canonicalizeSnapshot(JSON.parse(snapshotText) as OkrSnapshot),
+      snapshot: canonicalizeSnapshot(JSON.parse(snapshotText) as OkrSnapshot, config),
       revision: `${stat.mtimeMs}:${stat.size}`
     };
   } catch {
@@ -84,12 +89,12 @@ function emptySnapshot(): OkrSnapshot {
   };
 }
 
-function canonicalizeSnapshot(snapshot: OkrSnapshot): OkrSnapshot {
+function canonicalizeSnapshot(snapshot: OkrSnapshot, config: AdminConfig): OkrSnapshot {
   return {
     ...snapshot,
     records: snapshot.records.map((record) => ({
       ...record,
-      team: canonicalTeamName(record.team),
+      team: resolveAdminTeamName(config, canonicalTeamName(record.team)),
       owner: canonicalOwnerName(record.owner),
       objective_scope: record.objective_scope ?? "team",
       owner_email: record.owner_email?.trim().toLowerCase() || undefined
