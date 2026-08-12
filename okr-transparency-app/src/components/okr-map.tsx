@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Building2, ChevronRight, Layers3, UserRound, ZoomIn, ZoomOut } from "lucide-react";
 import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { Badge } from "@/components/ui/badge";
-import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
+import { ConfidenceBadge, TypeBadge } from "@/components/okr-status";
 import type { AdminTeam } from "@/lib/admin/config";
 import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
 import { buildAlignmentViewModel } from "@/lib/okr/alignment-view";
@@ -178,24 +178,6 @@ export function OkrMap({
         </section>
       )}
 
-      {unalignedTeamObjectives.length > 0 && (
-        <section className="rounded-lg border border-amber-200 bg-amber-50/40 p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-slate-950">{lang === "en" ? "Unaligned Objectives" : "未对齐目标"}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {lang === "en" ? "These team Objectives do not have an upper-level Objective alignment yet." : "这些团队 Objective 还没有对齐到上级 Objective，建议优先补齐。"}
-              </p>
-            </div>
-            <Badge tone="yellow">{unalignedTeamObjectives.length}</Badge>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {unalignedTeamObjectives.map((objective) => (
-              <UnalignedObjective key={objective.okr_id} objective={objective} lang={lang} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
@@ -339,30 +321,6 @@ function ObjectiveNodeCard({ item, lang, collapsed, onToggle }: { item: Position
         )}
       </div>
     </div>
-  );
-}
-
-function UnalignedObjective({ objective, lang }: { objective: OkrRecord; lang: Lang }) {
-  return (
-    <article className="rounded-md border border-amber-200 bg-white p-4">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500">
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-amber-400 text-white">{initials(objective.team)}</span>
-        <span>{objective.team}</span>
-        <span className="text-slate-300">/</span>
-        <span>{objective.owner}</span>
-      </div>
-      <Link
-        href={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
-        className="block text-base font-semibold leading-6 text-slate-950 hover:text-blue-700"
-      >
-        {translateText(objective.objective, lang, objective.localized?.objective)}
-      </Link>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <TypeBadge value={objective.type} />
-        <ConfidenceBadge value={objective.confidence} />
-        <span className="text-xs text-muted-foreground">{t(lang, "score")} <Score value={objective.score} /></span>
-      </div>
-    </article>
   );
 }
 
