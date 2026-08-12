@@ -2,8 +2,10 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { ConfidenceLevel } from "./types";
 import { documentIdFromParts } from "../storage/document-ids";
-import { listFirestoreCollection, writeFirestoreDocument } from "../storage/firestore";
+import { deleteFirestoreDocument, listFirestoreCollection, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
+import { readAdminConfig, type AdminConfig } from "../admin/config";
+import { resolveAdminTeamName } from "../admin/team-rename";
 
 const dataDir = path.join(/* turbopackIgnore: true */ process.cwd(), "data");
 const progressNotesPath = path.join(dataDir, "okr-progress-notes.json");
@@ -50,10 +52,16 @@ type ProgressNoteStoreOptions = {
 
 export async function readProgressNotes(options: ProgressNoteStoreOptions = {}) {
   if (shouldUseFirestore(options)) {
-    return sortProgressNotes(await listFirestoreCollection<ProgressNote>("okrProgressNotes"));
+    const [notes, config] = await Promise.all([
+      listFirestoreCollection<ProgressNote>("okrProgressNotes"),
+      readAdminConfig()
+    ]);
+    return sortProgressNotes(resolveProgressNoteTeamNames(notes, config));
   }
 
-  return sortProgressNotes((await readProgressNoteFile(options)).notes);
+  const notes = (await readProgressNoteFile(options)).notes;
+  if (options.filePath) return sortProgressNotes(notes);
+  return sortProgressNotes(resolveProgressNoteTeamNames(notes, await readAdminConfig()));
 }
 
 export async function readProgressNotesForObjective(
@@ -62,21 +70,11 @@ export async function readProgressNotesForObjective(
   objectiveId: string,
   options: ProgressNoteStoreOptions = {}
 ) {
-  if (shouldUseFirestore(options)) {
-    const notes = await listFirestoreCollection<ProgressNote>("okrProgressNotes");
-    return sortProgressNotes(notes.filter((note) =>
-      note.team === team &&
-      note.periodId === periodId &&
-      note.objectiveId === objectiveId
-    ));
-  }
-
-  const file = await readProgressNoteFile(options);
-  return sortProgressNotes(file.notes.filter((note) =>
+  return (await readProgressNotes(options)).filter((note) =>
     note.team === team &&
     note.periodId === periodId &&
     note.objectiveId === objectiveId
-  ));
+  );
 }
 
 export async function writeProgressNote(input: {
@@ -127,20 +125,21 @@ export async function writeProgressNote(input: {
   };
 
   if (shouldUseFirestore(options)) {
+    const [storedNotes, config] = await Promise.all([
+      listFirestoreCollection<ProgressNote>("okrProgressNotes"),
+      readAdminConfig()
+    ]);
+    const previousNotes = storedNotes.filter((note) => sameProgressNote(note, nextNote, config));
     await writeFirestoreDocument(progressNoteDocumentPath(nextNote), nextNote);
+    await Promise.all(previousNotes
+      .filter((note) => progressNoteDocumentPath(note) !== progressNoteDocumentPath(nextNote))
+      .map((note) => deleteFirestoreDocument(progressNoteDocumentPath(note))));
     return nextNote;
   }
 
   const file = await readProgressNoteFile(options);
-  const index = file.notes.findIndex((note) =>
-    note.team === input.team &&
-    note.periodId === input.periodId &&
-    note.objectiveId === input.objectiveId &&
-    note.weekStart === nextNote.weekStart
-  );
-  const notes = index >= 0
-    ? file.notes.map((note, noteIndex) => noteIndex === index ? nextNote : note)
-    : [...file.notes, nextNote];
+  const config = options.filePath ? null : await readAdminConfig();
+  const notes = [...file.notes.filter((note) => !sameProgressNote(note, nextNote, config)), nextNote];
 
   const filePath = resolveProgressNotesPath(options);
   await fs.mkdir(/* turbopackIgnore: true */ resolveProgressNotesDir(options), { recursive: true });
@@ -246,6 +245,18 @@ function resolveProgressNotesDir(options: ProgressNoteStoreOptions) {
 
 function shouldUseFirestore(options: ProgressNoteStoreOptions) {
   return !options.filePath && isFirestoreStorageEnabled();
+}
+
+function resolveProgressNoteTeamNames(notes: ProgressNote[], config: AdminConfig) {
+  return notes.map((note) => ({ ...note, team: resolveAdminTeamName(config, note.team) }));
+}
+
+function sameProgressNote(left: ProgressNote, right: ProgressNote, config: AdminConfig | null) {
+  const leftTeam = config ? resolveAdminTeamName(config, left.team) : left.team;
+  return leftTeam === right.team &&
+    left.periodId === right.periodId &&
+    left.objectiveId === right.objectiveId &&
+    left.weekStart === right.weekStart;
 }
 
 function progressNoteDocumentPath(note: Pick<ProgressNote, "team" | "periodId" | "objectiveId" | "weekStart">) {

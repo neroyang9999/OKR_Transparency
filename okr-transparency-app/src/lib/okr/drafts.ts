@@ -7,10 +7,11 @@ import { documentIdFromParts } from "../storage/document-ids";
 import { readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
 import { readAdminConfig } from "../admin/config";
+import { adminTeamNameCandidates, resolveAdminTeamName } from "../admin/team-rename";
 import { validateOkrGraph, validateOkrRecordQuality } from "./graph-validation";
 import { buildPublicationCandidate } from "./publication-candidate";
 import { readSnapshotVersion, writeSnapshotVersion } from "./snapshot-versions";
-import { canonicalOwnerName, canonicalTeamName, legacyTeamNamesFor } from "../team-names";
+import { canonicalOwnerName } from "../team-names";
 import type { OkrOwnerScope } from "./owner-scope";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -32,29 +33,32 @@ type PeriodSnapshotFile = {
 };
 
 export async function readDraft(team: string, periodId: string): Promise<OkrDraft> {
+  const config = await readAdminConfig();
+  const resolvedTeam = resolveAdminTeamName(config, team);
+  const teamCandidates = adminTeamNameCandidates(config, resolvedTeam);
   if (isFirestoreStorageEnabled()) {
-    for (const candidate of [team, ...legacyTeamNamesFor(team)]) {
+    for (const candidate of teamCandidates) {
       const existing = await readFirestoreDocument<OkrDraft>(draftDocumentPath(candidate, periodId));
-      if (existing) return canonicalizeDraft(existing);
+      if (existing) return canonicalizeDraft(existing, resolvedTeam);
     }
 
     const periodRecords = await readPeriodRecords(periodId);
-    if (periodRecords) return recordsToDraft(periodRecords, team, periodId);
+    if (periodRecords) return recordsToDraft(periodRecords, resolvedTeam, periodId);
 
     const snapshot = await readOkrSnapshot();
-    return recordsToDraft(snapshot.records, team, periodId, periodId === await getDefaultPeriodId());
+    return recordsToDraft(snapshot.records, resolvedTeam, periodId, periodId === config.defaultPeriodId);
   }
 
   const file = await readDraftFile();
-  const acceptedTeams = new Set([team, ...legacyTeamNamesFor(team)]);
+  const acceptedTeams = new Set(teamCandidates);
   const existing = file.drafts.find((draft) => acceptedTeams.has(draft.team) && draft.periodId === periodId);
-  if (existing) return canonicalizeDraft(existing);
+  if (existing) return canonicalizeDraft(existing, resolvedTeam);
 
   const periodRecords = await readPeriodRecords(periodId);
-  if (periodRecords) return recordsToDraft(periodRecords, team, periodId);
+  if (periodRecords) return recordsToDraft(periodRecords, resolvedTeam, periodId);
 
   const snapshot = await readOkrSnapshot();
-  return recordsToDraft(snapshot.records, team, periodId, periodId === await getDefaultPeriodId());
+  return recordsToDraft(snapshot.records, resolvedTeam, periodId, periodId === config.defaultPeriodId);
 }
 
 export async function writeDraft(draft: OkrDraft, teamOwner = draft.team, forceOwner = true, preserveStatus = false) {
@@ -268,13 +272,14 @@ async function getDefaultPeriodId() {
 }
 
 export async function readPeriodRecords(periodId: string) {
+  const config = await readAdminConfig();
   if (isFirestoreStorageEnabled()) {
     const period = await readFirestoreDocument<PeriodSnapshotFile["periods"][number]>(periodDocumentPath(periodId));
-    return period?.records.map(canonicalizeRecord) ?? null;
+    return period?.records.map((record) => canonicalizeRecord(record, config)) ?? null;
   }
 
   const file = await readPeriodSnapshotFile();
-  return file.periods.find((period) => period.periodId === periodId)?.records.map(canonicalizeRecord) ?? null;
+  return file.periods.find((period) => period.periodId === periodId)?.records.map((record) => canonicalizeRecord(record, config)) ?? null;
 }
 
 async function readDraftFile(): Promise<DraftFile> {
@@ -326,18 +331,17 @@ function periodDocumentPath(periodId: string) {
   return `okrPeriodSnapshots/${documentIdFromParts([periodId])}`;
 }
 
-function canonicalizeRecord(record: OkrSnapshot["records"][number]) {
+function canonicalizeRecord(record: OkrSnapshot["records"][number], config: Awaited<ReturnType<typeof readAdminConfig>>) {
   return {
     ...record,
-    team: canonicalTeamName(record.team),
+    team: resolveAdminTeamName(config, record.team),
     owner: canonicalOwnerName(record.owner),
     objective_scope: record.objective_scope ?? "team",
     owner_email: record.owner_email?.trim().toLowerCase() || undefined
   };
 }
 
-function canonicalizeDraft(draft: OkrDraft): OkrDraft {
-  const team = canonicalTeamName(draft.team);
+function canonicalizeDraft(draft: OkrDraft, team: string): OkrDraft {
   return {
     ...draft,
     team,
