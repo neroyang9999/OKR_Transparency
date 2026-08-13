@@ -19,3 +19,4 @@ deploy/terraform/.terraform.lock.hcl
 deploy/terraform/terraform.tfvars
 deploy/terraform/terraform.tfstate
 deploy/terraform/terraform.tfstate.backup
+tsconfig.tsbuildinfo

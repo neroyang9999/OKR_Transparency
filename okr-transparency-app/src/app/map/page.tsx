@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
-import { OkrMap } from "@/components/okr-map";
+import { OkrAlignmentMap } from "@/components/okr-alignment-map";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readOkrSnapshot } from "@/lib/okr/store";
@@ -114,11 +114,10 @@ export default async function MapPage({
           )}
         </div>
       )}
-      <OkrMap
+      <OkrAlignmentMap
         records={teamScope.records}
         teams={pageAccess.adminConfig.teams}
         lang={lang}
-        selectedTeam={teamScope.focusTeam}
       />
     </AppShell>
   );
