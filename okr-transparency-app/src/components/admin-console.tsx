@@ -660,7 +660,7 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
   }
 
   function addUser() {
-    const user: AdminUser = { email: nextUserEmail(config.users), displayName: "新成员", role: "user", teams: [config.defaultTeam], ownerAliases: [], enabled: true };
+    const user: AdminUser = { email: nextUserEmail(config.users), displayName: "新成员", role: "user", teams: [], ownerAliases: [], enabled: true };
     setQuery("");
     setRoleFilter("user");
     setConfig({ ...config, users: [user, ...config.users] });
@@ -849,7 +849,7 @@ function UserAvatar({ name, enabled }: { name: string; enabled: boolean }) { con
 
 function EffectiveAccess({ config, user }: { config: AdminConfig; user: AdminUser }) {
   const teams = user.role === "super_admin" ? config.teams.filter((team) => team.enabled).map((team) => team.name) : user.role === "team_leader" ? unique(user.teams.flatMap((team) => [team, ...descendantTeams(config.teams, team)])) : user.teams;
-  const capability = user.role === "super_admin" ? "管理后台、编辑和发布所有团队" : user.role === "team_leader" ? "编辑并发布所选团队及其下级团队" : "仅编辑本人名下的 KR，不可发布";
+  const capability = user.role === "super_admin" ? "管理后台、编辑和发布所有团队" : user.role === "team_leader" ? "编辑并发布所选团队及其下级团队" : "仅编辑并发布本人名下的 OKR，不可发布团队 OKR";
   const leaderTeams = user.role === "team_leader" ? user.teams : user.leaderTeams ?? [];
   return <div className="mt-5 rounded-lg bg-slate-50 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">最终生效权限</div><div className="mt-2 text-sm font-medium text-slate-900">{capability}</div><div className="mt-2 text-xs leading-5 text-slate-500">范围：{teams.length ? teams.join("、") : "无团队范围"}</div>{leaderTeams.length > 0 && <div className="mt-2 text-xs leading-5 text-violet-700">团队负责人：{leaderTeams.join("、")}</div>}</div>;
 }
