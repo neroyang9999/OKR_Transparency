@@ -112,8 +112,14 @@ function PeriodArrow({
   const tooltip = period ? periodLabel(period, lang) : t(lang, "noMorePeriods");
   const tooltipClassName = cn(
     "pointer-events-none absolute top-[-38px] z-40 whitespace-nowrap rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition group-hover:opacity-100",
-    "after:absolute after:left-1/2 after:top-full after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-4 after:border-t-4 after:border-x-transparent after:border-t-slate-900",
-    direction === "newer" ? "left-1/2 -translate-x-1/2" : "right-1/2 translate-x-1/2"
+    "after:absolute after:top-full after:h-0 after:w-0 after:border-x-4 after:border-t-4 after:border-x-transparent after:border-t-slate-900",
+    /** The older arrow is the last control on the row, so its tooltip is right-anchored rather
+     *  than centred: centring overhangs the 40px button by ~38px, which on a wide page sits
+     *  flush against the viewport and gives the whole document a horizontal scrollbar. The
+     *  pointer follows the anchor so it still lands on the middle of the 40px button. */
+    direction === "newer"
+      ? "left-1/2 -translate-x-1/2 after:left-1/2 after:-translate-x-1/2"
+      : "right-0 after:right-5 after:translate-x-1/2"
   );
 
   if (!period) {
