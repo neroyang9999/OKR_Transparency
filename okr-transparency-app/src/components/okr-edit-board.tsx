@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowDown, Check, CircleAlert, ClipboardPaste, Link2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { ArrowDown, Check, CircleAlert, ClipboardPaste, Link2, Loader2, Lock, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { applyDraftObjectiveScope, calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
@@ -48,6 +48,12 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const [message, setMessage] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [navigating, startNavigation] = useTransition();
+  // Publish runs save → publish → navigate. saveState flips back to "saved" halfway
+  // through, so the confirm dialog tracks this instead and stays up until the
+  // destination page has actually rendered.
+  const publishInFlight = publishing || navigating;
   const [touchedFields, setTouchedFields] = useState<Set<string>>(() => new Set());
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const copy = lang === "en" ? en : zh;
@@ -169,11 +175,18 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
     setMessage(copy.importApplied(objectives.length));
   }
 
-  async function publish() {
+  function stopPublishing() {
+    setPublishing(false);
     setPublishConfirmOpen(false);
-    setSaveState("saving");
+  }
+
+  async function publish() {
+    setPublishing(true);
     const saveResult = await saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved, copy.translationFailed);
-    if (!saveResult.ok) return;
+    if (!saveResult.ok) {
+      stopPublishing();
+      return;
+    }
 
     const response = await fetch("/api/okrs/publish", {
       method: "POST",
@@ -186,16 +199,23 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
     if (!response.ok) {
       setSaveState("error");
       setMessage(body.error ?? body.errors?.[0] ?? copy.publishFailed);
+      stopPublishing();
       return;
     }
 
     setSaveState("saved");
     setMessage(saveResult.translationWarnings.length > 0 ? `${copy.published} · ${copy.translationFailed}` : copy.published);
     if (saveResult.translationWarnings.length > 0) {
+      stopPublishing();
       router.refresh();
       return;
     }
-    router.push(hrefWithLang(overviewHref(draft.team, draft.periodId, ownerEmail), lang));
+    // Batched with the transition below, so publishInFlight never dips to false:
+    // the dialog keeps its spinner until the destination page has rendered.
+    setPublishing(false);
+    startNavigation(() => {
+      router.push(hrefWithLang(overviewHref(draft.team, draft.periodId, ownerEmail), lang));
+    });
   }
 
   return (
@@ -228,7 +248,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           <button
             type="button"
             onClick={() => saveDraft(draft, fixedOwner, ownerEmail, setSaveState, setMessage, copy.saved, copy.translationFailed)}
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            disabled={publishInFlight}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
           >
             <Save className="h-4 w-4" />
             {copy.save}
@@ -236,11 +257,11 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           <button
             type="button"
             onClick={requestPublish}
-            disabled={saveState === "saving" || !canPublishDraft}
+            disabled={publishInFlight || saveState === "saving" || !canPublishDraft}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            <Send className="h-4 w-4" />
-            {copy.publish}
+            {publishInFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {publishInFlight ? copy.publishing : copy.publish}
           </button>
         </div>
       </div>
@@ -413,12 +434,14 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4"
           role="dialog"
           aria-modal="true"
+          aria-busy={publishInFlight}
           aria-labelledby="publish-confirm-title"
         >
           <button
             type="button"
             className="absolute inset-0"
             onClick={() => setPublishConfirmOpen(false)}
+            disabled={publishInFlight}
             aria-label={copy.cancel}
           />
           <div className="relative w-full max-w-sm rounded-xl border border-border bg-white p-5 shadow-2xl">
@@ -426,7 +449,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
               {copy.confirmPublishTitle}
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {copy.confirmPublishDescription}
+              {publishInFlight ? copy.publishingDescription : copy.confirmPublishDescription}
             </p>
             {validation.warnings.length > 0 && (
               <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
@@ -440,17 +463,19 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
               <button
                 type="button"
                 onClick={() => setPublishConfirmOpen(false)}
-                className="h-9 rounded-md px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                disabled={publishInFlight}
+                className="h-9 rounded-md px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
               >
                 {copy.cancel}
               </button>
               <button
                 type="button"
                 onClick={() => void publish()}
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+                disabled={publishInFlight}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
               >
-                <Send className="h-4 w-4" />
-                {copy.confirmPublishAction}
+                {publishInFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {publishInFlight ? copy.publishing : copy.confirmPublishAction}
               </button>
             </div>
           </div>
@@ -1221,7 +1246,9 @@ const zh = {
   confirmDeleteKr: "确认删除这个 KR？删除后会自动保存草稿。",
   confirmPublishTitle: "发布 OKR？",
   confirmPublishDescription: "发布后，团队页面将立即更新。",
-  confirmPublishAction: "确认发布"
+  confirmPublishAction: "确认发布",
+  publishing: "发布中…",
+  publishingDescription: "正在保存并发布，完成后会自动跳转到 OKR 页面。"
 };
 
 const en: typeof zh = {
@@ -1304,5 +1331,7 @@ const en: typeof zh = {
   confirmDeleteKr: "Delete this KR? The draft will auto-save.",
   confirmPublishTitle: "Publish OKR?",
   confirmPublishDescription: "The team page will update immediately.",
-  confirmPublishAction: "Publish"
+  confirmPublishAction: "Publish",
+  publishing: "Publishing…",
+  publishingDescription: "Saving and publishing; you will be taken to the OKR page when it finishes."
 };
