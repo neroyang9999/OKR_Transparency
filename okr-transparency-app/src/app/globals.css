@@ -18,6 +18,12 @@
   box-sizing: border-box;
 }
 
+/* Reserve the scrollbar track on every route. Without it a page that scrolls is 15px narrower
+   than one that does not, which slides the centered header sideways as you navigate. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: hsl(var(--background));
