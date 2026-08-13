@@ -158,7 +158,9 @@ export default async function HomePage({
           {rootObjectives.length === 0 ? (
             <EmptyTeam lang={lang} />
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border bg-white shadow-subtle">
+            /* A column, never a grid: each Objective keeps the full width even on a wide monitor,
+               so two of them are never set side by side. */
+            <div className="flex flex-col gap-4">
               {rootObjectives.map((objective, index) => (
                 <ObjectiveBlock
                   key={objective.okr_id}
@@ -241,7 +243,7 @@ function ObjectiveBlock({
   );
 
   return (
-    <article className={cn("relative px-6 py-6", index > 0 && "border-t border-border")}>
+    <article className="relative rounded-lg border border-border bg-white px-6 py-6 shadow-subtle">
       <div className="grid gap-4 md:grid-cols-[72px_1fr]">
         <div className="relative hidden md:block">
           <div className="absolute left-8 top-8 h-[calc(100%-32px)] w-px bg-slate-200" />
@@ -263,11 +265,14 @@ function ObjectiveBlock({
             {t(lang, "targetPrefix")}{translateText(objective.objective, lang, objective.localized?.objective)}
           </OkrDetailLink>
           {alignmentChain.length > 0 && <AlignmentPill chain={alignmentChain} lang={lang} />}
-          <div className="mt-3 h-2 max-w-3xl overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
+          <div className="mt-3 flex items-center gap-3">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
+            </div>
+            <span className="flex-none text-sm font-bold tabular-nums text-slate-700">{progress}%</span>
           </div>
 
-          <div className="mt-5 space-y-3 border-y border-border py-3">
+          <div className="mt-5 flex flex-col gap-2.5">
             {children.filter((record) => record.kr).map((kr) => (
               <KRRow key={kr.okr_id} kr={kr} detailHref={detailHref(kr.okr_id)} lang={lang} />
             ))}
@@ -302,7 +307,7 @@ function KRRow({ kr, detailHref, lang }: { kr: OkrRecord; detailHref: string; la
   return (
     <OkrDetailLink
       href={detailHref}
-      className="block rounded-md border border-transparent px-3 py-3 transition hover:border-blue-100 hover:bg-slate-50"
+      className="block rounded-[9px] border border-[#eceff3] bg-[#fbfcfd] px-[13px] py-[11px] transition hover:border-blue-200 hover:bg-slate-50"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">

@@ -35,8 +35,11 @@ export function AppShell({
   const { data: session } = useSession();
   const identity = useAppIdentity();
   const currentEmail = identity.mode === "iap" ? identity.email : session?.user?.email;
-  /** Only the page body changes width per route; the header is fixed chrome and stays put. */
-  const contentWidth = active === "okrMap" ? "max-w-none" : "max-w-7xl";
+  /** Only the page body changes width per route; the header is fixed chrome and stays put.
+   *  The overview runs wider than the default: its Objective cards stack in a single column, so
+   *  the surplus on a wide monitor goes into the cards themselves rather than into empty margin. */
+  const contentWidth =
+    active === "okrMap" ? "max-w-none" : active === "overview" ? "max-w-[1600px]" : "max-w-7xl";
 
   return (
     <div className="min-h-screen">
