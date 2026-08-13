@@ -668,7 +668,7 @@ function ObjectiveCard({
         <TypeMark type={objective.type} />
       </div>
 
-      <div className="text-[12.5px] font-semibold leading-[1.4] text-slate-950">{title}</div>
+      <div className="text-[11.5px] font-semibold leading-[1.4] text-slate-950">{title}</div>
 
       <div className="mt-2 flex items-center gap-2">
         <ProgressBar progress={objective.progress} confidence={objective.confidence} />
@@ -745,7 +745,7 @@ function MemberGroupCard({
           <ChevronDown
             className={cn("h-3.5 w-3.5 flex-none text-slate-400 transition-transform duration-[180ms]", !open && "-rotate-90")}
           />
-          <span className="flex-none text-[12.5px] font-bold text-slate-950">{group.team}</span>
+          <span className="flex-none text-[11.5px] font-bold text-slate-950">{group.team}</span>
           {parentTitle && (
             <span className="min-w-0 flex-1 truncate text-[10.5px] text-slate-400">
               {lang === "en" ? `carries “${parentTitle}”` : `承接「${parentTitle}」`}
