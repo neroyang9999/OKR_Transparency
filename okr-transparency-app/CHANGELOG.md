@@ -4,6 +4,13 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.7.11 - 2026-08-13
+
+- Rebuild the OKR alignment view as three fixed columns (top-level team, second-level team, individual carrier group) carrying a single kind of edge, each routed through its own vertical channel.
+- Scale the alignment canvas with the screen: columns fill the available width, and past a 1900px baseline cards, gaps, and type scale up together instead of leaving the map at laptop size on a large monitor.
+- Compact the rows above the alignment canvas on short viewports, so a scaled 1080p laptop gains 84px of canvas and no longer scrolls the page to show it.
+- Render the navigation bar identically on every route, and align the account, sign-in, and language controls with the navigation type size.
+
 ## v0.7.10 - 2026-08-12
 
 - Hide the large unaligned-objectives warning list while preserving alignment data, summary metrics, map nodes, and publishing behavior.

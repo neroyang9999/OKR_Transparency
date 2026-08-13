@@ -35,20 +35,22 @@ export default async function MapPage({
 
   return (
     <AppShell active="okrMap">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+      {/* On a short viewport every row above the canvas is competing with it, so the heading block
+          gives up its explainer and some of its scale — the canvas is the page. */}
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4 short:mb-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-950">{t(lang, "mapTitle")}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+          <h1 className="text-2xl font-semibold text-slate-950 short:text-xl">{t(lang, "mapTitle")}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground short:hidden">
             {t(lang, "mapSubtitle")}
           </p>
         </div>
-        <div className="flex h-10 items-center rounded-md border border-border bg-white shadow-subtle">
+        <div className="flex h-10 items-center rounded-md border border-border bg-white shadow-subtle short:h-9">
           {configuredPeriods.map((period) => (
             <Link
               key={period.id}
               href={mapHref({ period: period.id, team: teamScope.selectedTeam, lang })}
               className={cn(
-                "grid h-10 min-w-40 place-items-center border-l border-border px-5 text-sm font-medium first:border-l-0",
+                "grid h-10 min-w-40 place-items-center border-l border-border px-5 text-sm font-medium first:border-l-0 short:h-9 short:min-w-36",
                 period.id === selectedPeriod ? "bg-blue-50/70 text-blue-600" : "text-slate-700 hover:bg-slate-50"
               )}
               aria-current={period.id === selectedPeriod ? "page" : undefined}
@@ -59,7 +61,7 @@ export default async function MapPage({
         </div>
       </div>
       {teamScope.topLevelTeams.length > 0 && (
-        <div className="mb-5 space-y-2 rounded-lg border border-border bg-white p-3 shadow-subtle">
+        <div className="mb-5 space-y-2 rounded-lg border border-border bg-white p-3 shadow-subtle short:mb-3 short:p-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 min-w-24 text-sm font-medium text-muted-foreground">{lang === "en" ? "Organization" : "一级团队"}</span>
             <Link

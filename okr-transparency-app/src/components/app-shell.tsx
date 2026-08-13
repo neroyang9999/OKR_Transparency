@@ -35,11 +35,15 @@ export function AppShell({
   const { data: session } = useSession();
   const identity = useAppIdentity();
   const currentEmail = identity.mode === "iap" ? identity.email : session?.user?.email;
+  /** Only the page body changes width per route; the header is fixed chrome and stays put. */
+  const contentWidth = active === "okrMap" ? "max-w-none" : "max-w-7xl";
 
   return (
-    <div className={cn("min-h-screen", compactOnLaptop && "overview-laptop-compact")}>
+    <div className="min-h-screen">
+      {/* The header is deliberately outside any page-level compaction: it has to render at the
+          same size and in the same place on every route, or navigating resizes the nav bar. */}
       <header className="sticky top-0 z-20 border-b border-border bg-white/92 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3 short:py-2">
           <Link href={hrefWithLang("/", lang)} className="flex items-center gap-3">
             <div className="flex h-9 w-11 items-center justify-center rounded-md bg-black px-1.5">
               <Image
@@ -84,7 +88,7 @@ export function AppShell({
                 })}
                 {currentEmail && identity.mode === "iap" ? (
                   <span
-                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 xl:inline-flex"
+                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-sm font-medium text-slate-500 xl:inline-flex"
                     title={currentEmail}
                   >
                     <span className="truncate">{currentEmail}</span>
@@ -93,7 +97,7 @@ export function AppShell({
                   <button
                     type="button"
                     onClick={() => void signOut()}
-                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 xl:inline-flex"
+                    className="hidden h-9 max-w-44 items-center rounded-md px-3 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 xl:inline-flex"
                     title={currentEmail}
                   >
                     <span className="truncate">{currentEmail}</span>
@@ -102,7 +106,7 @@ export function AppShell({
                   <button
                     type="button"
                     onClick={() => void signIn("google")}
-                    className="hidden h-9 items-center rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
+                    className="hidden h-9 items-center rounded-md px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 md:inline-flex"
                   >
                     登录
                   </button>
@@ -113,7 +117,9 @@ export function AppShell({
           </nav>
         </div>
       </header>
-      <main className={cn("mx-auto px-5 py-6", active === "okrMap" ? "max-w-none" : "max-w-7xl")}>{children}</main>
+      <main className={cn("mx-auto px-5 py-6 short:py-4", contentWidth, compactOnLaptop && "overview-laptop-compact")}>
+        {children}
+      </main>
     </div>
   );
 }
@@ -136,7 +142,7 @@ function LanguageToggle({
 
   return (
     <div
-      className="ml-2 inline-flex h-9 shrink-0 items-center rounded-md border border-border bg-white p-0.5 text-xs font-medium shadow-subtle"
+      className="ml-2 inline-flex h-9 shrink-0 items-center rounded-md border border-border bg-white p-0.5 text-sm font-medium shadow-subtle"
       aria-label={t(currentLang, "languageLabel")}
     >
       {(["zh", "en"] as const).map((lang) => (
