@@ -4,6 +4,7 @@ type BadgeProps = {
   children: React.ReactNode;
   tone?: "gray" | "green" | "yellow" | "red" | "blue";
   className?: string;
+  title?: string;
 };
 
 const toneClasses = {
@@ -14,9 +15,12 @@ const toneClasses = {
   blue: "border-blue-200 bg-blue-50 text-blue-700"
 };
 
-export function Badge({ children, tone = "gray", className }: BadgeProps) {
+export function Badge({ children, tone = "gray", className, title }: BadgeProps) {
   return (
-    <span className={cn("inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium", toneClasses[tone], className)}>
+    <span
+      title={title}
+      className={cn("inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium", toneClasses[tone], className)}
+    >
       {children}
     </span>
   );
