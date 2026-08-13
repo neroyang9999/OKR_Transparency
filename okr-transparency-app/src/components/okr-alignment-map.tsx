@@ -253,10 +253,10 @@ export function OkrAlignmentMap({
   const hitGroups = model.memberGroups.filter((group) => group.members.some(matches)).length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 short:space-y-2">
       <MetricsBar model={model} lang={lang} />
 
-      <div className="flex h-[52px] items-center gap-3.5 rounded-[10px] border border-[#e0e6ee] bg-white px-3 shadow-subtle">
+      <div className="flex h-[52px] items-center gap-3.5 rounded-[10px] border border-[#e0e6ee] bg-white px-3 shadow-subtle short:h-11 short:gap-3">
         <DensitySwitch
           label={t(lang, "alignGroupDensity")}
           options={[

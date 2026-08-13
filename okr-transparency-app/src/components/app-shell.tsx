@@ -42,7 +42,7 @@ export function AppShell({
   return (
     <div className={cn("min-h-screen", compactOnLaptop && "overview-laptop-compact")}>
       <header className="sticky top-0 z-20 border-b border-border bg-white/92 backdrop-blur">
-        <div className={cn("mx-auto flex items-center justify-between gap-4 px-5 py-3", containerWidth)}>
+        <div className={cn("mx-auto flex items-center justify-between gap-4 px-5 py-3 short:py-2", containerWidth)}>
           <Link href={hrefWithLang("/", lang)} className="flex items-center gap-3">
             <div className="flex h-9 w-11 items-center justify-center rounded-md bg-black px-1.5">
               <Image
@@ -116,7 +116,7 @@ export function AppShell({
           </nav>
         </div>
       </header>
-      <main className={cn("mx-auto px-5 py-6", containerWidth)}>{children}</main>
+      <main className={cn("mx-auto px-5 py-6 short:py-4", containerWidth)}>{children}</main>
     </div>
   );
 }

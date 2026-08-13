@@ -8,6 +8,11 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      screens: {
+        /** Laptops and scaled 1080p displays, where page chrome competes with the map canvas for
+         *  the little vertical room there is. Height-only: a short window needs this at any width. */
+        short: { raw: "(max-height: 900px)" }
+      },
       colors: {
         border: "hsl(var(--border))",
         background: "hsl(var(--background))",
