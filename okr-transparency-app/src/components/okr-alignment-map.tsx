@@ -30,6 +30,10 @@ const designCanvasHeight = 604;
 const minCanvasHeight = 420;
 /** Path bar + its gap + the page's bottom padding, all of which sit below the canvas. */
 const canvasBottomReserve = 80;
+/** Width the three columns were drawn for. Beyond it the whole canvas scales up rather than only
+ *  the cards growing, so card, gap, and type sizes keep the ratios they were designed at. */
+const canvasBaselineWidth = 1900;
+const maxCanvasZoom = 1.4;
 
 export function OkrAlignmentMap({
   records,
@@ -53,6 +57,7 @@ export function OkrAlignmentMap({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [edgePaths, setEdgePaths] = useState<EdgePath[]>([]);
   const [canvasHeight, setCanvasHeight] = useState(designCanvasHeight);
+  const [canvasZoom, setCanvasZoom] = useState(1);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -128,16 +133,19 @@ export function OkrAlignmentMap({
       const documentTop = scroller.getBoundingClientRect().top + window.scrollY;
       const available = window.innerHeight - documentTop - canvasBottomReserve;
       setCanvasHeight(Math.max(minCanvasHeight, Math.floor(available)));
+      /** offsetWidth, not clientWidth: a scrollbar appearing must not feed back into the zoom. */
+      setCanvasZoom(zoomForWidth(scroller.offsetWidth));
     }
 
     const origin = canvas.getBoundingClientRect();
+    /** Rects come back in screen pixels; the SVG draws in the canvas's own pre-zoom units. */
     const toLocal = (element: Element) => {
       const rect = element.getBoundingClientRect();
       return {
-        left: rect.left - origin.left,
-        top: rect.top - origin.top,
-        right: rect.right - origin.left,
-        bottom: rect.bottom - origin.top
+        left: (rect.left - origin.left) / canvasZoom,
+        top: (rect.top - origin.top) / canvasZoom,
+        right: (rect.right - origin.left) / canvasZoom,
+        bottom: (rect.bottom - origin.top) / canvasZoom
       };
     };
 
@@ -170,9 +178,12 @@ export function OkrAlignmentMap({
     });
 
     setEdgePaths(buildEdgePaths(inputs, columns));
-  }, [model.edges, anchorFallback]);
+  }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
+    /** Measure before the browser paints: a zoom change re-lays the cards out, and edges routed
+     *  against the previous layout would show in the wrong place for a frame. */
+    measure();
     let firstFrame = 0;
     let secondFrame = 0;
     firstFrame = requestAnimationFrame(() => {
@@ -309,7 +320,7 @@ export function OkrAlignmentMap({
         style={{ height: canvasHeight }}
         className="overflow-auto rounded-xl border border-[#e0e6ee] bg-[#f5f6f8] shadow-[inset_0_1px_3px_rgba(16,24,40,0.04)]"
       >
-        <div ref={canvasRef} className="relative min-w-[1170px] px-6 pb-7">
+        <div ref={canvasRef} style={{ zoom: canvasZoom }} className="relative min-w-[1170px] px-6 pb-7">
           <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-visible" aria-hidden>
             <defs>
               <marker id="alignment-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
@@ -336,10 +347,11 @@ export function OkrAlignmentMap({
             })}
           </svg>
 
-          {/* Columns keep the density they were designed at; on wide monitors the surplus goes
-              into the gaps (more room for edge channels) rather than stretching the cards. */}
-          <div className="relative z-[1] mx-auto flex max-w-[1760px] items-start justify-between gap-28">
-            <div ref={(element) => { columnRefs.current[0] = element; }} className="min-w-[270px] max-w-[440px] flex-1 basis-0">
+          {/* Columns fill the canvas width, which the zoom above holds at the baseline the design
+              was drawn for, so the surplus on a wide monitor scales the map instead of pooling in
+              the gaps. The cap keeps ultra-wide screens from stretching cards past readable. */}
+          <div className="relative z-[1] mx-auto flex max-w-[1900px] items-start justify-between gap-28">
+            <div ref={(element) => { columnRefs.current[0] = element; }} className="min-w-[270px] max-w-[560px] flex-1 basis-0">
               <ColumnHeader
                 level="L1"
                 title={t(lang, "alignLevelOne")}
@@ -373,7 +385,7 @@ export function OkrAlignmentMap({
               ))}
             </div>
 
-            <div ref={(element) => { columnRefs.current[1] = element; }} className="min-w-[270px] max-w-[440px] flex-1 basis-0">
+            <div ref={(element) => { columnRefs.current[1] = element; }} className="min-w-[270px] max-w-[560px] flex-1 basis-0">
               <ColumnHeader
                 level="L2"
                 title={t(lang, "alignLevelTwo")}
@@ -402,7 +414,7 @@ export function OkrAlignmentMap({
               </div>
             </div>
 
-            <div ref={(element) => { columnRefs.current[2] = element; }} className="min-w-[296px] max-w-[440px] flex-1 basis-0">
+            <div ref={(element) => { columnRefs.current[2] = element; }} className="min-w-[296px] max-w-[560px] flex-1 basis-0">
               <ColumnHeader
                 level="L3"
                 title={t(lang, "alignLevelThree")}
@@ -1011,6 +1023,15 @@ function collectTrail(activeNodeId: string | null, parents: Map<string, string[]
     trail.unshift(parent);
     current = parent;
   }
+}
+
+/** Never below 1: a canvas narrower than the baseline already scrolls, and shrinking it further
+ *  would only make the type smaller. Firefox shipped `zoom` in 126, and where it is missing the
+ *  canvas has to stay at 1× rather than draw its edges against a scale the cards never got. */
+function zoomForWidth(width: number) {
+  if (!CSS.supports("zoom", "1.2")) return 1;
+  const zoom = Math.round((width / canvasBaselineWidth) * 100) / 100;
+  return Math.min(maxCanvasZoom, Math.max(1, zoom));
 }
 
 function noteKey(note: AlignmentEmptyNote) {

@@ -35,11 +35,14 @@ export function AppShell({
   const { data: session } = useSession();
   const identity = useAppIdentity();
   const currentEmail = identity.mode === "iap" ? identity.email : session?.user?.email;
+  /** The header shares the page container: the map runs full-bleed, and a header still boxed at
+   *  80rem would leave the logo and nav floating in the middle of a wide screen. */
+  const containerWidth = active === "okrMap" ? "max-w-none" : "max-w-7xl";
 
   return (
     <div className={cn("min-h-screen", compactOnLaptop && "overview-laptop-compact")}>
       <header className="sticky top-0 z-20 border-b border-border bg-white/92 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3">
+        <div className={cn("mx-auto flex items-center justify-between gap-4 px-5 py-3", containerWidth)}>
           <Link href={hrefWithLang("/", lang)} className="flex items-center gap-3">
             <div className="flex h-9 w-11 items-center justify-center rounded-md bg-black px-1.5">
               <Image
@@ -113,7 +116,7 @@ export function AppShell({
           </nav>
         </div>
       </header>
-      <main className={cn("mx-auto px-5 py-6", active === "okrMap" ? "max-w-none" : "max-w-7xl")}>{children}</main>
+      <main className={cn("mx-auto px-5 py-6", containerWidth)}>{children}</main>
     </div>
   );
 }
