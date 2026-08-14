@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { draftToRecords, filterDraftByOwner, mergeDraftByOwner, normalizeDraft, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
-import { readOkrSnapshot, readOkrSnapshotState, writeOkrSnapshot } from "./store";
+import { readOkrSnapshot, readOkrSnapshotState, SnapshotConflictError, writeOkrSnapshot } from "./store";
 import type { OkrSnapshot } from "./types";
 import { documentIdFromParts } from "../storage/document-ids";
 import { readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
@@ -17,6 +17,7 @@ import type { OkrOwnerScope } from "./owner-scope";
 const dataDir = path.join(process.cwd(), "data");
 const draftPath = path.join(dataDir, "okr-drafts.json");
 const periodSnapshotPath = path.join(dataDir, "okr-period-snapshots.json");
+const snapshotWriteAttempts = 4;
 
 type DraftFile = {
   version: 1;
@@ -107,69 +108,84 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
 
   const normalizedDraft = normalizeDraft(publishableDraft, ownerScope?.owner ?? teamOwner, true);
   const defaultPeriodId = await getDefaultPeriodId();
-  const currentState = await readOkrSnapshotState();
-  const current = currentState.snapshot;
   const publishedRecords = draftToRecords({
     ...normalizedDraft,
     objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" }))
   }, ownerScope?.owner ?? teamOwner, true);
-  const currentPeriodRecords = await readPeriodRecords(periodId);
-  const currentRecords = periodId === defaultPeriodId
-    ? current.records
-    : currentPeriodRecords ?? [];
-  const candidate = buildPublicationCandidate(currentRecords, publishedRecords, {
-    team,
-    ownerAliases: ownerScope?.aliases,
-    objectiveScope: ownerScope?.objectiveScope,
-    ownerEmail: ownerScope?.ownerEmail
-  });
-  const nextPeriodRecords = candidate.records;
-  const nextRecords = periodId === defaultPeriodId ? nextPeriodRecords : current.records;
-  const snapshot: OkrSnapshot = {
-    version: 1,
-    meta: {
-      status: "ok",
-      source: "snapshot",
-      lastSyncedAt: new Date().toISOString(),
-      message: `Published ${team} OKR from page editor`,
-      rowCount: nextRecords.length
-    },
-    records: nextRecords
-  };
-  const graphValidation = validateOkrGraph(nextPeriodRecords);
-  const qualityValidation = validateOkrRecordQuality(publishedRecords);
-  if (graphValidation.errors.length > 0 || qualityValidation.errors.length > 0) {
+
+  // Every team publishes into one shared snapshot document, so simultaneous
+  // publishes from unrelated teams collide on its optimistic lock. Rebuilding
+  // the candidate against freshly read records and retrying keeps that
+  // collision invisible instead of asking the user to republish.
+  for (let attempt = 1; ; attempt += 1) {
+    const currentState = await readOkrSnapshotState();
+    const current = currentState.snapshot;
+    const currentPeriodRecords = await readPeriodRecords(periodId);
+    const currentRecords = periodId === defaultPeriodId
+      ? current.records
+      : currentPeriodRecords ?? [];
+    const candidate = buildPublicationCandidate(currentRecords, publishedRecords, {
+      team,
+      ownerAliases: ownerScope?.aliases,
+      objectiveScope: ownerScope?.objectiveScope,
+      ownerEmail: ownerScope?.ownerEmail
+    });
+    const nextPeriodRecords = candidate.records;
+    const nextRecords = periodId === defaultPeriodId ? nextPeriodRecords : current.records;
+    const snapshot: OkrSnapshot = {
+      version: 1,
+      meta: {
+        status: "ok",
+        source: "snapshot",
+        lastSyncedAt: new Date().toISOString(),
+        message: `Published ${team} OKR from page editor`,
+        rowCount: nextRecords.length
+      },
+      records: nextRecords
+    };
+    const graphValidation = validateOkrGraph(nextPeriodRecords);
+    const qualityValidation = validateOkrRecordQuality(publishedRecords);
+    if (graphValidation.errors.length > 0 || qualityValidation.errors.length > 0) {
+      return {
+        snapshot: current,
+        errors: [...graphValidation.errors, ...qualityValidation.errors],
+        warnings: [...validation.warnings, ...candidate.warnings, ...graphValidation.warnings, ...qualityValidation.warnings]
+      };
+    }
+
+    try {
+      if (periodId === defaultPeriodId) {
+        await writeOkrSnapshot(snapshot, currentState.revision);
+      }
+    } catch (error) {
+      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) continue;
+      throw error;
+    }
+
+    // Recorded only once the snapshot write has landed, so a lost race cannot
+    // leave a restore point for a publish that never happened.
+    await writeSnapshotVersion({
+      periodId,
+      team,
+      actor,
+      records: currentRecords.filter((record) => record.team === team)
+    });
+    await writePeriodRecords(periodId, nextPeriodRecords);
+    await writeDraft({
+      ...(ownerScope
+        ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published", ownerScope)
+        : {
+            ...draft,
+            objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
+          })
+    }, ownerScope?.owner ?? teamOwner, false, true);
+
     return {
-      snapshot: current,
-      errors: [...graphValidation.errors, ...qualityValidation.errors],
+      snapshot,
+      errors: [],
       warnings: [...validation.warnings, ...candidate.warnings, ...graphValidation.warnings, ...qualityValidation.warnings]
     };
   }
-
-  await writeSnapshotVersion({
-    periodId,
-    team,
-    actor,
-    records: currentRecords.filter((record) => record.team === team)
-  });
-  if (periodId === defaultPeriodId) {
-    await writeOkrSnapshot(snapshot, currentState.revision);
-  }
-  await writePeriodRecords(periodId, nextPeriodRecords);
-  await writeDraft({
-    ...(ownerScope
-      ? mergeDraftByOwner(draft, normalizedDraft, ownerScope.owner, ownerScope.aliases, "published", ownerScope)
-      : {
-          ...draft,
-          objectives: normalizedDraft.objectives.map((objective) => ({ ...objective, status: "published" as const }))
-        })
-  }, ownerScope?.owner ?? teamOwner, false, true);
-
-  return {
-    snapshot,
-    errors: [],
-    warnings: [...validation.warnings, ...candidate.warnings, ...graphValidation.warnings, ...qualityValidation.warnings]
-  };
 }
 
 export async function rollbackTeamVersion(versionId: string) {
@@ -221,10 +237,6 @@ export async function updatePublishedRecordProgress(input: {
   actor: string;
 }) {
   const config = await readAdminConfig();
-  const currentPeriodRecords = await readPeriodRecords(input.periodId) ?? [];
-  const currentRecord = currentPeriodRecords.find((record) => record.okr_id === input.recordId && record.team === input.team);
-  if (!currentRecord) throw new Error("Published OKR record not found");
-  if (!currentRecord.kr) throw new Error("Progress values must be updated on a KR");
   if (input.progress !== undefined && input.progress !== null && (!Number.isFinite(input.progress) || input.progress < 0 || input.progress > 100)) {
     throw new Error("Progress must be between 0 and 100");
   }
@@ -238,33 +250,50 @@ export async function updatePublishedRecordProgress(input: {
     risks: input.risks !== undefined ? input.risks.trim() : record.risks,
     last_update: today
   } : record;
-  const nextPeriodRecords = currentPeriodRecords.map(updateRecord);
-  const validation = validateOkrGraph(nextPeriodRecords);
-  if (validation.errors.length > 0) throw new Error(validation.errors[0]);
 
-  await writeSnapshotVersion({
-    periodId: input.periodId,
-    team: input.team,
-    actor: input.actor,
-    records: currentPeriodRecords.filter((record) => record.team === input.team)
-  });
+  // Weekly check-ins land in bursts around review meetings and contend for the
+  // same snapshot lock as publishing, so re-read and retry rather than making
+  // the reviewer re-enter their numbers.
+  for (let attempt = 1; ; attempt += 1) {
+    const currentPeriodRecords = await readPeriodRecords(input.periodId) ?? [];
+    const currentRecord = currentPeriodRecords.find((record) => record.okr_id === input.recordId && record.team === input.team);
+    if (!currentRecord) throw new Error("Published OKR record not found");
+    if (!currentRecord.kr) throw new Error("Progress values must be updated on a KR");
 
-  if (input.periodId === config.defaultPeriodId) {
-    const currentState = await readOkrSnapshotState();
-    const nextRecords = currentState.snapshot.records.map(updateRecord);
-    await writeOkrSnapshot({
-      version: 1,
-      meta: {
-        status: "ok",
-        source: "snapshot",
-        lastSyncedAt: new Date().toISOString(),
-        message: `Updated ${input.recordId} progress`,
-        rowCount: nextRecords.length
-      },
-      records: nextRecords
-    }, currentState.revision);
+    const nextPeriodRecords = currentPeriodRecords.map(updateRecord);
+    const validation = validateOkrGraph(nextPeriodRecords);
+    if (validation.errors.length > 0) throw new Error(validation.errors[0]);
+
+    try {
+      if (input.periodId === config.defaultPeriodId) {
+        const currentState = await readOkrSnapshotState();
+        const nextRecords = currentState.snapshot.records.map(updateRecord);
+        await writeOkrSnapshot({
+          version: 1,
+          meta: {
+            status: "ok",
+            source: "snapshot",
+            lastSyncedAt: new Date().toISOString(),
+            message: `Updated ${input.recordId} progress`,
+            rowCount: nextRecords.length
+          },
+          records: nextRecords
+        }, currentState.revision);
+      }
+    } catch (error) {
+      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) continue;
+      throw error;
+    }
+
+    await writeSnapshotVersion({
+      periodId: input.periodId,
+      team: input.team,
+      actor: input.actor,
+      records: currentPeriodRecords.filter((record) => record.team === input.team)
+    });
+    await writePeriodRecords(input.periodId, nextPeriodRecords);
+    return;
   }
-  await writePeriodRecords(input.periodId, nextPeriodRecords);
 }
 
 async function getDefaultPeriodId() {

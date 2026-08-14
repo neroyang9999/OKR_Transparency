@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { ConfidenceLevel } from "./types";
 import { documentIdFromParts } from "../storage/document-ids";
-import { deleteFirestoreDocument, listFirestoreCollection, writeFirestoreDocument } from "../storage/firestore";
+import { deleteFirestoreDocument, listFirestoreCollection, queryFirestoreCollection, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
 import { readAdminConfig, type AdminConfig } from "../admin/config";
 import { resolveAdminTeamName } from "../admin/team-rename";
@@ -51,15 +51,28 @@ type ProgressNoteStoreOptions = {
 };
 
 export async function readProgressNotes(options: ProgressNoteStoreOptions = {}) {
+  return readProgressNotesInPeriod(undefined, options);
+}
+
+/**
+ * Notes accumulate for every (period, team, objective, week) and are never
+ * pruned, so the whole-collection read is only for callers that genuinely need
+ * every period — the backup export. Everything on a request path passes a
+ * periodId to keep the read bounded by the current quarter.
+ */
+async function readProgressNotesInPeriod(periodId: string | undefined, options: ProgressNoteStoreOptions = {}) {
   if (shouldUseFirestore(options)) {
     const [notes, config] = await Promise.all([
-      listFirestoreCollection<ProgressNote>("okrProgressNotes"),
+      periodId
+        ? queryFirestoreCollection<ProgressNote>("okrProgressNotes", "periodId", periodId)
+        : listFirestoreCollection<ProgressNote>("okrProgressNotes"),
       readAdminConfig()
     ]);
     return sortProgressNotes(resolveProgressNoteTeamNames(notes, config));
   }
 
-  const notes = (await readProgressNoteFile(options)).notes;
+  const stored = (await readProgressNoteFile(options)).notes;
+  const notes = periodId ? stored.filter((note) => note.periodId === periodId) : stored;
   if (options.filePath) return sortProgressNotes(notes);
   return sortProgressNotes(resolveProgressNoteTeamNames(notes, await readAdminConfig()));
 }
@@ -70,7 +83,7 @@ export async function readProgressNotesForObjective(
   objectiveId: string,
   options: ProgressNoteStoreOptions = {}
 ) {
-  return (await readProgressNotes(options)).filter((note) =>
+  return (await readProgressNotesInPeriod(periodId, options)).filter((note) =>
     note.team === team &&
     note.periodId === periodId &&
     note.objectiveId === objectiveId
@@ -126,7 +139,7 @@ export async function writeProgressNote(input: {
 
   if (shouldUseFirestore(options)) {
     const [storedNotes, config] = await Promise.all([
-      listFirestoreCollection<ProgressNote>("okrProgressNotes"),
+      queryFirestoreCollection<ProgressNote>("okrProgressNotes", "periodId", nextNote.periodId),
       readAdminConfig()
     ]);
     const previousNotes = storedNotes.filter((note) => sameProgressNote(note, nextNote, config));

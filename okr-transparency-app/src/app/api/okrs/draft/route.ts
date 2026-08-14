@@ -5,7 +5,7 @@ import { readDraft, writeOwnerScopedDraft } from "@/lib/okr/drafts";
 import { applyDraftObjectiveScope, filterDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "@/lib/okr/edit-types";
 import { translateDraftContent } from "@/lib/okr/translation";
 import { ownerScopeForMember, ownerScopeForTeam } from "@/lib/okr/owner-scope";
-import { authorizeDraftChange, canEditTeamOwner, resolveRequestAccess } from "@/lib/admin/permissions";
+import { authorizeDraftChange, canEditTeamOwner, getTeamEditPolicy, resolveRequestAccess } from "@/lib/admin/permissions";
 
 export async function GET(request: NextRequest) {
   const authorization = await requireApiAccess(request);
@@ -14,6 +14,11 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const team = searchParams.get("team") ?? "Software";
   const periodId = searchParams.get("period") ?? (await readAdminConfig()).defaultPeriodId;
+  // Transparency covers published OKRs. A draft is unreviewed work in progress,
+  // so it is readable only by the people who could edit it.
+  if (!getTeamEditPolicy(authorization.config, team, authorization.access).canEdit) {
+    return NextResponse.json({ error: "No edit permission for this team" }, { status: 403 });
+  }
   const draft = await readDraft(team, periodId);
   return NextResponse.json({ draft, validation: validateDraft(draft) });
 }

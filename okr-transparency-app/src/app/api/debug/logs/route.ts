@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/admin-auth";
-import { readRecentAppLogs } from "@/lib/app-log";
+import { getAppLogDestination, readRecentAppLogs } from "@/lib/app-log";
 
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
@@ -8,6 +8,13 @@ export async function GET(request: NextRequest) {
   }
 
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? 200);
+  const destination = getAppLogDestination();
   const logs = await readRecentAppLogs(Number.isFinite(limit) ? limit : 200);
-  return NextResponse.json({ logs });
+  return NextResponse.json({
+    logs,
+    destination,
+    ...(destination === "cloud-logging"
+      ? { message: "Application logs go to Cloud Logging on this deployment. Query them there instead." }
+      : {})
+  });
 }

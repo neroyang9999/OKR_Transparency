@@ -12,21 +12,47 @@ export type AppLogEntry = {
   details?: Record<string, unknown>;
 };
 
+export type AppLogDestination = "cloud-logging" | "file";
+
 const dataDir = path.join(process.cwd(), "data");
 const logPath = path.join(dataDir, "app-events.log");
 
+const cloudSeverity: Record<AppLogLevel, string> = {
+  debug: "DEBUG",
+  info: "INFO",
+  warn: "WARNING",
+  error: "ERROR"
+};
+
+/**
+ * Container filesystems are per-instance and disappear with the instance, so a
+ * log file is only useful when the app runs on a developer's machine. On Cloud
+ * Run the entry goes to stdout as structured JSON instead, which Cloud Logging
+ * picks up and indexes by the `severity` field.
+ */
+export function getAppLogDestination(env: NodeJS.ProcessEnv = process.env): AppLogDestination {
+  return env.K_SERVICE || env.NODE_ENV === "production" ? "cloud-logging" : "file";
+}
+
 export async function writeAppLog(entry: Omit<AppLogEntry, "timestamp">) {
-  const line = JSON.stringify({
+  const record: AppLogEntry = {
     timestamp: new Date().toISOString(),
     ...entry,
     details: entry.details ? sanitizeDetails(entry.details) : undefined
-  });
+  };
+
+  if (getAppLogDestination() === "cloud-logging") {
+    console.log(JSON.stringify({ severity: cloudSeverity[record.level], ...record }));
+    return;
+  }
 
   await fs.mkdir(dataDir, { recursive: true });
-  await fs.appendFile(logPath, `${line}\n`, "utf8");
+  await fs.appendFile(logPath, `${JSON.stringify(record)}\n`, "utf8");
 }
 
 export async function readRecentAppLogs(limit = 200) {
+  if (getAppLogDestination() === "cloud-logging") return [];
+
   try {
     const text = await fs.readFile(logPath, "utf8");
     return text

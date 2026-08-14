@@ -2,6 +2,8 @@ import { google } from "googleapis";
 import { updateLocalizedText } from "./bilingual";
 import type { OkrDraft } from "./edit-types";
 
+const translationTimeoutMs = 8_000;
+
 type TargetLanguage = "zh" | "en";
 type PendingTranslation = {
   text: string;
@@ -67,17 +69,31 @@ async function translateBatch(contents: string[], targetLanguage: TargetLanguage
   const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FIRESTORE_PROJECT_ID;
   if (!projectId) return [];
 
-  const auth = await google.auth.getClient({
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+  // Autosave awaits this call, so an unreachable translation endpoint would
+  // otherwise hold the editor's save open indefinitely. On timeout the caller
+  // records a warning and keeps the author's original text.
+  return withDeadline((async () => {
+    const auth = await google.auth.getClient({
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+    });
+    const client = google.translate({ version: "v3", auth });
+    const response = await client.projects.locations.translateText({
+      parent: `projects/${projectId}/locations/global`,
+      requestBody: {
+        contents,
+        mimeType: "text/plain",
+        targetLanguageCode: targetLanguage
+      }
+    }, { timeout: translationTimeoutMs });
+    return response.data.translations?.map((translation) => translation.translatedText?.trim() ?? "") ?? [];
+  })(), `Cloud Translation to ${targetLanguage}`);
+}
+
+function withDeadline<T>(work: Promise<T>, label: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${translationTimeoutMs}ms`)), translationTimeoutMs);
   });
-  const client = google.translate({ version: "v3", auth });
-  const response = await client.projects.locations.translateText({
-    parent: `projects/${projectId}/locations/global`,
-    requestBody: {
-      contents,
-      mimeType: "text/plain",
-      targetLanguageCode: targetLanguage
-    }
-  });
-  return response.data.translations?.map((translation) => translation.translatedText?.trim() ?? "") ?? [];
+
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
