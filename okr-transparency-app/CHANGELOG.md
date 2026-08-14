@@ -4,6 +4,10 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.1 - 2026-08-14
+
+- Publish the PR18 launch-hardening release and align the repository version with production.
+
 ## v0.7.11 - 2026-08-13
 
 - Rebuild the OKR alignment view as three fixed columns (top-level team, second-level team, individual carrier group) carrying a single kind of edge, each routed through its own vertical channel.
