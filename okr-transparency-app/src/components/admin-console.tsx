@@ -22,6 +22,7 @@ import {
   Settings,
   Shield,
   Trash2,
+  Upload,
   UserPlus,
   Users,
   X
@@ -33,6 +34,7 @@ import { filterAdminUsers, matchesAdminRoleCategory } from "@/lib/admin/user-fil
 import { resolveTeamOwner, selectableTeamOwners } from "@/lib/admin/team-owners";
 import { deleteAdminTeam, teamDeleteBlockReason } from "@/lib/admin/team-delete";
 import { renameAdminTeam, teamRenameError } from "@/lib/admin/team-rename";
+import { applyUserImport, parseUserImport, type UserImportRow } from "@/lib/admin/user-import";
 import type { UserFeedback } from "@/lib/feedback";
 import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import type { OkrRecord, OkrTreeResponse } from "@/lib/okr/types";
@@ -647,6 +649,7 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState<number | null>(config.users.length > 0 ? 0 : null);
   const [roleFilter, setRoleFilter] = useState<AdminRole>(config.users[0]?.role ?? "user");
+  const [importOpen, setImportOpen] = useState(false);
   const memberListRef = useRef<HTMLDivElement>(null);
   const visibleUsers = filterAdminUsers(config.users, roleFilter, query);
   const selected = selectedIndex === null ? null : config.users[selectedIndex] ?? null;
@@ -679,10 +682,17 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
     setSelectedIndex(null);
   }
 
+  function applyImport(rows: UserImportRow[]) {
+    setConfig(applyUserImport(config, rows));
+    setImportOpen(false);
+    setQuery("");
+    setSelectedIndex(null);
+  }
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+    <><div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
       <Panel>
-        <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-950">成员</h3><p className="mt-1 text-xs text-slate-500">{config.users.filter((user) => user.enabled).length} / {config.users.length} 个账号启用</p></div><button type="button" onClick={addUser} className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-medium text-white"><UserPlus className="h-4 w-4" />添加</button></div>
+        <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-950">成员</h3><p className="mt-1 text-xs text-slate-500">{config.users.filter((user) => user.enabled).length} / {config.users.length} 个账号启用</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => setImportOpen(true)} className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-slate-700 hover:bg-slate-50"><Upload className="h-4 w-4" />批量导入</button><button type="button" onClick={addUser} className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-medium text-white"><UserPlus className="h-4 w-4" />添加</button></div></div>
         <div className="mt-4 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
           {(["super_admin", "team_leader", "user"] as AdminRole[]).map((role) => {
             const count = config.users.filter((user) => matchesAdminRoleCategory(user, role)).length;
@@ -733,6 +743,88 @@ function MemberAccess({ config, setConfig }: AdminSectionProps) {
           </div>
         </Panel>
       ) : <Panel><EmptyState text="选择一个成员查看权限" /></Panel>}
+    </div>{importOpen && <MemberImportDialog config={config} onCancel={() => setImportOpen(false)} onApply={applyImport} />}</>
+  );
+}
+
+function MemberImportDialog({ config, onCancel, onApply }: { config: AdminConfig; onCancel: () => void; onApply: (rows: UserImportRow[]) => void }) {
+  const [text, setText] = useState("");
+  const preview = useMemo(() => parseUserImport(text, config), [text, config]);
+  const teamNames = config.teams.filter((team) => team.enabled).map((team) => team.name);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-label="批量导入成员">
+      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-white p-6 shadow-2xl">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-950">批量导入成员</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            从表格粘贴，每行一人。第一列是邮箱，其余列可选：姓名、角色、团队、管理团队、Owner 别名、启用。
+            多个团队或别名用 <code className="rounded bg-slate-100 px-1">|</code> 分隔。留空的列不会覆盖成员已有设置。
+          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            角色可填 <code className="rounded bg-slate-100 px-1">user</code> / <code className="rounded bg-slate-100 px-1">team_leader</code> / <code className="rounded bg-slate-100 px-1">super_admin</code>，
+            或中文“成员 / 团队负责人 / 系统管理员”。可用团队：{teamNames.join("、") || "（尚未配置团队）"}
+          </p>
+        </div>
+
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          rows={8}
+          spellCheck={false}
+          placeholder={"email,displayName,role,teams\nli.ming@example.com,李明,user,Software\nwang.fang@example.com,王芳,team_leader,Software|Platform"}
+          className="mt-4 w-full shrink-0 rounded-md border border-border p-3 font-mono text-xs leading-5 outline-none focus:border-blue-400"
+        />
+
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+          {preview.issues.length > 0 && (
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
+              <div className="text-xs font-semibold text-rose-800">{preview.issues.length} 行无法导入</div>
+              <ul className="mt-1 space-y-0.5 text-xs leading-5 text-rose-700">
+                {preview.issues.slice(0, 8).map((issue) => <li key={`${issue.line}-${issue.message}`}>第 {issue.line} 行：{issue.message}</li>)}
+                {preview.issues.length > 8 && <li>…另有 {preview.issues.length - 8} 行</li>}
+              </ul>
+            </div>
+          )}
+
+          {preview.rows.length > 0 && (
+            <div className="overflow-hidden rounded-lg border border-border">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr><th className="px-3 py-2 font-medium">操作</th><th className="px-3 py-2 font-medium">邮箱</th><th className="px-3 py-2 font-medium">姓名</th><th className="px-3 py-2 font-medium">角色</th><th className="px-3 py-2 font-medium">团队</th></tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {preview.rows.slice(0, 50).map((row) => (
+                    <tr key={row.user.email}>
+                      <td className="px-3 py-2"><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", row.action === "add" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>{row.action === "add" ? "新增" : "更新"}</span></td>
+                      <td className="px-3 py-2 text-slate-700">{row.user.email}</td>
+                      <td className="px-3 py-2 text-slate-700">{row.user.displayName}</td>
+                      <td className="px-3 py-2 text-slate-500">{roleLabel(row.user.role)}</td>
+                      <td className="px-3 py-2 text-slate-500">{row.user.teams.join("、") || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {preview.rows.length > 50 && <div className="border-t border-border px-3 py-2 text-xs text-slate-500">预览前 50 行，导入时会应用全部 {preview.rows.length} 行。</div>}
+            </div>
+          )}
+
+          {text.trim() && preview.rows.length === 0 && preview.issues.length === 0 && (
+            <EmptyState text="粘贴的内容与现有成员完全一致，没有需要导入的改动" />
+          )}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <p className="text-xs text-slate-500">
+            {preview.rows.length > 0 ? `将新增 ${preview.addCount} 人、更新 ${preview.updateCount} 人。确认后仍需点击顶部“保存修改”才会生效。` : "粘贴内容后会在这里显示导入预览。"}
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={onCancel} className="h-9 rounded-md border border-border px-4 text-sm font-medium text-slate-700">取消</button>
+            <button type="button" onClick={() => onApply(preview.rows)} disabled={preview.rows.length === 0} className="h-9 rounded-md bg-blue-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300">导入 {preview.rows.length} 人</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

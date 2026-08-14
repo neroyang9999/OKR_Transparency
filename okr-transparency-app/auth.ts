@@ -82,8 +82,12 @@ function credentialsLoginEnabled() {
 }
 
 function getLocalAdminCredentials() {
-  const username = process.env.OKR_LOCAL_ADMIN_USERNAME ?? "admin";
-  const password = process.env.OKR_LOCAL_ADMIN_PASSWORD ?? "1234";
+  // The convenience defaults exist so a fresh checkout can log in offline. In
+  // production they would be a published password, so the fallback login only
+  // works there when both values are set explicitly.
+  const isProduction = process.env.NODE_ENV === "production";
+  const username = process.env.OKR_LOCAL_ADMIN_USERNAME ?? (isProduction ? "" : "admin");
+  const password = process.env.OKR_LOCAL_ADMIN_PASSWORD ?? (isProduction ? "" : "1234");
 
   if (!username || !password) return null;
   return { username, password };

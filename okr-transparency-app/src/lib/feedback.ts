@@ -5,6 +5,7 @@ import { isFirestoreStorageEnabled } from "./storage/mode";
 
 const dataDir = path.join(process.cwd(), "data");
 const feedbackPath = path.join(dataDir, "okr-feedback.json");
+const feedbackRetentionLimit = 500;
 
 export type FeedbackStatus = "open" | "completed";
 
@@ -63,13 +64,13 @@ export async function appendUserFeedback(
 
   const file = await readFeedbackFile();
   await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(feedbackPath, JSON.stringify({ version: 1, feedback: [feedback, ...file.feedback].slice(0, 500) }, null, 2), "utf8");
+  await fs.writeFile(feedbackPath, JSON.stringify({ version: 1, feedback: [feedback, ...file.feedback].slice(0, feedbackRetentionLimit) }, null, 2), "utf8");
   return feedback;
 }
 
 export async function readUserFeedback() {
   if (isFirestoreStorageEnabled()) {
-    const feedback = await listFirestoreCollection<StoredUserFeedback>("okrFeedback", 200, "createdAt desc");
+    const feedback = await listFirestoreCollection<StoredUserFeedback>("okrFeedback", feedbackRetentionLimit, "createdAt desc");
     return feedback.map(normalizeUserFeedback);
   }
 
