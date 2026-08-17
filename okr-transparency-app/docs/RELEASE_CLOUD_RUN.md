@@ -8,7 +8,8 @@
 - Cloud Run service：`okr-transparency-app`
 - Region：`us-west1`
 - Artifact Registry：`us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app`
-- 生产 URL：`https://okr-transparency-app-403984849396.us-west1.run.app/`
+- 对外生产 URL：`https://okr-transparency.unitxlabs.com/`
+- Cloud Run 原始 URL：`https://okr-transparency-app-403984849396.us-west1.run.app/`
 - 生产认证：IAP；测试账号通常为 `xinyang.yang@unitxlabs.com`
 - 生产存储：Firestore
 
@@ -157,10 +158,10 @@ gcloud run services update-traffic okr-transparency-app \
   --to-revisions=okr-transparency-app-v082-pr20-7eca76f=100
 ```
 
-随后在生产 URL 上重新验证同一页面：
+随后在对外生产 URL 上重新验证同一页面：
 
 ```text
-https://okr-transparency-app-403984849396.us-west1.run.app/map?period=2026-q3
+https://okr-transparency.unitxlabs.com/map?period=2026-q3
 ```
 
 也可以检查流量归属：
@@ -202,4 +203,3 @@ Cloud Build：...
 回滚 revision：...
 数据：Firestore 未迁移、未修改
 ```
-
