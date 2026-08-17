@@ -35,6 +35,10 @@ powershell -ExecutionPolicy Bypass -File .\deploy\scripts\push-image.ps1 -Tag st
 
 ## Apply
 
+> **重要：只允许在持有生产 `terraform.tfstate` 和实际 `terraform.tfvars` 的部署机器上执行。**
+>
+> 当前机器缺少与生产匹配的 state 或 tfvars 时，禁止执行 `terraform apply`。先找到 state 所在的部署环境；代码发布本身请按 `docs/RELEASE_CLOUD_RUN.md` 的 Cloud Build + Cloud Run 候选流程执行。
+
 ```powershell
 cd .\deploy\terraform
 copy terraform.tfvars.example terraform.tfvars

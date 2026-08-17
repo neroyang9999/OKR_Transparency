@@ -30,7 +30,7 @@ git status -sb
 1. 最近要发布的 PR 已经合入 `origin/main`，记录合并提交 SHA。
 2. 工作区中的本地演示数据、`.claude/`、压缩包等无关文件不会进入构建上下文。
 3. `okr-transparency-app/package.json` 和 `package-lock.json` 版本一致。
-4. 发布提交和 tag 已经存在于 GitHub；如果版本 bump 尚未推送，先完成版本提交和 tag，再部署。
+4. 发布提交已经推送到 GitHub `main`。正式发布建议同时创建并推送匹配的 Git tag；tag 是追溯凭证，不是 Cloud Run 发布的技术前置条件。
 
 版本发布文件只应包括：
 
@@ -100,10 +100,21 @@ gcloud auth login xinyang.yang@unitxlabs.com
 
 tag 要同时包含版本、PR 范围和提交 SHA，便于追溯：
 
+先替换下面 3 个变量，再执行后续命令。`VERSION_ID` 建议使用不含点号的短版本，例如 `v082`；`PR_ID` 写本次包含的 PR 范围，例如 `pr19-pr20`。
+
+```bash
+VERSION_ID="vXYZ"
+PR_ID="prN"
+MERGE_COMMIT_SHA="<MERGE_COMMIT_SHA>"
+IMAGE_TAG="${VERSION_ID}-${PR_ID}-${MERGE_COMMIT_SHA}"
+```
+
+构建并推送：
+
 ```bash
 gcloud builds submit \
   --project=knowledge-base-496322 \
-  --tag=us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app:v082-pr20-7eca76f \
+  --tag=us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app:${IMAGE_TAG} \
   .
 ```
 
@@ -121,16 +132,16 @@ gcloud builds submit \
 gcloud run deploy okr-transparency-app \
   --project=knowledge-base-496322 \
   --region=us-west1 \
-  --image=us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app:v082-pr20-7eca76f \
-  --revision-suffix=v082-pr20-7eca76f \
+  --image=us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app:${IMAGE_TAG} \
+  --revision-suffix=${IMAGE_TAG} \
   --no-traffic \
-  --tag=v082-pr20-7eca76f
+  --tag=${IMAGE_TAG}
 ```
 
-命令成功后会返回候选 URL：
+命令成功后会返回候选 URL，格式为：
 
 ```text
-https://v082-pr20-7eca76f---okr-transparency-app-exfisl5cna-uw.a.run.app
+https://${IMAGE_TAG}---okr-transparency-app-exfisl5cna-uw.a.run.app
 ```
 
 ## 5. 候选冒烟验证
@@ -138,7 +149,7 @@ https://v082-pr20-7eca76f---okr-transparency-app-exfisl5cna-uw.a.run.app
 在已经登录 IAP 的浏览器中打开：
 
 ```text
-https://v082-pr20-7eca76f---okr-transparency-app-exfisl5cna-uw.a.run.app/map?period=2026-q3
+https://${IMAGE_TAG}---okr-transparency-app-exfisl5cna-uw.a.run.app/map?period=2026-q3
 ```
 
 至少确认：
@@ -159,7 +170,7 @@ https://v082-pr20-7eca76f---okr-transparency-app-exfisl5cna-uw.a.run.app/map?per
 gcloud run services update-traffic okr-transparency-app \
   --project=knowledge-base-496322 \
   --region=us-west1 \
-  --to-revisions=okr-transparency-app-v082-pr20-7eca76f=100
+  --to-revisions=okr-transparency-app-${IMAGE_TAG}=100
 ```
 
 随后在对外生产 URL 上重新验证同一页面：
