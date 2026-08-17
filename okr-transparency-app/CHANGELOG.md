@@ -4,6 +4,11 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.2 - 2026-08-17
+
+- Keep personal-scope OKRs out of the team overview and calculate team health from the records actually shown.
+- Add Chinese guidance for Type and Confidence choices while preserving the existing stored values and publishing flow.
+
 ## v0.8.1 - 2026-08-14
 
 - Publish the PR18 launch-hardening release and align the repository version with production.
