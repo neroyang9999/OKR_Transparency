@@ -5,11 +5,13 @@ import { confidenceLevels, okrTypes, type ConfidenceLevel, type OkrType } from "
  * Type and Confidence used to render as bare enum words, which told nobody how to choose.
  * `label` is what the dropdown shows; `helper` is the line that stays under the closed control.
  *
- * A native select paints the selected option's text into the control, and that control is a quarter
- * of the objective row — 169px of usable width at a 1512px viewport. Labels stay at the bare name
- * for that reason; the scoring anchor lives in `helper`, which has the full row to wrap into. Every
- * label keeps its enum word so the stored value stays recognisable, and the confidence wording
- * matches the weekly progress note (正常 / 关注 / 风险).
+ * Type keeps the bare enum: Committed / Aspirational / Learning already read as words, so the
+ * helper alone carries the meaning. Confidence cannot — Green / Yellow / Red are colours — so its
+ * labels take the wording the weekly progress note already uses (正常 / 关注 / 风险).
+ *
+ * Every label starts with its enum word, because the stored value and the public badge still show
+ * that word. Labels also stay short: a native select paints the selected option into the control,
+ * which is a quarter of the objective row, so a label that grows into a sentence truncates.
  *
  * Wording follows unitx-okr-diagnostic-report.md:235-238; helpers say what an option means, never
  * what to do after missing it.
@@ -22,14 +24,14 @@ export type FieldChoice = {
 
 const typeCopy: Record<Lang, Record<OkrType, Omit<FieldChoice, "value">>> = {
   zh: {
-    Committed: { label: "Committed · 必达", helper: "本周期必须 100% 达成。" },
-    Aspirational: { label: "Aspirational · 挑战", helper: "做到 60–70% 即算有效。" },
-    Learning: { label: "Learning · 探索", helper: "用于不确定性高的探索。KR 要回答“本周期必须学会什么”。" }
+    Committed: { label: "Committed", helper: "本周期必须 100% 达成。" },
+    Aspirational: { label: "Aspirational", helper: "做到 60–70% 即算有效。" },
+    Learning: { label: "Learning", helper: "用于不确定性高的探索。KR 要回答“本周期必须学会什么”。" }
   },
   en: {
-    Committed: { label: "Committed · Must hit", helper: "Must reach 100% this cycle." },
-    Aspirational: { label: "Aspirational · Stretch", helper: "60–70% counts as success." },
-    Learning: { label: "Learning · Explore", helper: "For high-uncertainty work. The KR answers what you must learn." }
+    Committed: { label: "Committed", helper: "Must reach 100% this cycle." },
+    Aspirational: { label: "Aspirational", helper: "60–70% counts as success." },
+    Learning: { label: "Learning", helper: "For high-uncertainty work. The KR answers what you must learn." }
   }
 };
 

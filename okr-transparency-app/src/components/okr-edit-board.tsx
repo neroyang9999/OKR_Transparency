@@ -323,8 +323,9 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                     error={objectiveTitleError}
                   />
                 </div>
-                {/* Type and Confidence now carry a gloss, so they take the wider share of the row. */}
-                <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,0.75fr)_minmax(0,0.75fr)_minmax(0,1.25fr)_minmax(0,1.25fr)]">
+                {/* Four across only once there is room: beside the 300px sidebar a quarter of this
+                    row is 50px, which truncated even a bare "Aspirational" long before it had a gloss. */}
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ReadOnlyField label={copy.owner} value={fixedOwner} />
                   <ReadOnlyField label={lang === "en" ? "Scope" : "目标范围"} value={ownerScoped ? (lang === "en" ? "Member Objective" : "成员 Objective") : (lang === "en" ? "Team Objective" : "团队 Objective")} />
                   <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} helper={typeHelper(objective.type, lang)} />
