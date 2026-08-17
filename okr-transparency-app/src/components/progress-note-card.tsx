@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, CalendarDays, Check, ChevronDown, FileText, Save, X } from "lucide-react";
 import Link from "next/link";
 import type { Lang } from "@/lib/i18n";
+import { confidenceChoices } from "@/lib/okr/field-copy";
 import type { ProgressNote } from "@/lib/okr/progress-notes";
 import type { ConfidenceLevel } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
@@ -163,9 +164,9 @@ export function ProgressNoteCard({
                 }}
                 className="mt-1 h-9 w-full rounded-md border border-blue-100 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-400"
               >
-                <option value="Green">{copy.green}</option>
-                <option value="Yellow">{copy.yellow}</option>
-                <option value="Red">{copy.red}</option>
+                {confidenceChoices(lang).map((choice) => (
+                  <option key={choice.value} value={choice.value}>{choice.label}</option>
+                ))}
               </select>
             </label>
           </div>
@@ -390,10 +391,7 @@ const zh = {
   saving: "保存中...",
   saved: "已保存",
   saveError: "请填写本周进展；Yellow/Red 还需要风险或下一步。",
-  defaultLead: "Lead",
-  green: "正常",
-  yellow: "关注",
-  red: "风险"
+  defaultLead: "Lead"
 };
 
 const en: typeof zh = {
@@ -417,8 +415,5 @@ const en: typeof zh = {
   saving: "Saving...",
   saved: "Saved",
   saveError: "Add a weekly update; Yellow/Red also requires a risk or next step.",
-  defaultLead: "Lead",
-  green: "Green",
-  yellow: "Yellow",
-  red: "Red"
+  defaultLead: "Lead"
 };

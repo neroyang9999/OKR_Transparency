@@ -9,6 +9,7 @@ import { PeriodSwitcher } from "@/components/period-switcher";
 import { applyDraftObjectiveScope, calculateObjectiveProgress, createEmptyKr, createEmptyObjective, localizeDraftForLanguage, normalizeDraft, validateDraft, type EditableKr, type EditableObjective, type OkrDraft } from "@/lib/okr/edit-types";
 import type { TeamEditPolicy } from "@/lib/admin/permissions";
 import type { ConfidenceLevel, OkrType } from "@/lib/okr/types";
+import { confidenceChoices, confidenceHelper, typeChoices, typeHelper, type FieldChoice } from "@/lib/okr/field-copy";
 import { alignmentOptionMatchesQuery, filterAlignmentOptionGroups, flattenAlignmentOptionGroups, type AlignmentOption } from "@/lib/okr/alignment-options";
 import { hrefWithLang, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -26,8 +27,6 @@ type OkrEditBoardProps = {
   periods: Period[];
 };
 
-const confidenceOptions: ConfidenceLevel[] = ["Green", "Yellow", "Red"];
-const typeOptions: OkrType[] = ["Committed", "Aspirational", "Learning"];
 
 export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, policy, ownerEmail, title, periods }: OkrEditBoardProps) {
   const router = useRouter();
@@ -57,6 +56,8 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const [touchedFields, setTouchedFields] = useState<Set<string>>(() => new Set());
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const copy = lang === "en" ? en : zh;
+  const typeOptions = useMemo(() => typeChoices(lang), [lang]);
+  const confidenceOptions = useMemo(() => confidenceChoices(lang), [lang]);
   const showAlignment = ownerScoped || draft.team !== "Software";
 
   useEffect(() => {
@@ -322,11 +323,12 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
                     error={objectiveTitleError}
                   />
                 </div>
-                <div className="mt-3 grid gap-2 md:grid-cols-4">
+                {/* Type and Confidence now carry a gloss, so they take the wider share of the row. */}
+                <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,0.75fr)_minmax(0,0.75fr)_minmax(0,1.25fr)_minmax(0,1.25fr)]">
                   <ReadOnlyField label={copy.owner} value={fixedOwner} />
                   <ReadOnlyField label={lang === "en" ? "Scope" : "目标范围"} value={ownerScoped ? (lang === "en" ? "Member Objective" : "成员 Objective") : (lang === "en" ? "Team Objective" : "团队 Objective")} />
-                  <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} />
-                  <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} />
+                  <Select label={copy.type} value={objective.type} options={typeOptions} onChange={(value) => updateObjective(objective.id, { type: value as OkrType })} disabled={objectiveLocked} helper={typeHelper(objective.type, lang)} />
+                  <Select label={copy.confidence} value={objective.confidence} options={confidenceOptions} onChange={(value) => updateObjective(objective.id, { confidence: value as ConfidenceLevel })} disabled={objectiveLocked} helper={confidenceHelper(objective.confidence, lang)} />
                 </div>
               </div>
               <ReadOnlyField label={copy.progressPercent} value={objectiveProgress === null ? "N/A" : `${objectiveProgress}%`} />
@@ -1110,7 +1112,8 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
       <span className="mt-1 flex h-9 w-full items-center rounded-md border border-border bg-slate-50 px-3 text-sm font-medium text-slate-700">
-        {value}
+        {/* Owner names such as "Qiaolong (Collin) Luo" outgrow this box on a 1280px laptop. */}
+        <span className="truncate" title={value}>{value}</span>
       </span>
     </label>
   );
@@ -1145,7 +1148,7 @@ function parsePercentInput(value: string) {
   return Math.min(100, Math.max(0, number));
 }
 
-function Select({ label, value, options, onChange, disabled = false }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void; disabled?: boolean }) {
+function Select({ label, value, options, onChange, disabled = false, helper }: { label: string; value: string; options: readonly FieldChoice[]; onChange: (value: string) => void; disabled?: boolean; helper?: string }) {
   return (
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
@@ -1155,8 +1158,9 @@ function Select({ label, value, options, onChange, disabled = false }: { label: 
         disabled={disabled}
         className="mt-1 h-9 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-blue-400"
       >
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
+      {helper && <span className="mt-1 block text-[11px] leading-4 text-slate-500">{helper}</span>}
     </label>
   );
 }
@@ -1193,8 +1197,8 @@ const zh = {
   objectivePlaceholder: "添加 Objective：写清楚本周期最重要的目标",
   krPlaceholder: "添加 Key Result：写一个清晰、可衡量的结果",
   owner: "Owner",
-  type: "Type",
-  confidence: "Confidence",
+  type: "类型 Type",
+  confidence: "信心 Confidence",
   progress: "进度",
   progressPercent: "进度 (%)",
   weight: "权重",
