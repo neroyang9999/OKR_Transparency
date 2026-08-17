@@ -24,7 +24,7 @@ export type FieldChoice = {
 
 const typeCopy: Record<Lang, Record<OkrType, Omit<FieldChoice, "value">>> = {
   zh: {
-    Committed: { label: "Committed", helper: "本周期必须 100% 达成。" },
+    Committed: { label: "Committed", helper: "本周期需要 100% 达成。" },
     Aspirational: { label: "Aspirational", helper: "做到 60–70% 即算有效。" },
     Learning: { label: "Learning", helper: "用于不确定性高的探索。KR 要回答“本周期必须学会什么”。" }
   },

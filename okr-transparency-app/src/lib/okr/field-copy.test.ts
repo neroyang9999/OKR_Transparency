@@ -29,7 +29,7 @@ describe("field choice copy", () => {
   });
 
   it("resolves the helper of the selected value", () => {
-    expect(typeHelper("Committed", "zh")).toBe("本周期必须 100% 达成。");
+    expect(typeHelper("Committed", "zh")).toBe("本周期需要 100% 达成。");
     expect(typeHelper("Aspirational", "en")).toBe("60–70% counts as success.");
     expect(confidenceHelper("Red", "zh")).toBe("靠团队自己已经解决不了，需要上级或跨团队决策。");
   });
