@@ -150,9 +150,9 @@ Both write modes preserve the previous JSON files under `data/repair-backups/`.
 
 ## Cloud Run Deployment
 
-The production deployment target is the `nero` GCP project:
+The production deployment target is the `knowledge-base-496322` GCP project:
 
-- Project ID: `gen-lang-client-0913302758`
+- Project ID: `knowledge-base-496322`
 - Runtime: Cloud Run
 - Image registry: Artifact Registry `unitx-internal`
 - Auth boundary: IAP, default `domain:unitxlabs.com`

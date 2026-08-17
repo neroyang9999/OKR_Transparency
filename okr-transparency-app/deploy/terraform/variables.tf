@@ -1,7 +1,7 @@
 variable "project_id" {
-  description = "GCP project ID for the OKR app. Default is the nero project."
+  description = "GCP project ID for the OKR app."
   type        = string
-  default     = "gen-lang-client-0913302758"
+  default     = "knowledge-base-496322"
 }
 
 variable "region" {

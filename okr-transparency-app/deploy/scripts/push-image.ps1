@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Tag,
 
-  [string]$ProjectId = "gen-lang-client-0913302758",
+  [string]$ProjectId = "knowledge-base-496322",
   [string]$Region = "us-west1",
   [string]$Repository = "unitx-internal"
 )

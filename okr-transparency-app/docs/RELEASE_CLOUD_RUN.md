@@ -47,11 +47,15 @@ npm run lint
 npm run build
 ```
 
-## 不要直接运行 Terraform
+## Terraform 与应用发布边界
 
-本项目的 Terraform 配置没有远程 backend，state 是本地文件。若当前机器找不到部署机器上的 `terraform.tfstate` 和实际 `terraform.tfvars`，不要执行 `terraform apply`：空 state 会把已经存在的 Artifact Registry、Cloud Run、IAP、Secret 和 IAM 资源当成不存在，可能造成重复资源或配置漂移。
+当前 Terraform 配置没有声明 remote backend，因此 Terraform 默认使用执行机本地 state。若当前机器找不到与生产环境匹配的 `terraform.tfstate` 和 `terraform.tfvars`，不要执行 `terraform apply`：空 state 可能把已经存在的 Artifact Registry、Cloud Run、IAP、Secret 和 IAM 资源视为未创建，导致创建失败、重复资源或配置漂移。
 
-本次应用发布只需要构建镜像和更新 Cloud Run 修订，不需要 Terraform。
+本次代码发布采用 Cloud Build 构建镜像，再通过 Cloud Run 创建 0 流量候选修订、完成冒烟验证后切换流量，不需要 Terraform，也不会迁移、覆盖或删除 Firestore 数据。
+
+但 Cloud Run 的镜像由 Terraform 的 `image_tag` 管理。直接更新 Cloud Run 镜像会产生 Terraform drift；下一次执行 Terraform 前，必须在持有生产 state 的部署机器上把 `terraform.tfvars` 的 `image_tag` 更新为同一个镜像 tag，或改用 Terraform 完成发布。
+
+以下变更仍应通过持有正确 state 的部署环境执行 Terraform：Cloud Run 服务配置、IAP、IAM、Secret、环境变量、扩缩容参数、Artifact Registry 和其他基础设施。
 
 ## 1. 准备干净主线
 

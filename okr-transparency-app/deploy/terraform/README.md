@@ -1,6 +1,6 @@
 # OKR Transparency App Terraform
 
-Target project: `nero` (`gen-lang-client-0913302758`).
+Target project: `knowledge-base-496322`.
 
 This deploys the Next.js OKR app to Cloud Run, stores app secrets in Secret
 Manager, grants the runtime service account Firestore access, and binds IAP
@@ -13,7 +13,7 @@ can be translated without storing a service-account key in the application.
 1. Select the project:
 
    ```powershell
-   gcloud config set project gen-lang-client-0913302758
+   gcloud config set project knowledge-base-496322
    ```
 
 2. Configure the OAuth consent screen for IAP:
@@ -54,7 +54,7 @@ can write Firestore:
 
 ```powershell
 $env:OKR_STORAGE = "firestore"
-$env:FIRESTORE_PROJECT_ID = "gen-lang-client-0913302758"
+$env:FIRESTORE_PROJECT_ID = "knowledge-base-496322"
 npm run migrate:firestore
 ```
 
