@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AdminConfig } from "@/lib/admin/config";
-import { ownerScopeForMember, ownerScopeForTeam } from "./owner-scope";
+import { isMemberScopedRecord, ownerScopeForMember, ownerScopeForTeam, teamScopedRecords } from "./owner-scope";
+import type { OkrRecord } from "./types";
 
 const config = {
   teams: [
@@ -30,5 +31,36 @@ describe("OKR owner scopes", () => {
       ownerEmail: "yang.luo@unitxlabs.com"
     });
     expect(ownerScopeForMember(config, "QA Team", "yang.luo@unitxlabs.com")).toBeNull();
+  });
+});
+
+describe("team-scoped records", () => {
+  const record = (okrId: string, objectiveScope?: OkrRecord["objective_scope"]) => ({
+    okr_id: okrId,
+    team: "TPM Team",
+    owner: "Yang Luo",
+    objective_scope: objectiveScope
+  } as OkrRecord);
+
+  it("treats a record without an explicit scope as a team record", () => {
+    expect(isMemberScopedRecord(record("TPM-TEAM-O1"))).toBe(false);
+    expect(isMemberScopedRecord(record("TPM-TEAM-O2", "team"))).toBe(false);
+    expect(isMemberScopedRecord(record("TPM-MEMBER-O1", "member"))).toBe(true);
+  });
+
+  it("drops the personal OKRs a member aligned into the team", () => {
+    const records = [
+      record("TPM-TEAM-O1", "team"),
+      record("TPM-TEAM-O1-KR1", "team"),
+      record("TPM-LEGACY-O1"),
+      record("TPM-MEMBER-O1", "member"),
+      record("TPM-MEMBER-O1-KR1", "member")
+    ];
+
+    expect(teamScopedRecords(records).map((item) => item.okr_id)).toEqual([
+      "TPM-TEAM-O1",
+      "TPM-TEAM-O1-KR1",
+      "TPM-LEGACY-O1"
+    ]);
   });
 });

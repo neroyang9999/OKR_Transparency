@@ -1,6 +1,6 @@
 import type { AdminConfig, AdminUser } from "@/lib/admin/config";
 import { resolveTeamOwner } from "../admin/team-owners";
-import type { ObjectiveScope } from "./types";
+import type { ObjectiveScope, OkrRecord } from "./types";
 
 export type OkrOwnerScope = {
   owner: string;
@@ -48,6 +48,15 @@ export function ownerScopeForTeam(config: AdminConfig, team: string): OkrOwnerSc
       ...leaders.flatMap((leader) => ownerScopeForUser(leader).aliases)
     ])
   };
+}
+
+export function isMemberScopedRecord(record: Pick<OkrRecord, "objective_scope">) {
+  return (record.objective_scope ?? "team") === "member";
+}
+
+/** A member's personal OKRs belong to that member's page, never to the team page they align into. */
+export function teamScopedRecords(records: OkrRecord[]) {
+  return records.filter((record) => !isMemberScopedRecord(record));
 }
 
 function unique(values: string[]) {
