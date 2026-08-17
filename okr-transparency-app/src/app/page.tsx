@@ -22,7 +22,7 @@ import { filterDraftByOwner } from "@/lib/okr/edit-types";
 import type { AlignmentOption } from "@/lib/okr/alignment-options";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
-import { ownerScopeForTeam, ownerScopeForUser } from "@/lib/okr/owner-scope";
+import { ownerScopeForTeam, ownerScopeForUser, teamScopedRecords } from "@/lib/okr/owner-scope";
 import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
 import { getOkrTreeResponse } from "@/lib/okr/store";
 import type { Period } from "@/lib/periods";
@@ -70,10 +70,10 @@ export default async function HomePage({
   const draft = baseDraft ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner, selectedOwnerScope) : null;
   const periodRecords = selectedPeriod === adminConfig.defaultPeriodId ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
-  const qualityStats = getOkrQualityStats(teamRecords);
   const selectedRecords = selectedMember
     ? buildOwnerScopedRecords(teamRecords, selectedOwnerAliases)
-    : teamRecords;
+    : teamScopedRecords(teamRecords);
+  const qualityStats = getOkrQualityStats(selectedRecords);
   const displayRecordCount = selectedMember
     ? selectedRecords.filter((record) => ownerMatches(record.owner, selectedOwnerAliases)).length
     : selectedRecords.length;
