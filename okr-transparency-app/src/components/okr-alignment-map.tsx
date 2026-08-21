@@ -15,7 +15,7 @@ import {
   type AlignmentObjective,
   type AlignmentStatusCounts
 } from "@/lib/okr/alignment-map";
-import { buildEdgeRouting, type EdgeInput, type EdgeRouting } from "@/lib/okr/alignment-edge-path";
+import { buildEdgePaths, type EdgeInput, type EdgePath } from "@/lib/okr/alignment-edge-path";
 import type { ConfidenceLevel, OkrRecord } from "@/lib/okr/types";
 import { teamColor, teamInitials } from "@/lib/team-colors";
 import { cn } from "@/lib/utils";
@@ -75,7 +75,7 @@ export function OkrAlignmentMap({
   const [query, setQuery] = useState("");
   const [pinnedNodeId, setPinnedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [routing, setRouting] = useState<EdgeRouting>(() => ({ segments: [], junctions: [] }));
+  const [edgePaths, setEdgePaths] = useState<EdgePath[]>([]);
   /** Vertical offsets that bring the focused chain onto one row. Derived from the resting layout,
    *  so it is computed in an effect rather than during render. */
   const [lift, setLift] = useState<Map<string, number>>(() => new Map());
@@ -145,6 +145,34 @@ export function OkrAlignmentMap({
   const trail = useMemo(() => collectTrail(activeNodeId, graph.parents), [activeNodeId, graph.parents]);
 
   const nodeIndex = useMemo(() => buildNodeIndex(model, lang), [model, lang]);
+
+  /** Edges routed onto the same pair of anchors come back with the same geometry, so draw one
+   *  stroke and let it light up for any of the pairs it stands for. */
+  const drawnEdges = useMemo(() => {
+    const byShape = new Map<string, { id: string; d: string; endpoints: Array<[string, string]> }>();
+    edgePaths.forEach((path) => {
+      const shape = byShape.get(path.d);
+      if (shape) {
+        shape.endpoints.push([path.fromNodeId, path.toNodeId]);
+        return;
+      }
+      byShape.set(path.d, { id: path.id, d: path.d, endpoints: [[path.fromNodeId, path.toNodeId]] });
+    });
+    return Array.from(byShape.values());
+  }, [edgePaths]);
+
+  /** Split once instead of per path: routes that coincide have to be composited together, and
+   *  that only works if the whole set shares one opacity. */
+  const [litEdges, dimEdges] = useMemo(() => {
+    const lit: typeof drawnEdges = [];
+    const dim: typeof drawnEdges = [];
+    drawnEdges.forEach((edge) => {
+      const onChain = chain !== null
+        && edge.endpoints.some(([fromNodeId, toNodeId]) => chain.has(fromNodeId) && chain.has(toNodeId));
+      (onChain ? lit : dim).push(edge);
+    });
+    return [lit, dim];
+  }, [drawnEdges, chain]);
 
   /** A folded band renders a summary strip instead of its cards, so the edges those cards owned
    *  re-anchor onto the strip. Applied to both sides of an edge by `resolve` below. */
@@ -228,7 +256,7 @@ export function OkrAlignmentMap({
       }];
     });
 
-    setRouting(buildEdgeRouting(inputs, columns));
+    setEdgePaths(buildEdgePaths(inputs, columns));
   }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
@@ -418,47 +446,45 @@ export function OkrAlignmentMap({
         <div ref={canvasRef} style={{ zoom: canvasZoom }} className="relative min-w-[1170px] px-6 pb-7">
           <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-visible" aria-hidden>
             <defs>
+              {/* `currentColor` inside a marker resolves against the defs, not the referencing
+                  path, so each colour needs its own -- otherwise every arrowhead comes out black. */}
               <marker id="alignment-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="currentColor" />
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#94a3b8" />
+              </marker>
+              <marker id="alignment-arrow-lit" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#2563eb" />
               </marker>
             </defs>
-            {routing.segments.map((segment) => {
-              const highlighted = onChain(chain, segment.endpoints);
-              return (
+            {/* The alpha sits on the group, not the paths: coinciding routes are drawn on top of
+                each other, and per-path opacity would compound where they overlap and turn a shared
+                stretch into a darker line. */}
+            <g
+              className="text-slate-400 transition-opacity duration-150"
+              opacity={chain !== null ? 0.06 : 0.5}
+            >
+              {dimEdges.map((edge) => (
                 <path
-                  key={segment.id}
-                  d={segment.d}
+                  key={edge.id}
+                  d={edge.d}
                   fill="none"
-                  className={cn(
-                    "transition-[stroke,opacity] duration-150",
-                    highlighted ? "text-blue-600" : "text-slate-400"
-                  )}
                   stroke="currentColor"
-                  strokeWidth={highlighted ? 2.2 : 1.4}
-                  strokeLinecap="round"
-                  opacity={highlighted ? 1 : chain !== null ? 0.06 : 0.5}
-                  markerEnd={segment.arrow ? "url(#alignment-arrow)" : undefined}
+                  strokeWidth={1.4}
+                  markerEnd="url(#alignment-arrow)"
                 />
-              );
-            })}
-            {/* Where three or more runs meet. Without it a junction and a crossing look alike. */}
-            {routing.junctions.map((junction) => {
-              const highlighted = onChain(chain, junction.endpoints);
-              return (
-                <circle
-                  key={junction.id}
-                  cx={junction.x}
-                  cy={junction.y}
-                  r={highlighted ? 2.8 : 2.2}
-                  className={cn(
-                    "transition-[fill,opacity] duration-150",
-                    highlighted ? "text-blue-600" : "text-slate-400"
-                  )}
-                  fill="currentColor"
-                  opacity={highlighted ? 1 : chain !== null ? 0.06 : 0.5}
+              ))}
+            </g>
+            <g className="text-blue-600">
+              {litEdges.map((edge) => (
+                <path
+                  key={edge.id}
+                  d={edge.d}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.2}
+                  markerEnd="url(#alignment-arrow-lit)"
                 />
-              );
-            })}
+              ))}
+            </g>
           </svg>
 
           {/* Columns fill the canvas width, which the zoom above holds at the baseline the design
@@ -1183,11 +1209,6 @@ function appliedTranslateY(element: HTMLElement) {
 
 /** A lifted card floats over whatever it landed on, which is already faded out of the way. */
 const liftedCard = "z-20 shadow-[0_10px_30px_rgba(16,24,40,0.18)]";
-
-/** A run belongs to the focused chain when any pair travelling it has both ends on the chain. */
-function onChain(chain: Set<string> | null, endpoints: Array<[string, string]>) {
-  return chain !== null && endpoints.some(([fromNodeId, toNodeId]) => chain.has(fromNodeId) && chain.has(toNodeId));
-}
 
 function sameLift(a: Map<string, number>, b: Map<string, number>) {
   return a.size === b.size && Array.from(a).every(([nodeId, offset]) => b.get(nodeId) === offset);
