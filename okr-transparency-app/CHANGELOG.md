@@ -4,6 +4,12 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.3 - 2026-08-21
+
+- Restore upper-level alignment for members: the picker matched candidates against the configured team owner label while publishing records the resolved owner display name, so every team with a configured leader offered its members no alignment target at all.
+- Keep a leader's personal OKR out of the alignment targets offered to their team members.
+- Show the resolved team owner in the alignment view group headers, matching the name every other view already shows.
+
 ## v0.8.2 - 2026-08-17
 
 - Keep personal-scope OKRs out of the team overview and calculate team health from the records actually shown.
