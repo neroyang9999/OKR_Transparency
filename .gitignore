@@ -26,3 +26,7 @@ okr-transparency-app/data/okr-snapshot.json
 
 # Root-level analysis drafts
 /*.md
+!CLAUDE.md
+
+# Development worktrees
+.worktrees/

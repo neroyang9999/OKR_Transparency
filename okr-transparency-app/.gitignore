@@ -10,6 +10,7 @@ data/okr-drafts.json
 data/okr-period-snapshots.json
 data/okr-feedback.json
 data/repair-backups/
+data/seed-local-backups/
 data/firestore-reset-backups/
 data/local-sync-backups/
 data/okr-snapshot-versions.json

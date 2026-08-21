@@ -1,4 +1,3 @@
-import { google } from "googleapis";
 import { updateLocalizedText } from "./bilingual";
 import type { OkrDraft } from "./edit-types";
 
@@ -73,6 +72,8 @@ async function translateBatch(contents: string[], targetLanguage: TargetLanguage
   // otherwise hold the editor's save open indefinitely. On timeout the caller
   // records a warning and keeps the author's original text.
   return withDeadline((async () => {
+    // Loaded on demand for the same reason as in storage/firestore.ts.
+    const { google } = await import("googleapis");
     const auth = await google.auth.getClient({
       scopes: ["https://www.googleapis.com/auth/cloud-platform"]
     });

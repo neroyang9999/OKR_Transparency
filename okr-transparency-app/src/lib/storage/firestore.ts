@@ -1,5 +1,3 @@
-import { google } from "googleapis";
-
 type FirestoreValue =
   | { nullValue: null }
   | { booleanValue: boolean }
@@ -198,18 +196,24 @@ async function getProjectId() {
   const explicitProjectId = process.env.FIRESTORE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
   if (explicitProjectId) return explicitProjectId;
 
-  return getGoogleAuth().getProjectId();
+  return (await getGoogleAuth()).getProjectId();
 }
 
 async function getAccessToken() {
-  const client = await getGoogleAuth().getClient();
+  const client = await (await getGoogleAuth()).getClient();
   const token = await client.getAccessToken();
   const accessToken = typeof token === "string" ? token : token?.token;
   if (!accessToken) throw new Error("Unable to obtain Google access token for Firestore");
   return accessToken;
 }
 
-function getGoogleAuth() {
+/**
+ * Loaded on demand. `googleapis` is ~200 MB, and importing it at module scope pulls it into
+ * every module graph that reaches this file — including pure-logic tests that never
+ * authenticate, where it cost seconds per test file.
+ */
+async function getGoogleAuth() {
+  const { google } = await import("googleapis");
   const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (credentialsJson) {
     return new google.auth.GoogleAuth({
