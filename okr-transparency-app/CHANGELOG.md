@@ -4,6 +4,8 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.5 - 2026-08-21
+
 - Fold the alignment view's second-level column into one collapsible band per team. Seventeen Objectives laid out flat pushed a carrier group a thousand pixels below the root it aligns to; bands past two Objectives now start folded, a fold holds until it is clicked open, and a search still pulls its match into view.
 - Bring a focused chain onto one row. Hovering or pinning a card floats the rest of its chain alongside it instead of only fading the others out, and a folded band the chain runs through opens itself, so the Objective arrives rather than a "3 Objectives collapsed" strip.
 - Draw everything aligning into one Objective as a single line under a single arrowhead. The alignment edges landing on one card previously fanned out into as many near-parallel neighbours, with their arrowheads stacked on one point; arrowheads also now take the colour of the line they belong to instead of always rendering black.
