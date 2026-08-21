@@ -114,9 +114,14 @@ IMAGE_TAG="${VERSION_ID}-${PR_ID}-${MERGE_COMMIT_SHA}"
 ```bash
 gcloud builds submit \
   --project=knowledge-base-496322 \
-  --tag=us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app:${IMAGE_TAG} \
+  --config=cloudbuild.yaml \
+  --substitutions=_TAG=${IMAGE_TAG} \
   .
 ```
+
+`cloudbuild.yaml` 额外维护一个 `:deps-cache` tag：依赖层单独构建并推送，下一次构建在 `package-lock.json` 未变时复用它，跳过 `npm ci` 以及把 `node_modules` COPY 进 builder 阶段那一层。这个 tag 是构建缓存、不是发布产物，**不要**把它部署到 Cloud Run。
+
+> 不要再用 `gcloud builds submit --tag=...`。那种形式没有缓存来源，每次从零构建全部层。
 
 记录输出中的：
 
@@ -125,6 +130,16 @@ gcloud builds submit \
 - 镜像 digest
 
 构建上下文必须是 `okr-transparency-app`，不要从包含本地业务数据的上级目录构建。`.dockerignore` 应排除 `data`。
+
+想确认缓存是否命中，看 `build-deps` 这一步的耗时：命中在 10s 以内，未命中约 50s（`npm ci` 重跑）。
+
+```bash
+gcloud builds describe <BUILD_ID> \
+  --project=knowledge-base-496322 \
+  --format='table(steps[].id,steps[].timing.startTime,steps[].timing.endTime)'
+```
+
+`package-lock.json` 一变，`npm ci` 必然重跑，这是预期行为，不是缓存失效。
 
 ## 4. 创建 0 流量候选修订
 

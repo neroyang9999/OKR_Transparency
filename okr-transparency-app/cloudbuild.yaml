@@ -1,0 +1,64 @@
+# Release build for Cloud Run. Replaces a bare `gcloud builds submit --tag`, which builds every
+# layer from scratch because it has nothing to reuse.
+#
+# The dependency stage is built and pushed as its own `:deps-cache` tag so the next build can reuse
+# it whenever package-lock.json is unchanged. That skips `npm ci` and, because the layer digest
+# matches, the `COPY --from=deps node_modules` into the builder stage as well. Pushing the cache tag
+# is close to free after the first run: unchanged layers already exist in the registry.
+#
+# The source stage is deliberately not cached — `COPY . .` invalidates on any source change, which
+# is every release, so caching it would only add a push.
+
+substitutions:
+  _IMAGE: us-west1-docker.pkg.dev/knowledge-base-496322/unitx-internal/okr-transparency-app
+  # Release tag, e.g. v085-pr24-abc1234. Required; see docs/RELEASE_CLOUD_RUN.md.
+  _TAG: ""
+
+options:
+  env:
+    - DOCKER_BUILDKIT=1
+
+steps:
+  - id: require-tag
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ -z "${_TAG}" ]; then
+          echo "_TAG is required, e.g. --substitutions=_TAG=v085-pr24-abc1234" >&2
+          exit 1
+        fi
+
+  # Nothing to pull on the first run, and that is not a failure.
+  - id: pull-deps-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - docker pull "${_IMAGE}:deps-cache" || echo "no deps cache yet; this build will populate it"
+
+  - id: build-deps
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target=deps
+      - --cache-from=${_IMAGE}:deps-cache
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --tag=${_IMAGE}:deps-cache
+      - .
+
+  - id: build-release
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --cache-from=${_IMAGE}:deps-cache
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --tag=${_IMAGE}:${_TAG}
+      - .
+
+images:
+  - ${_IMAGE}:${_TAG}
+  - ${_IMAGE}:deps-cache
+
+timeout: 1800s
