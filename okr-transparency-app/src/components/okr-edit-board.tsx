@@ -35,14 +35,11 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   const ownerScoped = Boolean(ownerEmail);
   const canEditDraft = ownerScoped ? policy.canEdit : policy.canPublish;
   const canPublishDraft = ownerScoped ? canEditDraft : policy.canPublish;
-  const defaultAlignmentId = ownerScoped ? alignmentOptions[0]?.id : undefined;
   const objectiveScope = ownerScoped
     ? { objectiveScope: "member" as const, ownerEmail }
     : { objectiveScope: "team" as const };
-  const [draft, setDraft] = useState(() => withDefaultAlignment(
-    applyDraftObjectiveScope(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), objectiveScope),
-    defaultAlignmentId
-  ));
+  const [draft, setDraft] = useState(() =>
+    applyDraftObjectiveScope(normalizeDraft(localizeDraftForLanguage(initialDraft, lang), fixedOwner, true), objectiveScope));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   const [message, setMessage] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -126,8 +123,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
         ...current.objectives,
         {
           ...createEmptyObjective(current.team, current.periodId, fixedOwner),
-          ...objectiveScope,
-          alignedToId: defaultAlignmentId
+          ...objectiveScope
         }
       ]
     }));
@@ -167,10 +163,7 @@ export function OkrEditBoard({ initialDraft, lang, alignmentOptions, teamOwner, 
   }
 
   function importPastedObjectives(objectives: PastedOkrObjective[], mode: PastedOkrApplyMode) {
-    changeDraft((current) => withDefaultAlignment(
-      applyPastedOkrs(current, objectives, fixedOwner, mode, undefined, objectiveScope),
-      defaultAlignmentId
-    ));
+    changeDraft((current) => applyPastedOkrs(current, objectives, fixedOwner, mode, undefined, objectiveScope));
     setPublishAttempted(false);
     setTouchedFields(new Set());
     setMessage(copy.importApplied(objectives.length));
@@ -1032,17 +1025,6 @@ function redistributeWeights(keyResults: EditableKr[]) {
     ...kr,
     weight: index === keyResults.length - 1 ? Math.round((100 - base * (keyResults.length - 1)) * 10) / 10 : base
   }));
-}
-
-function withDefaultAlignment(draft: OkrDraft, defaultAlignmentId?: string): OkrDraft {
-  if (!defaultAlignmentId) return draft;
-  return {
-    ...draft,
-    objectives: draft.objectives.map((objective) => ({
-      ...objective,
-      alignedToId: objective.alignedToId ?? defaultAlignmentId
-    }))
-  };
 }
 
 function StatusPill({ state, copy }: { state: "saved" | "saving" | "dirty" | "error"; copy: typeof zh }) {
