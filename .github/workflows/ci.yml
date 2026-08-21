@@ -31,6 +31,10 @@ jobs:
 
       - run: npm test
 
+      # tsconfig.json is `strict` and covers the test files too, but nothing ran it: the Turbopack
+      # build does not type-check, so this was the one signal with no gate behind it.
+      - run: npm run typecheck
+
       - run: npm run lint
 
       - run: npm run build

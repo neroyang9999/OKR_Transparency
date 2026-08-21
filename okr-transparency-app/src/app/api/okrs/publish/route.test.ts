@@ -26,7 +26,9 @@ describe("POST /api/okrs/publish", () => {
     vi.mocked(resolveRequestAccess).mockResolvedValue(access as never);
     vi.mocked(authorizePublish).mockReturnValue({ ok: true, error: "" });
     vi.mocked(publishDraft).mockResolvedValue({ snapshot: { version: 1, meta: {} as never, records: [] }, errors: [], warnings: [] });
-    vi.mocked(appendAdminEvent).mockResolvedValue(undefined);
+    /** The route never reads the event back, so resolving nothing is the honest mock -- but
+     *  the real signature returns the stored event. */
+    vi.mocked(appendAdminEvent).mockResolvedValue(undefined as never);
   });
 
   it("publishes only the team lead owner scope when no member is selected", async () => {
