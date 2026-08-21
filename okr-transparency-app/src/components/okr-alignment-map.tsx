@@ -38,13 +38,15 @@ const maxCanvasZoom = 1.4;
 export function OkrAlignmentMap({
   records,
   teams,
+  teamOwners,
   lang
 }: {
   records: OkrRecord[];
   teams: AdminTeam[];
+  teamOwners: Record<string, string>;
   lang: Lang;
 }) {
-  const model = useMemo(() => buildAlignmentMapModel(records, teams), [records, teams]);
+  const model = useMemo(() => buildAlignmentMapModel(records, teams, teamOwners), [records, teams, teamOwners]);
   const colorOf = useMemo(() => {
     const byTeam = new Map(teams.map((team) => [team.name, team.color]));
     return (team: string) => teamColor(byTeam.get(team));

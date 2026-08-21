@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
 import { OkrAlignmentMap } from "@/components/okr-alignment-map";
+import { teamOwnerDisplayNames } from "@/lib/admin/team-owners";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readOkrSnapshot } from "@/lib/okr/store";
@@ -119,6 +120,7 @@ export default async function MapPage({
       <OkrAlignmentMap
         records={teamScope.records}
         teams={pageAccess.adminConfig.teams}
+        teamOwners={teamOwnerDisplayNames(pageAccess.adminConfig.users, pageAccess.adminConfig.teams)}
         lang={lang}
       />
     </AppShell>
