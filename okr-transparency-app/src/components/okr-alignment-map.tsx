@@ -32,6 +32,10 @@ const dimmed = "opacity-[.14]";
 const secondLevelAutoCollapseFrom = 3;
 /** Breathing room between two cards of one column that land on the same row. */
 const liftStackGap = 8;
+/** A lifted stack stops here rather than at the canvas top: the sticky column header covers the
+ *  first 43px, and a band header travelling with its cards needs its own 24px above the first of
+ *  them. Landing above this line puts one of the two outside the scroll container. */
+const liftTopReserve = 68;
 
 /** The design's canvas height, used until the client can measure the real viewport. */
 const designCanvasHeight = 604;
@@ -339,6 +343,18 @@ export function OkrAlignmentMap({
   const isFaded = (nodeId: string, hit: boolean) =>
     (chain !== null && !chain.has(nodeId)) || (filterActive && !hit);
 
+  /** The band chrome has to move and fade with its contents. A header left behind while its cards
+   *  float away ends up below its own group, and a strip left solid shows through the gaps between
+   *  the cards a lift floats over it. */
+  const bandState = (band: { nodeId: string; objectives: AlignmentObjective[] }, collapsed: boolean) => ({
+    faded:
+      (chain !== null && !band.objectives.some((objective) => chain.has(objective.nodeId)))
+      || (filterActive && !band.objectives.some(matches)),
+    lift: collapsed
+      ? lift.get(band.nodeId)
+      : band.objectives.map((objective) => lift.get(objective.nodeId)).find((offset) => offset !== undefined)
+  });
+
   const cardState = (nodeId: string, hit: boolean) => ({
     faded: isFaded(nodeId, hit),
     active: activeNodeId === nodeId,
@@ -499,7 +515,9 @@ export function OkrAlignmentMap({
                   ? `${model.columns.l1.teamCount} teams · ${model.columns.l1.objectiveCount} O`
                   : `${model.columns.l1.teamCount} 团队 · ${model.columns.l1.objectiveCount} O`}
               />
-              {model.groups.map((group) => (
+              {model.groups.map((group) => {
+                const collapsed = isBandCollapsed(group.nodeId, collapsedGroups);
+                return (
                 <GroupBand
                   key={group.nodeId}
                   band={group}
@@ -510,8 +528,8 @@ export function OkrAlignmentMap({
                   collapsedLabel={lang === "en"
                     ? `${group.objectives.length} root Objectives collapsed`
                     : `${group.objectives.length} 个根目标已折叠`}
-                  collapsed={isBandCollapsed(group.nodeId, collapsedGroups)}
-                  lift={lift.get(group.nodeId)}
+                  collapsed={collapsed}
+                  {...bandState(group, collapsed)}
                   onToggle={() => toggleGroup(group.nodeId)}
                 >
                   {group.objectives.map((objective) => (
@@ -529,7 +547,8 @@ export function OkrAlignmentMap({
                     />
                   ))}
                 </GroupBand>
-              ))}
+                );
+              })}
             </div>
 
             <div ref={(element) => { columnRefs.current[1] = element; }} className="min-w-[270px] max-w-[560px] flex-1 basis-0">
@@ -540,7 +559,9 @@ export function OkrAlignmentMap({
                   ? `${model.columns.l2.teamCount} teams · ${model.columns.l2.objectiveCount} O`
                   : `${model.columns.l2.teamCount} 团队 · ${model.columns.l2.objectiveCount} O`}
               />
-              {model.secondLevelGroups.map((band) => (
+              {model.secondLevelGroups.map((band) => {
+                const collapsed = isBandCollapsed(band.nodeId, collapsedSecondLevel);
+                return (
                 <GroupBand
                   key={band.nodeId}
                   band={band}
@@ -551,8 +572,8 @@ export function OkrAlignmentMap({
                   collapsedLabel={lang === "en"
                     ? `${band.objectives.length} Objectives collapsed`
                     : `${band.objectives.length} 个目标已折叠`}
-                  collapsed={isBandCollapsed(band.nodeId, collapsedSecondLevel)}
-                  lift={lift.get(band.nodeId)}
+                  collapsed={collapsed}
+                  {...bandState(band, collapsed)}
                   onToggle={() => toggleSecondLevel(band.nodeId)}
                 >
                   {band.objectives.map((objective) => (
@@ -570,7 +591,8 @@ export function OkrAlignmentMap({
                     />
                   ))}
                 </GroupBand>
-              ))}
+                );
+              })}
               <div className="flex flex-col gap-[9px]">
                 {model.secondLevelNotes.map((note) => (
                   <DashedNote key={noteKey(note)} note={note} lang={lang} variant="second-level" />
@@ -707,6 +729,7 @@ function GroupBand({
   stats,
   collapsedLabel,
   collapsed,
+  faded,
   lift,
   onToggle,
   children
@@ -716,6 +739,7 @@ function GroupBand({
   stats: string;
   collapsedLabel: string;
   collapsed: boolean;
+  faded: boolean;
   lift?: number;
   onToggle: () => void;
   children: React.ReactNode;
@@ -726,7 +750,12 @@ function GroupBand({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex w-full items-center gap-[7px] px-0.5 pb-[7px] text-left"
+        style={liftStyle(lift)}
+        className={cn(
+          "flex w-full items-center gap-[7px] px-0.5 pb-[7px] text-left",
+          "transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+          faded && dimmed
+        )}
       >
         <ChevronDown
           className={cn("h-3.5 w-3.5 flex-none text-slate-400 transition-transform duration-[180ms]", collapsed && "-rotate-90")}
@@ -745,7 +774,8 @@ function GroupBand({
           style={liftStyle(lift)}
           className={cn(
             "flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-[11px] py-[9px]",
-            "transition-transform duration-150 motion-reduce:transition-none",
+            "transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+            faded && dimmed,
             lift !== undefined && liftedCard
           )}
         >
@@ -1257,9 +1287,9 @@ function buildLift(
       return box.bottom - box.top;
     });
     const stack = heights.reduce((sum, height) => sum + height, 0) + liftStackGap * (ordered.length - 1);
-    /** Centre the stack on the active row, but never above the top of the canvas, where the
-     *  scroll container would clip it. */
-    let cursor = Math.max(0, targetY - stack / 2);
+    /** Centre the stack on the active row, but never so high that the scroll container clips it
+     *  or the sticky column header covers it. */
+    let cursor = Math.max(liftTopReserve, targetY - stack / 2);
 
     ordered.forEach((anchorId, index) => {
       const box = boxes.get(anchorId) as RestingBox;
