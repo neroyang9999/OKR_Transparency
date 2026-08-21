@@ -82,12 +82,6 @@ export function OkrAlignmentMap({
   const [canvasHeight, setCanvasHeight] = useState(designCanvasHeight);
   const [canvasZoom, setCanvasZoom] = useState(1);
 
-  /** Where every anchor sits with nothing lifted. Lifting moves cards with a transform, and
-   *  `getBoundingClientRect` reports the moved position, so offsets have to be measured against
-   *  the layout as it rests -- otherwise each pass would compound the previous one. */
-  const restingBoxes = useRef(new Map<string, RestingBox>());
-  const liftRef = useRef(new Map<string, number>());
-
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const columnRefs = useRef<Array<HTMLDivElement | null>>([null, null, null]);
@@ -136,9 +130,6 @@ export function OkrAlignmentMap({
     );
   }, [searching, model.groups, model.secondLevelGroups, matches]);
 
-  const isBandCollapsed = (nodeId: string, collapsed: Set<string>) =>
-    collapsed.has(nodeId) && !searchOpenedBands.has(nodeId);
-
   const graph = useMemo(() => {
     const parents = new Map<string, string[]>();
     const children = new Map<string, string[]>();
@@ -180,6 +171,22 @@ export function OkrAlignmentMap({
     return fallback;
   }, [model.groups, model.secondLevelGroups]);
 
+  /** A folded band on the focused chain opens itself. Lifting its summary strip instead would put
+   *  "4 Objectives collapsed" beside the card that carries them, which says nothing about which
+   *  one it is -- and leaves the team name behind on the band header. Only bands in other columns
+   *  ever open this way, so the card under the cursor never moves. */
+  const chainOpenedBands = useMemo(() => {
+    const bands = new Set<string>();
+    chain?.forEach((nodeId) => {
+      const band = anchorFallback.get(nodeId);
+      if (band) bands.add(band);
+    });
+    return bands;
+  }, [chain, anchorFallback]);
+
+  const isBandCollapsed = (nodeId: string, collapsed: Set<string>) =>
+    collapsed.has(nodeId) && !searchOpenedBands.has(nodeId) && !chainOpenedBands.has(nodeId);
+
 
   const measure = useCallback(() => {
     const canvas = canvasRef.current;
@@ -215,15 +222,6 @@ export function OkrAlignmentMap({
       anchors.set(id, { element, box: toLocal(element), column: Number(element.dataset.column ?? "0") });
     });
 
-    if (liftRef.current.size === 0) {
-      restingBoxes.current = new Map(
-        Array.from(anchors, ([id, anchor]): [string, RestingBox] => [
-          id,
-          { top: anchor.box.top, bottom: anchor.box.bottom, column: anchor.column }
-        ])
-      );
-    }
-
     const resolve = (nodeId: string) => anchors.get(nodeId) ?? anchors.get(anchorFallback.get(nodeId) ?? "");
     const columns = columnRefs.current.flatMap((column) => {
       if (!column) return [];
@@ -249,18 +247,17 @@ export function OkrAlignmentMap({
   }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
-    /** Keeping the previous map when nothing moved stops an unchanged focus from re-measuring. */
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    /** Read the layout back here rather than reusing the measuring pass: a band that just opened
+     *  for this chain moved everything below it, and offsets computed against the layout as it was
+     *  a moment ago would land the cards short. Keeping the previous map when nothing moved stops
+     *  an unchanged focus from re-measuring. */
     setLift((current) => {
-      const next = buildLift(activeNodeId, chain, restingBoxes.current, anchorFallback);
+      const next = buildLift(activeNodeId, chain, readRestingBoxes(canvas, canvasZoom), anchorFallback);
       return sameLift(current, next) ? current : next;
     });
-  }, [activeNodeId, chain, anchorFallback]);
-
-  /** Declared ahead of the measuring effect so `measure` already knows whether a lift is applied
-   *  by the time it reads the anchors back. */
-  useLayoutEffect(() => {
-    liftRef.current = lift;
-  }, [lift]);
+  }, [activeNodeId, chain, chainOpenedBands, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
     /** Measure before the browser paints: a zoom change re-lays the cards out, and edges routed
@@ -280,6 +277,7 @@ export function OkrAlignmentMap({
   }, [
     measure,
     lift,
+    chainOpenedBands,
     collapsedGroups,
     collapsedSecondLevel,
     openMemberGroups,
@@ -775,6 +773,10 @@ function ObjectiveCard({
   onHover: (nodeId: string | null) => void;
   onPin: (nodeId: string) => void;
 }) {
+  /** Inside its band the header already names the team. Lifted, the card has left that header
+   *  behind, so it has to carry the name itself. */
+  const showTeamName = showTeam || lift !== undefined;
+
   return (
     <article
       data-node-id={objective.nodeId}
@@ -803,7 +805,7 @@ function ObjectiveCard({
           {teamInitials(objective.owner || objective.team)}
         </span>
         <span className="min-w-0 flex-1 truncate text-[10.5px] text-muted-foreground">
-          {showTeam ? (
+          {showTeamName ? (
             <>
               <strong className="font-bold text-slate-600">{objective.team}</strong> · {objective.owner}
             </>
@@ -1144,6 +1146,38 @@ function buildNodeIndex(model: ReturnType<typeof buildAlignmentMapModel>, lang: 
 }
 
 type RestingBox = { top: number; bottom: number; column: number };
+
+/** Where every anchor would sit with nothing lifted, in the canvas's own pre-zoom units. */
+function readRestingBoxes(canvas: HTMLElement, zoom: number) {
+  const origin = canvas.getBoundingClientRect();
+  const boxes = new Map<string, RestingBox>();
+
+  canvas.querySelectorAll<HTMLElement>("[data-node-id]").forEach((element) => {
+    const id = element.dataset.nodeId;
+    if (!id || element.offsetParent === null) return;
+    const rect = element.getBoundingClientRect();
+    /** The rect carries whatever offset is applied right now, a half-finished transition included,
+     *  so take it off the element instead of assuming the last target already landed. */
+    const applied = appliedTranslateY(element);
+    boxes.set(id, {
+      top: (rect.top - origin.top) / zoom - applied,
+      bottom: (rect.bottom - origin.top) / zoom - applied,
+      column: Number(element.dataset.column ?? "0")
+    });
+  });
+
+  return boxes;
+}
+
+function appliedTranslateY(element: HTMLElement) {
+  const transform = getComputedStyle(element).transform;
+  if (!transform || transform === "none") return 0;
+  try {
+    return new DOMMatrixReadOnly(transform).f;
+  } catch {
+    return 0;
+  }
+}
 
 /** A lifted card floats over whatever it landed on, which is already faded out of the way. */
 const liftedCard = "z-20 shadow-[0_10px_30px_rgba(16,24,40,0.18)]";
