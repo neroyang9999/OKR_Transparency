@@ -39,12 +39,14 @@ jobs:
 
       - run: npm run build
 
-      # data/*.json are tracked, so a step that writes them would land in a later commit by
-      # accident. Fail loudly instead of letting that through unnoticed.
-      - name: Check no tracked data file was modified
+      # Running the app rewrites tracked files -- a publish writes data/*.json -- and they then
+      # land in a later commit by accident. Every tracked file is checked rather than data/ alone:
+      # next-env.d.ts was tracked until recently, and a build rewriting it in the app root went
+      # straight through the narrower version of this step.
+      - name: Check the run left no tracked file modified
         run: |
-          if [ -n "$(git status --porcelain -- data)" ]; then
-            echo "The build modified tracked files under data/:"
-            git status --porcelain -- data
+          if [ -n "$(git status --porcelain -uno)" ]; then
+            echo "Running the checks modified tracked files:"
+            git status --porcelain -uno
             exit 1
           fi
