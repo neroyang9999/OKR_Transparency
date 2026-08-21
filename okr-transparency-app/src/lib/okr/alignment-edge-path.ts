@@ -42,13 +42,23 @@ export function buildEdgePaths(
     const ordered = [...gapEdges].sort((a, b) => centerY(a.from) - centerY(b.from) || a.id.localeCompare(b.id));
     const gap = channelBounds(columns, toColumn);
 
-    return ordered.map((edge, index) => {
+    /** Edges that leave and land at the same two points share one channel. A folded band collapses
+     *  several of its Objectives onto one summary strip, and giving those edges separate channels
+     *  would draw two bowed lines between an identical pair of anchors. */
+    const channelIndex = new Map<string, number>();
+    ordered.forEach((edge) => {
+      const key = shapeKey(edge);
+      if (!channelIndex.has(key)) channelIndex.set(key, channelIndex.size);
+    });
+
+    return ordered.map((edge) => {
       const ax = edge.from.left;
       const ay = centerY(edge.from);
       const bx = edge.to.right;
       const by = centerY(edge.to);
+      const index = channelIndex.get(shapeKey(edge)) ?? 0;
       const channel = gap
-        ? gap.left + ((gap.right - gap.left) * (index + 1)) / (ordered.length + 1)
+        ? gap.left + ((gap.right - gap.left) * (index + 1)) / (channelIndex.size + 1)
         : (ax + bx) / 2;
 
       return {
@@ -98,6 +108,12 @@ function channelBounds(columns: EdgeColumnBounds[], toColumn: number) {
   const child = columns[toColumn + 1];
   if (!parent || !child || child.left <= parent.right) return null;
   return { left: parent.right, right: child.left };
+}
+
+/** Two edges share a shape when both endpoints coincide, which is what happens once the anchors
+ *  they resolved to are the same element. */
+function shapeKey(edge: EdgeInput) {
+  return `${round(edge.from.left)},${round(centerY(edge.from))}->${round(edge.to.right)},${round(centerY(edge.to))}`;
 }
 
 function centerY(box: EdgeBox) {

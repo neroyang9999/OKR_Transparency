@@ -64,6 +64,21 @@ describe("alignment edge path", () => {
     expect(path.d).toBe("M 0 52 L 270 412");
   });
 
+  it("shares one channel between edges that resolved to the same pair of anchors", () => {
+    const folded = box(0, 400);
+    const paths = buildEdgePaths(
+      [
+        edge("first", box(382, 40), folded),
+        edge("second", box(382, 40), folded),
+        edge("other", box(382, 240), box(0, 800))
+      ],
+      columns
+    );
+
+    expect(paths.find((path) => path.id === "first")?.d).toBe(paths.find((path) => path.id === "second")?.d);
+    expect(new Set(paths.map((path) => channelOf(path.d))).size).toBe(2);
+  });
+
   it("keeps channels independent per column gap", () => {
     const paths = buildEdgePaths(
       [

@@ -42,6 +42,19 @@ export type AlignmentGroup = {
   statusCounts: AlignmentStatusCounts;
 };
 
+/** L2 column: one collapsible band per second-level team. A structural subset of
+ *  `AlignmentGroup`, so both columns render through the same band component. */
+export type AlignmentSecondLevelGroup = {
+  nodeId: string;
+  team: string;
+  owner: string;
+  color: string;
+  objectives: AlignmentObjective[];
+  memberCount: number;
+  averageProgress: number | null;
+  statusCounts: AlignmentStatusCounts;
+};
+
 /** L3 column: every member Objective of one team folded into a single card. */
 export type AlignmentMemberGroup = {
   nodeId: string;
@@ -75,6 +88,7 @@ export type AlignmentEdge = { id: string; fromNodeId: string; toNodeId: string }
 export type AlignmentMapModel = {
   groups: AlignmentGroup[];
   secondLevel: AlignmentObjective[];
+  secondLevelGroups: AlignmentSecondLevelGroup[];
   secondLevelNotes: AlignmentEmptyNote[];
   memberGroups: AlignmentMemberGroup[];
   memberNote: AlignmentEmptyNote | null;
@@ -93,6 +107,10 @@ export function objectiveNodeId(okrId: string) {
 
 export function memberGroupNodeId(team: string) {
   return `member-group:${team}`;
+}
+
+export function secondLevelGroupNodeId(team: string) {
+  return `second-level-group:${team}`;
 }
 
 export function groupNodeId(team: string) {
@@ -178,10 +196,12 @@ export function buildAlignmentMapModel(
 
   const secondLevelOrder = new Map(secondLevel.map((objective, index) => [objective.nodeId, index]));
   const memberGroups = buildMemberGroups(memberObjectives, objectiveByNodeId, teamByName, secondLevelOrder, rootOrder);
+  const secondLevelGroups = buildSecondLevelGroups(secondLevel, memberObjectives, teamByName, teamOwners);
 
   return {
     groups,
     secondLevel,
+    secondLevelGroups,
     secondLevelNotes: buildSecondLevelNotes(memberObjectives, secondLevel, groups, teamByName, topLevelTeamOf),
     memberGroups,
     memberNote: buildMissingTeamsNote(groups, new Set(memberObjectives.map((objective) => topLevelTeamOf(objective.team)))),
@@ -239,6 +259,45 @@ function buildGroups(
         statusCounts: countStatuses(subtree)
       };
     });
+}
+
+/** Bands follow the order `secondLevel` is already sorted into, so the column keeps its
+ *  parent-proximity ordering and the L3 sort that reads off it stays untouched. */
+function buildSecondLevelGroups(
+  secondLevel: AlignmentObjective[],
+  memberObjectives: AlignmentObjective[],
+  teamByName: Map<string, AdminTeam>,
+  teamOwners: Record<string, string>
+): AlignmentSecondLevelGroup[] {
+  const memberCountByTeam = new Map<string, number>();
+  memberObjectives.forEach((objective) => {
+    memberCountByTeam.set(objective.team, (memberCountByTeam.get(objective.team) ?? 0) + 1);
+  });
+
+  const order: string[] = [];
+  const byTeam = new Map<string, AlignmentObjective[]>();
+  secondLevel.forEach((objective) => {
+    if (!byTeam.has(objective.team)) order.push(objective.team);
+    byTeam.set(objective.team, [...(byTeam.get(objective.team) ?? []), objective]);
+  });
+
+  return order.map((team): AlignmentSecondLevelGroup => {
+    const objectives = byTeam.get(team) ?? [];
+    return {
+      nodeId: secondLevelGroupNodeId(team),
+      team,
+      owner: teamOwners[team] || teamByName.get(team)?.owner || "",
+      color: teamByName.get(team)?.color ?? "",
+      objectives,
+      /** The team's own members, matching how L3 groups them. Rolling up what sits below these
+       *  Objectives instead would count a member twice once Objectives nest. */
+      memberCount: memberCountByTeam.get(team) ?? 0,
+      /** Over the band's own Objectives, which is exactly what the collapsed strip claims to
+       *  summarise. */
+      averageProgress: averageProgress(objectives),
+      statusCounts: countStatuses(objectives)
+    };
+  });
 }
 
 function buildMemberGroups(

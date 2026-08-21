@@ -22,8 +22,14 @@ import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | ConfidenceLevel;
 
+/** What the band chrome renders, shared by the L1 and L2 columns. */
+type AlignmentBand = Pick<AlignmentGroup, "nodeId" | "team" | "owner" | "color" | "statusCounts" | "averageProgress">;
+
 const statusFilters: StatusFilter[] = ["all", "Red", "Yellow", "Green"];
 const dimmed = "opacity-[.14]";
+/** A band folds itself on first paint from this many Objectives up. Below it the rows cost less
+ *  scroll than the click needed to reveal them. */
+const secondLevelAutoCollapseFrom = 3;
 
 /** The design's canvas height, used until the client can measure the real viewport. */
 const designCanvasHeight = 604;
@@ -52,6 +58,16 @@ export function OkrAlignmentMap({
     return (team: string) => teamColor(byTeam.get(team));
   }, [teams]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  /** Bands past a few Objectives start folded, so the first paint is already short. Leaving them
+   *  open would hand the shorter column only to whoever thinks to click. */
+  const [collapsedSecondLevel, setCollapsedSecondLevel] = useState<Set<string>>(
+    () =>
+      new Set(
+        model.secondLevelGroups
+          .filter((band) => band.objectives.length >= secondLevelAutoCollapseFrom)
+          .map((band) => band.nodeId)
+      )
+  );
   const [openMemberGroups, setOpenMemberGroups] = useState<Set<string>>(() => new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
@@ -99,6 +115,19 @@ export function OkrAlignmentMap({
   const isMemberGroupOpen = (group: AlignmentMemberGroup) =>
     openMemberGroups.has(group.nodeId) || searchOpenedGroups.has(group.nodeId);
 
+  /** Same for a folded band: swallowing its matches would make the search look broken. */
+  const searchOpenedBands = useMemo(() => {
+    if (!searching) return new Set<string>();
+    return new Set(
+      [...model.groups, ...model.secondLevelGroups]
+        .filter((band) => band.objectives.some(matches))
+        .map((band) => band.nodeId)
+    );
+  }, [searching, model.groups, model.secondLevelGroups, matches]);
+
+  const isBandCollapsed = (nodeId: string, collapsed: Set<string>) =>
+    collapsed.has(nodeId) && !searchOpenedBands.has(nodeId);
+
   const graph = useMemo(() => {
     const parents = new Map<string, string[]>();
     const children = new Map<string, string[]>();
@@ -115,14 +144,30 @@ export function OkrAlignmentMap({
 
   const nodeIndex = useMemo(() => buildNodeIndex(model, lang), [model, lang]);
 
-  /** Collapsed L1 bands hide their root cards, so their edges re-anchor onto the summary strip. */
+  /** Edges routed onto the same pair of anchors come back with the same geometry, so draw one
+   *  stroke and let it light up for any of the pairs it stands for. */
+  const drawnEdges = useMemo(() => {
+    const byShape = new Map<string, { id: string; d: string; endpoints: Array<[string, string]> }>();
+    edgePaths.forEach((path) => {
+      const shape = byShape.get(path.d);
+      if (shape) {
+        shape.endpoints.push([path.fromNodeId, path.toNodeId]);
+        return;
+      }
+      byShape.set(path.d, { id: path.id, d: path.d, endpoints: [[path.fromNodeId, path.toNodeId]] });
+    });
+    return Array.from(byShape.values());
+  }, [edgePaths]);
+
+  /** A folded band renders a summary strip instead of its cards, so the edges those cards owned
+   *  re-anchor onto the strip. Applied to both sides of an edge by `resolve` below. */
   const anchorFallback = useMemo(() => {
     const fallback = new Map<string, string>();
-    model.groups.forEach((group) => {
-      group.objectives.forEach((objective) => fallback.set(objective.nodeId, group.nodeId));
+    [...model.groups, ...model.secondLevelGroups].forEach((band) => {
+      band.objectives.forEach((objective) => fallback.set(objective.nodeId, band.nodeId));
     });
     return fallback;
-  }, [model.groups]);
+  }, [model.groups, model.secondLevelGroups]);
 
   const measure = useCallback(() => {
     const canvas = canvasRef.current;
@@ -197,7 +242,16 @@ export function OkrAlignmentMap({
       cancelAnimationFrame(secondFrame);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [measure, collapsedGroups, openMemberGroups, searchOpenedGroups, statusFilter, lang]);
+  }, [
+    measure,
+    collapsedGroups,
+    collapsedSecondLevel,
+    openMemberGroups,
+    searchOpenedGroups,
+    searchOpenedBands,
+    statusFilter,
+    lang
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -231,6 +285,7 @@ export function OkrAlignmentMap({
     });
   };
   const toggleGroup = toggle(setCollapsedGroups);
+  const toggleSecondLevel = toggle(setCollapsedSecondLevel);
   const toggleMemberGroup = toggle(setOpenMemberGroups);
 
   const pin = (nodeId: string) => setPinnedNodeId((current) => (current === nodeId ? null : nodeId));
@@ -268,6 +323,24 @@ export function OkrAlignmentMap({
               label: t(lang, "alignCollapseAll"),
               active: collapsedGroups.size === model.groups.length && model.groups.length > 0,
               onSelect: () => setCollapsedGroups(new Set(model.groups.map((group) => group.nodeId)))
+            }
+          ]}
+        />
+        <span className="h-6 w-px flex-none bg-[#eef2f7]" />
+        <DensitySwitch
+          label={t(lang, "alignSecondLevelDensity")}
+          options={[
+            {
+              id: "open",
+              label: t(lang, "alignExpand"),
+              active: collapsedSecondLevel.size === 0,
+              onSelect: () => setCollapsedSecondLevel(new Set())
+            },
+            {
+              id: "closed",
+              label: t(lang, "alignCollapseAll"),
+              active: collapsedSecondLevel.size === model.secondLevelGroups.length && model.secondLevelGroups.length > 0,
+              onSelect: () => setCollapsedSecondLevel(new Set(model.secondLevelGroups.map((band) => band.nodeId)))
             }
           ]}
         />
@@ -329,12 +402,14 @@ export function OkrAlignmentMap({
                 <path d="M 0 0 L 7 3.5 L 0 7 z" fill="currentColor" />
               </marker>
             </defs>
-            {edgePaths.map((path) => {
-              const highlighted = chain !== null && chain.has(path.fromNodeId) && chain.has(path.toNodeId);
+            {drawnEdges.map((edge) => {
+              const highlighted =
+                chain !== null
+                && edge.endpoints.some(([fromNodeId, toNodeId]) => chain.has(fromNodeId) && chain.has(toNodeId));
               return (
                 <path
-                  key={path.id}
-                  d={path.d}
+                  key={edge.id}
+                  d={edge.d}
                   fill="none"
                   className={cn(
                     "transition-[stroke,opacity] duration-150",
@@ -364,9 +439,15 @@ export function OkrAlignmentMap({
               {model.groups.map((group) => (
                 <GroupBand
                   key={group.nodeId}
-                  group={group}
-                  lang={lang}
-                  collapsed={collapsedGroups.has(group.nodeId)}
+                  band={group}
+                  column={0}
+                  stats={lang === "en"
+                    ? `${group.objectives.length} roots · ${group.memberCount} people · ${formatPercent(group.averageProgress)}`
+                    : `${group.objectives.length} 根 · ${group.memberCount} 人 · ${formatPercent(group.averageProgress)}`}
+                  collapsedLabel={lang === "en"
+                    ? `${group.objectives.length} root Objectives collapsed`
+                    : `${group.objectives.length} 个根目标已折叠`}
+                  collapsed={isBandCollapsed(group.nodeId, collapsedGroups)}
                   onToggle={() => toggleGroup(group.nodeId)}
                 >
                   {group.objectives.map((objective) => (
@@ -395,21 +476,37 @@ export function OkrAlignmentMap({
                   ? `${model.columns.l2.teamCount} teams · ${model.columns.l2.objectiveCount} O`
                   : `${model.columns.l2.teamCount} 团队 · ${model.columns.l2.objectiveCount} O`}
               />
+              {model.secondLevelGroups.map((band) => (
+                <GroupBand
+                  key={band.nodeId}
+                  band={band}
+                  column={1}
+                  stats={lang === "en"
+                    ? `${band.objectives.length} O · ${band.memberCount} people · ${formatPercent(band.averageProgress)}`
+                    : `${band.objectives.length} O · ${band.memberCount} 人 · ${formatPercent(band.averageProgress)}`}
+                  collapsedLabel={lang === "en"
+                    ? `${band.objectives.length} Objectives collapsed`
+                    : `${band.objectives.length} 个目标已折叠`}
+                  collapsed={isBandCollapsed(band.nodeId, collapsedSecondLevel)}
+                  onToggle={() => toggleSecondLevel(band.nodeId)}
+                >
+                  {band.objectives.map((objective) => (
+                    <ObjectiveCard
+                      key={objective.nodeId}
+                      objective={objective}
+                      lang={lang}
+                      column={1}
+                      title={translate(objective)}
+                      color={colorOf(objective.team)}
+                      showTeam={false}
+                      {...cardState(objective.nodeId, matches(objective))}
+                      onHover={setHoveredNodeId}
+                      onPin={pin}
+                    />
+                  ))}
+                </GroupBand>
+              ))}
               <div className="flex flex-col gap-[9px]">
-                {model.secondLevel.map((objective) => (
-                  <ObjectiveCard
-                    key={objective.nodeId}
-                    objective={objective}
-                    lang={lang}
-                    column={1}
-                    title={translate(objective)}
-                    color={colorOf(objective.team)}
-                    showTeam
-                    {...cardState(objective.nodeId, matches(objective))}
-                    onHover={setHoveredNodeId}
-                    onPin={pin}
-                  />
-                ))}
                 {model.secondLevelNotes.map((note) => (
                   <DashedNote key={noteKey(note)} note={note} lang={lang} variant="second-level" />
                 ))}
@@ -540,14 +637,18 @@ function ColumnHeader({ level, title, note }: { level: string; title: string; no
 }
 
 function GroupBand({
-  group,
-  lang,
+  band,
+  column,
+  stats,
+  collapsedLabel,
   collapsed,
   onToggle,
   children
 }: {
-  group: AlignmentGroup;
-  lang: Lang;
+  band: AlignmentBand;
+  column: number;
+  stats: string;
+  collapsedLabel: string;
   collapsed: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -563,31 +664,23 @@ function GroupBand({
         <ChevronDown
           className={cn("h-3.5 w-3.5 flex-none text-slate-400 transition-transform duration-[180ms]", collapsed && "-rotate-90")}
         />
-        <span className="h-[13px] w-[3px] flex-none rounded-sm" style={{ backgroundColor: teamColor(group.color) }} />
-        <span className="text-[11.5px] font-bold text-slate-950">{group.team}</span>
-        <span className="truncate text-[10.5px] text-slate-400">{group.owner}</span>
+        <span className="h-[13px] w-[3px] flex-none rounded-sm" style={{ backgroundColor: teamColor(band.color) }} />
+        <span className="flex-none text-[11.5px] font-bold text-slate-950">{band.team}</span>
+        <span className="min-w-0 truncate text-[10.5px] text-slate-400">{band.owner}</span>
         <span className="flex-1" />
-        <span className="flex-none text-[10px] tabular-nums text-slate-400">
-          {lang === "en"
-            ? `${group.objectives.length} roots · ${group.memberCount} people · ${formatPercent(group.averageProgress)}`
-            : `${group.objectives.length} 根 · ${group.memberCount} 人 · ${formatPercent(group.averageProgress)}`}
-        </span>
+        <span className="flex-none text-[10px] tabular-nums text-slate-400">{stats}</span>
       </button>
 
       {collapsed ? (
         <div
-          data-node-id={group.nodeId}
-          data-column="0"
+          data-node-id={band.nodeId}
+          data-column={column}
           className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-[11px] py-[9px]"
         >
-          <span className="text-[11px] text-muted-foreground">
-            {lang === "en"
-              ? `${group.objectives.length} root Objectives collapsed`
-              : `${group.objectives.length} 个根目标已折叠`}
-          </span>
-          <StatusDots counts={group.statusCounts} />
+          <span className="flex-none text-[11px] text-muted-foreground">{collapsedLabel}</span>
+          <StatusDots counts={band.statusCounts} />
           <span className="flex-1" />
-          <span className="text-[11px] font-bold tabular-nums text-slate-700">{formatPercent(group.averageProgress)}</span>
+          <span className="flex-none text-[11px] font-bold tabular-nums text-slate-700">{formatPercent(band.averageProgress)}</span>
         </div>
       ) : (
         <div className="flex flex-col gap-[9px]">{children}</div>
