@@ -24,9 +24,13 @@ export const edgeCornerRadius = 9;
 const straightLineDistance = 40;
 
 /**
- * Routes every edge as an orthogonal polyline through its own vertical channel, so two edges
- * crossing the same column gap never overlap. Short or nearly-horizontal edges stay straight —
- * a rounded detour there reads as a hook rather than a connection.
+ * Routes every edge as an orthogonal polyline through a vertical channel. Short or nearly-
+ * horizontal edges stay straight — a rounded detour there reads as a hook rather than a connection.
+ *
+ * One channel per parent, not per edge: everything landing on one card runs down the same line and
+ * along the same approach, so the routes that coincide are drawn over each other instead of fanning
+ * out into a bundle of near-parallel neighbours. The caller has to apply the stroke alpha to the
+ * whole set at once, or the shared stretches compound into a darker line.
  */
 export function buildEdgePaths(
   edges: EdgeInput[],
@@ -42,13 +46,24 @@ export function buildEdgePaths(
     const ordered = [...gapEdges].sort((a, b) => centerY(a.from) - centerY(b.from) || a.id.localeCompare(b.id));
     const gap = channelBounds(columns, toColumn);
 
-    return ordered.map((edge, index) => {
+    /** Channels follow the parents down the column, so a lane never has to reach past its own
+     *  neighbours to get where it is going. */
+    const parents = new Map<string, number>();
+    ordered.forEach((edge) => parents.set(targetKey(edge), centerY(edge.to)));
+    const laneOf = new Map(
+      Array.from(parents)
+        .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+        .map(([key], index) => [key, index])
+    );
+
+    return ordered.map((edge) => {
       const ax = edge.from.left;
       const ay = centerY(edge.from);
       const bx = edge.to.right;
       const by = centerY(edge.to);
+      const index = laneOf.get(targetKey(edge)) ?? 0;
       const channel = gap
-        ? gap.left + ((gap.right - gap.left) * (index + 1)) / (ordered.length + 1)
+        ? gap.left + ((gap.right - gap.left) * (index + 1)) / (laneOf.size + 1)
         : (ax + bx) / 2;
 
       return {
@@ -98,6 +113,11 @@ function channelBounds(columns: EdgeColumnBounds[], toColumn: number) {
   const child = columns[toColumn + 1];
   if (!parent || !child || child.left <= parent.right) return null;
   return { left: parent.right, right: child.left };
+}
+
+/** The point an arrow lands on. Every edge sharing it shares a channel. */
+function targetKey(edge: EdgeInput) {
+  return `${round(edge.to.right)},${round(centerY(edge.to))}`;
 }
 
 function centerY(box: EdgeBox) {

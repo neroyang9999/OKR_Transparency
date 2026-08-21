@@ -22,8 +22,20 @@ import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | ConfidenceLevel;
 
+/** What the band chrome renders, shared by the L1 and L2 columns. */
+type AlignmentBand = Pick<AlignmentGroup, "nodeId" | "team" | "owner" | "color" | "statusCounts" | "averageProgress">;
+
 const statusFilters: StatusFilter[] = ["all", "Red", "Yellow", "Green"];
 const dimmed = "opacity-[.14]";
+/** A band folds itself on first paint from this many Objectives up. Below it the rows cost less
+ *  scroll than the click needed to reveal them. */
+const secondLevelAutoCollapseFrom = 3;
+/** Breathing room between two cards of one column that land on the same row. */
+const liftStackGap = 8;
+/** A lifted stack stops here rather than at the canvas top: the sticky column header covers the
+ *  first 43px, and a band header travelling with its cards needs its own 24px above the first of
+ *  them. Landing above this line puts one of the two outside the scroll container. */
+const liftTopReserve = 68;
 
 /** The design's canvas height, used until the client can measure the real viewport. */
 const designCanvasHeight = 604;
@@ -52,12 +64,25 @@ export function OkrAlignmentMap({
     return (team: string) => teamColor(byTeam.get(team));
   }, [teams]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  /** Bands past a few Objectives start folded, so the first paint is already short. Leaving them
+   *  open would hand the shorter column only to whoever thinks to click. */
+  const [collapsedSecondLevel, setCollapsedSecondLevel] = useState<Set<string>>(
+    () =>
+      new Set(
+        model.secondLevelGroups
+          .filter((band) => band.objectives.length >= secondLevelAutoCollapseFrom)
+          .map((band) => band.nodeId)
+      )
+  );
   const [openMemberGroups, setOpenMemberGroups] = useState<Set<string>>(() => new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
   const [pinnedNodeId, setPinnedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [edgePaths, setEdgePaths] = useState<EdgePath[]>([]);
+  /** Vertical offsets that bring the focused chain onto one row. Derived from the resting layout,
+   *  so it is computed in an effect rather than during render. */
+  const [lift, setLift] = useState<Map<string, number>>(() => new Map());
   const [canvasHeight, setCanvasHeight] = useState(designCanvasHeight);
   const [canvasZoom, setCanvasZoom] = useState(1);
 
@@ -99,6 +124,16 @@ export function OkrAlignmentMap({
   const isMemberGroupOpen = (group: AlignmentMemberGroup) =>
     openMemberGroups.has(group.nodeId) || searchOpenedGroups.has(group.nodeId);
 
+  /** Same for a folded band: swallowing its matches would make the search look broken. */
+  const searchOpenedBands = useMemo(() => {
+    if (!searching) return new Set<string>();
+    return new Set(
+      [...model.groups, ...model.secondLevelGroups]
+        .filter((band) => band.objectives.some(matches))
+        .map((band) => band.nodeId)
+    );
+  }, [searching, model.groups, model.secondLevelGroups, matches]);
+
   const graph = useMemo(() => {
     const parents = new Map<string, string[]>();
     const children = new Map<string, string[]>();
@@ -115,14 +150,60 @@ export function OkrAlignmentMap({
 
   const nodeIndex = useMemo(() => buildNodeIndex(model, lang), [model, lang]);
 
-  /** Collapsed L1 bands hide their root cards, so their edges re-anchor onto the summary strip. */
+  /** Edges routed onto the same pair of anchors come back with the same geometry, so draw one
+   *  stroke and let it light up for any of the pairs it stands for. */
+  const drawnEdges = useMemo(() => {
+    const byShape = new Map<string, { id: string; d: string; endpoints: Array<[string, string]> }>();
+    edgePaths.forEach((path) => {
+      const shape = byShape.get(path.d);
+      if (shape) {
+        shape.endpoints.push([path.fromNodeId, path.toNodeId]);
+        return;
+      }
+      byShape.set(path.d, { id: path.id, d: path.d, endpoints: [[path.fromNodeId, path.toNodeId]] });
+    });
+    return Array.from(byShape.values());
+  }, [edgePaths]);
+
+  /** Split once instead of per path: routes that coincide have to be composited together, and
+   *  that only works if the whole set shares one opacity. */
+  const [litEdges, dimEdges] = useMemo(() => {
+    const lit: typeof drawnEdges = [];
+    const dim: typeof drawnEdges = [];
+    drawnEdges.forEach((edge) => {
+      const onChain = chain !== null
+        && edge.endpoints.some(([fromNodeId, toNodeId]) => chain.has(fromNodeId) && chain.has(toNodeId));
+      (onChain ? lit : dim).push(edge);
+    });
+    return [lit, dim];
+  }, [drawnEdges, chain]);
+
+  /** A folded band renders a summary strip instead of its cards, so the edges those cards owned
+   *  re-anchor onto the strip. Applied to both sides of an edge by `resolve` below. */
   const anchorFallback = useMemo(() => {
     const fallback = new Map<string, string>();
-    model.groups.forEach((group) => {
-      group.objectives.forEach((objective) => fallback.set(objective.nodeId, group.nodeId));
+    [...model.groups, ...model.secondLevelGroups].forEach((band) => {
+      band.objectives.forEach((objective) => fallback.set(objective.nodeId, band.nodeId));
     });
     return fallback;
-  }, [model.groups]);
+  }, [model.groups, model.secondLevelGroups]);
+
+  /** A folded band on the focused chain opens itself. Lifting its summary strip instead would put
+   *  "4 Objectives collapsed" beside the card that carries them, which says nothing about which
+   *  one it is -- and leaves the team name behind on the band header. Only bands in other columns
+   *  ever open this way, so the card under the cursor never moves. */
+  const chainOpenedBands = useMemo(() => {
+    const bands = new Set<string>();
+    chain?.forEach((nodeId) => {
+      const band = anchorFallback.get(nodeId);
+      if (band) bands.add(band);
+    });
+    return bands;
+  }, [chain, anchorFallback]);
+
+  const isBandCollapsed = (nodeId: string, collapsed: Set<string>) =>
+    collapsed.has(nodeId) && !searchOpenedBands.has(nodeId) && !chainOpenedBands.has(nodeId);
+
 
   const measure = useCallback(() => {
     const canvas = canvasRef.current;
@@ -183,6 +264,19 @@ export function OkrAlignmentMap({
   }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    /** Read the layout back here rather than reusing the measuring pass: a band that just opened
+     *  for this chain moved everything below it, and offsets computed against the layout as it was
+     *  a moment ago would land the cards short. Keeping the previous map when nothing moved stops
+     *  an unchanged focus from re-measuring. */
+    setLift((current) => {
+      const next = buildLift(activeNodeId, chain, readRestingBoxes(canvas, canvasZoom), anchorFallback);
+      return sameLift(current, next) ? current : next;
+    });
+  }, [activeNodeId, chain, chainOpenedBands, anchorFallback, canvasZoom]);
+
+  useLayoutEffect(() => {
     /** Measure before the browser paints: a zoom change re-lays the cards out, and edges routed
      *  against the previous layout would show in the wrong place for a frame. */
     measure();
@@ -197,7 +291,18 @@ export function OkrAlignmentMap({
       cancelAnimationFrame(secondFrame);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [measure, collapsedGroups, openMemberGroups, searchOpenedGroups, statusFilter, lang]);
+  }, [
+    measure,
+    lift,
+    chainOpenedBands,
+    collapsedGroups,
+    collapsedSecondLevel,
+    openMemberGroups,
+    searchOpenedGroups,
+    searchOpenedBands,
+    statusFilter,
+    lang
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -231,16 +336,30 @@ export function OkrAlignmentMap({
     });
   };
   const toggleGroup = toggle(setCollapsedGroups);
+  const toggleSecondLevel = toggle(setCollapsedSecondLevel);
   const toggleMemberGroup = toggle(setOpenMemberGroups);
 
   const pin = (nodeId: string) => setPinnedNodeId((current) => (current === nodeId ? null : nodeId));
   const isFaded = (nodeId: string, hit: boolean) =>
     (chain !== null && !chain.has(nodeId)) || (filterActive && !hit);
 
+  /** The band chrome has to move and fade with its contents. A header left behind while its cards
+   *  float away ends up below its own group, and a strip left solid shows through the gaps between
+   *  the cards a lift floats over it. */
+  const bandState = (band: { nodeId: string; objectives: AlignmentObjective[] }, collapsed: boolean) => ({
+    faded:
+      (chain !== null && !band.objectives.some((objective) => chain.has(objective.nodeId)))
+      || (filterActive && !band.objectives.some(matches)),
+    lift: collapsed
+      ? lift.get(band.nodeId)
+      : band.objectives.map((objective) => lift.get(objective.nodeId)).find((offset) => offset !== undefined)
+  });
+
   const cardState = (nodeId: string, hit: boolean) => ({
     faded: isFaded(nodeId, hit),
     active: activeNodeId === nodeId,
-    linked: chain !== null && chain.has(nodeId) && activeNodeId !== nodeId
+    linked: chain !== null && chain.has(nodeId) && activeNodeId !== nodeId,
+    lift: lift.get(nodeId)
   });
 
   if (model.metrics.objectiveCount === 0) {
@@ -268,6 +387,24 @@ export function OkrAlignmentMap({
               label: t(lang, "alignCollapseAll"),
               active: collapsedGroups.size === model.groups.length && model.groups.length > 0,
               onSelect: () => setCollapsedGroups(new Set(model.groups.map((group) => group.nodeId)))
+            }
+          ]}
+        />
+        <span className="h-6 w-px flex-none bg-[#eef2f7]" />
+        <DensitySwitch
+          label={t(lang, "alignSecondLevelDensity")}
+          options={[
+            {
+              id: "open",
+              label: t(lang, "alignExpand"),
+              active: collapsedSecondLevel.size === 0,
+              onSelect: () => setCollapsedSecondLevel(new Set())
+            },
+            {
+              id: "closed",
+              label: t(lang, "alignCollapseAll"),
+              active: collapsedSecondLevel.size === model.secondLevelGroups.length && model.secondLevelGroups.length > 0,
+              onSelect: () => setCollapsedSecondLevel(new Set(model.secondLevelGroups.map((band) => band.nodeId)))
             }
           ]}
         />
@@ -325,28 +462,45 @@ export function OkrAlignmentMap({
         <div ref={canvasRef} style={{ zoom: canvasZoom }} className="relative min-w-[1170px] px-6 pb-7">
           <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-visible" aria-hidden>
             <defs>
+              {/* `currentColor` inside a marker resolves against the defs, not the referencing
+                  path, so each colour needs its own -- otherwise every arrowhead comes out black. */}
               <marker id="alignment-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="currentColor" />
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#94a3b8" />
+              </marker>
+              <marker id="alignment-arrow-lit" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#2563eb" />
               </marker>
             </defs>
-            {edgePaths.map((path) => {
-              const highlighted = chain !== null && chain.has(path.fromNodeId) && chain.has(path.toNodeId);
-              return (
+            {/* The alpha sits on the group, not the paths: coinciding routes are drawn on top of
+                each other, and per-path opacity would compound where they overlap and turn a shared
+                stretch into a darker line. */}
+            <g
+              className="text-slate-400 transition-opacity duration-150"
+              opacity={chain !== null ? 0.06 : 0.5}
+            >
+              {dimEdges.map((edge) => (
                 <path
-                  key={path.id}
-                  d={path.d}
+                  key={edge.id}
+                  d={edge.d}
                   fill="none"
-                  className={cn(
-                    "transition-[stroke,opacity] duration-150",
-                    highlighted ? "text-blue-600" : "text-slate-400"
-                  )}
                   stroke="currentColor"
-                  strokeWidth={highlighted ? 2.2 : 1.4}
-                  opacity={highlighted ? 1 : chain !== null ? 0.06 : 0.5}
+                  strokeWidth={1.4}
                   markerEnd="url(#alignment-arrow)"
                 />
-              );
-            })}
+              ))}
+            </g>
+            <g className="text-blue-600">
+              {litEdges.map((edge) => (
+                <path
+                  key={edge.id}
+                  d={edge.d}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.2}
+                  markerEnd="url(#alignment-arrow-lit)"
+                />
+              ))}
+            </g>
           </svg>
 
           {/* Columns fill the canvas width, which the zoom above holds at the baseline the design
@@ -361,12 +515,21 @@ export function OkrAlignmentMap({
                   ? `${model.columns.l1.teamCount} teams · ${model.columns.l1.objectiveCount} O`
                   : `${model.columns.l1.teamCount} 团队 · ${model.columns.l1.objectiveCount} O`}
               />
-              {model.groups.map((group) => (
+              {model.groups.map((group) => {
+                const collapsed = isBandCollapsed(group.nodeId, collapsedGroups);
+                return (
                 <GroupBand
                   key={group.nodeId}
-                  group={group}
-                  lang={lang}
-                  collapsed={collapsedGroups.has(group.nodeId)}
+                  band={group}
+                  column={0}
+                  stats={lang === "en"
+                    ? `${group.objectives.length} roots · ${group.memberCount} people · ${formatPercent(group.averageProgress)}`
+                    : `${group.objectives.length} 根 · ${group.memberCount} 人 · ${formatPercent(group.averageProgress)}`}
+                  collapsedLabel={lang === "en"
+                    ? `${group.objectives.length} root Objectives collapsed`
+                    : `${group.objectives.length} 个根目标已折叠`}
+                  collapsed={collapsed}
+                  {...bandState(group, collapsed)}
                   onToggle={() => toggleGroup(group.nodeId)}
                 >
                   {group.objectives.map((objective) => (
@@ -384,7 +547,8 @@ export function OkrAlignmentMap({
                     />
                   ))}
                 </GroupBand>
-              ))}
+                );
+              })}
             </div>
 
             <div ref={(element) => { columnRefs.current[1] = element; }} className="min-w-[270px] max-w-[560px] flex-1 basis-0">
@@ -395,21 +559,41 @@ export function OkrAlignmentMap({
                   ? `${model.columns.l2.teamCount} teams · ${model.columns.l2.objectiveCount} O`
                   : `${model.columns.l2.teamCount} 团队 · ${model.columns.l2.objectiveCount} O`}
               />
+              {model.secondLevelGroups.map((band) => {
+                const collapsed = isBandCollapsed(band.nodeId, collapsedSecondLevel);
+                return (
+                <GroupBand
+                  key={band.nodeId}
+                  band={band}
+                  column={1}
+                  stats={lang === "en"
+                    ? `${band.objectives.length} O · ${band.memberCount} people · ${formatPercent(band.averageProgress)}`
+                    : `${band.objectives.length} O · ${band.memberCount} 人 · ${formatPercent(band.averageProgress)}`}
+                  collapsedLabel={lang === "en"
+                    ? `${band.objectives.length} Objectives collapsed`
+                    : `${band.objectives.length} 个目标已折叠`}
+                  collapsed={collapsed}
+                  {...bandState(band, collapsed)}
+                  onToggle={() => toggleSecondLevel(band.nodeId)}
+                >
+                  {band.objectives.map((objective) => (
+                    <ObjectiveCard
+                      key={objective.nodeId}
+                      objective={objective}
+                      lang={lang}
+                      column={1}
+                      title={translate(objective)}
+                      color={colorOf(objective.team)}
+                      showTeam={false}
+                      {...cardState(objective.nodeId, matches(objective))}
+                      onHover={setHoveredNodeId}
+                      onPin={pin}
+                    />
+                  ))}
+                </GroupBand>
+                );
+              })}
               <div className="flex flex-col gap-[9px]">
-                {model.secondLevel.map((objective) => (
-                  <ObjectiveCard
-                    key={objective.nodeId}
-                    objective={objective}
-                    lang={lang}
-                    column={1}
-                    title={translate(objective)}
-                    color={colorOf(objective.team)}
-                    showTeam
-                    {...cardState(objective.nodeId, matches(objective))}
-                    onHover={setHoveredNodeId}
-                    onPin={pin}
-                  />
-                ))}
                 {model.secondLevelNotes.map((note) => (
                   <DashedNote key={noteKey(note)} note={note} lang={lang} variant="second-level" />
                 ))}
@@ -540,15 +724,23 @@ function ColumnHeader({ level, title, note }: { level: string; title: string; no
 }
 
 function GroupBand({
-  group,
-  lang,
+  band,
+  column,
+  stats,
+  collapsedLabel,
   collapsed,
+  faded,
+  lift,
   onToggle,
   children
 }: {
-  group: AlignmentGroup;
-  lang: Lang;
+  band: AlignmentBand;
+  column: number;
+  stats: string;
+  collapsedLabel: string;
   collapsed: boolean;
+  faded: boolean;
+  lift?: number;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
@@ -558,36 +750,39 @@ function GroupBand({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex w-full items-center gap-[7px] px-0.5 pb-[7px] text-left"
+        style={liftStyle(lift)}
+        className={cn(
+          "flex w-full items-center gap-[7px] px-0.5 pb-[7px] text-left",
+          "transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+          faded && dimmed
+        )}
       >
         <ChevronDown
           className={cn("h-3.5 w-3.5 flex-none text-slate-400 transition-transform duration-[180ms]", collapsed && "-rotate-90")}
         />
-        <span className="h-[13px] w-[3px] flex-none rounded-sm" style={{ backgroundColor: teamColor(group.color) }} />
-        <span className="text-[11.5px] font-bold text-slate-950">{group.team}</span>
-        <span className="truncate text-[10.5px] text-slate-400">{group.owner}</span>
+        <span className="h-[13px] w-[3px] flex-none rounded-sm" style={{ backgroundColor: teamColor(band.color) }} />
+        <span className="flex-none text-[11.5px] font-bold text-slate-950">{band.team}</span>
+        <span className="min-w-0 truncate text-[10.5px] text-slate-400">{band.owner}</span>
         <span className="flex-1" />
-        <span className="flex-none text-[10px] tabular-nums text-slate-400">
-          {lang === "en"
-            ? `${group.objectives.length} roots · ${group.memberCount} people · ${formatPercent(group.averageProgress)}`
-            : `${group.objectives.length} 根 · ${group.memberCount} 人 · ${formatPercent(group.averageProgress)}`}
-        </span>
+        <span className="flex-none text-[10px] tabular-nums text-slate-400">{stats}</span>
       </button>
 
       {collapsed ? (
         <div
-          data-node-id={group.nodeId}
-          data-column="0"
-          className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-[11px] py-[9px]"
+          data-node-id={band.nodeId}
+          data-column={column}
+          style={liftStyle(lift)}
+          className={cn(
+            "flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-[11px] py-[9px]",
+            "transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+            faded && dimmed,
+            lift !== undefined && liftedCard
+          )}
         >
-          <span className="text-[11px] text-muted-foreground">
-            {lang === "en"
-              ? `${group.objectives.length} root Objectives collapsed`
-              : `${group.objectives.length} 个根目标已折叠`}
-          </span>
-          <StatusDots counts={group.statusCounts} />
+          <span className="flex-none text-[11px] text-muted-foreground">{collapsedLabel}</span>
+          <StatusDots counts={band.statusCounts} />
           <span className="flex-1" />
-          <span className="text-[11px] font-bold tabular-nums text-slate-700">{formatPercent(group.averageProgress)}</span>
+          <span className="flex-none text-[11px] font-bold tabular-nums text-slate-700">{formatPercent(band.averageProgress)}</span>
         </div>
       ) : (
         <div className="flex flex-col gap-[9px]">{children}</div>
@@ -619,6 +814,7 @@ function ObjectiveCard({
   faded,
   active,
   linked,
+  lift,
   onHover,
   onPin
 }: {
@@ -631,9 +827,14 @@ function ObjectiveCard({
   faded: boolean;
   active: boolean;
   linked: boolean;
+  lift?: number;
   onHover: (nodeId: string | null) => void;
   onPin: (nodeId: string) => void;
 }) {
+  /** Inside its band the header already names the team. Lifted, the card has left that header
+   *  behind, so it has to carry the name itself. */
+  const showTeamName = showTeam || lift !== undefined;
+
   return (
     <article
       data-node-id={objective.nodeId}
@@ -641,14 +842,17 @@ function ObjectiveCard({
       onMouseEnter={() => onHover(objective.nodeId)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(objective.nodeId)}
+      style={liftStyle(lift)}
       className={cn(
-        "relative cursor-pointer rounded-lg border border-l-[3px] bg-white px-[11px] pb-2.5 pt-[9px] shadow-subtle transition-[opacity,box-shadow] duration-150",
+        "relative cursor-pointer rounded-lg border border-l-[3px] bg-white px-[11px] pb-2.5 pt-[9px] shadow-subtle",
+        "transition-[opacity,box-shadow,transform] duration-150 motion-reduce:transition-none",
         objective.unaligned ? "border-amber-300" : "border-[#e4e9f0]",
         confidenceTone[objective.confidence].rail,
         faded && dimmed,
         active && "shadow-[0_0_0_2px_#2563eb,0_12px_28px_rgba(37,99,235,0.18)]",
         linked && "shadow-[0_4px_14px_rgba(16,24,40,0.10)]",
-        !active && !linked && "hover:shadow-[0_8px_22px_rgba(16,24,40,0.13)]"
+        !active && !linked && "hover:shadow-[0_8px_22px_rgba(16,24,40,0.13)]",
+        lift !== undefined && liftedCard
       )}
     >
       <div className="mb-[5px] flex items-center gap-1.5">
@@ -659,7 +863,7 @@ function ObjectiveCard({
           {teamInitials(objective.owner || objective.team)}
         </span>
         <span className="min-w-0 flex-1 truncate text-[10.5px] text-muted-foreground">
-          {showTeam ? (
+          {showTeamName ? (
             <>
               <strong className="font-bold text-slate-600">{objective.team}</strong> · {objective.owner}
             </>
@@ -691,6 +895,7 @@ function MemberGroupCard({
   faded,
   active,
   linked,
+  lift,
   onToggle,
   onHover,
   onPin
@@ -704,6 +909,7 @@ function MemberGroupCard({
   faded: boolean;
   active: boolean;
   linked: boolean;
+  lift?: number;
   onToggle: () => void;
   onHover: (nodeId: string | null) => void;
   onPin: (nodeId: string) => void;
@@ -718,13 +924,16 @@ function MemberGroupCard({
       onMouseEnter={() => onHover(group.nodeId)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(group.nodeId)}
+      style={liftStyle(lift)}
       className={cn(
-        "relative cursor-pointer overflow-hidden rounded-lg border border-l-[3px] bg-white shadow-subtle transition-[opacity,box-shadow] duration-150",
+        "relative cursor-pointer overflow-hidden rounded-lg border border-l-[3px] bg-white shadow-subtle",
+        "transition-[opacity,box-shadow,transform] duration-150 motion-reduce:transition-none",
         group.unalignedCount > 0 ? "border-amber-300" : group.crossLevel ? "border-blue-100" : "border-[#e4e9f0]",
         confidenceTone[group.confidence].rail,
         faded && dimmed,
         active && "shadow-[0_0_0_2px_#2563eb,0_12px_28px_rgba(37,99,235,0.18)]",
-        linked && "shadow-[0_4px_14px_rgba(16,24,40,0.10)]"
+        linked && "shadow-[0_4px_14px_rgba(16,24,40,0.10)]",
+        lift !== undefined && liftedCard
       )}
     >
       <div
@@ -992,6 +1201,104 @@ function buildNodeIndex(model: ReturnType<typeof buildAlignmentMapModel>, lang: 
   });
 
   return index;
+}
+
+type RestingBox = { top: number; bottom: number; column: number };
+
+/** Where every anchor would sit with nothing lifted, in the canvas's own pre-zoom units. */
+function readRestingBoxes(canvas: HTMLElement, zoom: number) {
+  const origin = canvas.getBoundingClientRect();
+  const boxes = new Map<string, RestingBox>();
+
+  canvas.querySelectorAll<HTMLElement>("[data-node-id]").forEach((element) => {
+    const id = element.dataset.nodeId;
+    if (!id || element.offsetParent === null) return;
+    const rect = element.getBoundingClientRect();
+    /** The rect carries whatever offset is applied right now, a half-finished transition included,
+     *  so take it off the element instead of assuming the last target already landed. */
+    const applied = appliedTranslateY(element);
+    boxes.set(id, {
+      top: (rect.top - origin.top) / zoom - applied,
+      bottom: (rect.bottom - origin.top) / zoom - applied,
+      column: Number(element.dataset.column ?? "0")
+    });
+  });
+
+  return boxes;
+}
+
+function appliedTranslateY(element: HTMLElement) {
+  const transform = getComputedStyle(element).transform;
+  if (!transform || transform === "none") return 0;
+  try {
+    return new DOMMatrixReadOnly(transform).f;
+  } catch {
+    return 0;
+  }
+}
+
+/** A lifted card floats over whatever it landed on, which is already faded out of the way. */
+const liftedCard = "z-20 shadow-[0_10px_30px_rgba(16,24,40,0.18)]";
+
+function sameLift(a: Map<string, number>, b: Map<string, number>) {
+  return a.size === b.size && Array.from(a).every(([nodeId, offset]) => b.get(nodeId) === offset);
+}
+
+function liftStyle(lift?: number) {
+  return lift === undefined ? undefined : { transform: `translateY(${lift}px)` };
+}
+
+/**
+ * Vertical offsets that bring the active node's chain onto its own row.
+ *
+ * Only the other columns move: a chain never has two cards of the same column that both need to
+ * sit beside the active one, and moving the column the cursor is in would slide the card out from
+ * under the pointer. Offsets are transforms rather than layout, so nothing reflows and the edges
+ * re-route on their own once `measure` reads the moved rects back.
+ */
+function buildLift(
+  activeNodeId: string | null,
+  chain: Set<string> | null,
+  boxes: Map<string, RestingBox>,
+  anchorFallback: Map<string, string>
+) {
+  const lift = new Map<string, number>();
+  /** A card inside a folded band is not rendered, so the chain travels through its summary strip. */
+  const anchorOf = (nodeId: string) => (boxes.has(nodeId) ? nodeId : anchorFallback.get(nodeId));
+  const activeAnchor = activeNodeId ? anchorOf(activeNodeId) : undefined;
+  const anchorBox = activeAnchor ? boxes.get(activeAnchor) : undefined;
+  if (!chain || !activeAnchor || !anchorBox) return lift;
+
+  const targetY = (anchorBox.top + anchorBox.bottom) / 2;
+  const byColumn = new Map<number, string[]>();
+  chain.forEach((nodeId) => {
+    const anchorId = anchorOf(nodeId);
+    const box = anchorId ? boxes.get(anchorId) : undefined;
+    if (!anchorId || !box || anchorId === activeAnchor || box.column === anchorBox.column) return;
+    const column = byColumn.get(box.column) ?? [];
+    if (column.includes(anchorId)) return;
+    byColumn.set(box.column, [...column, anchorId]);
+  });
+
+  byColumn.forEach((anchorIds) => {
+    const ordered = [...anchorIds].sort((a, b) => (boxes.get(a)?.top ?? 0) - (boxes.get(b)?.top ?? 0));
+    const heights = ordered.map((anchorId) => {
+      const box = boxes.get(anchorId) as RestingBox;
+      return box.bottom - box.top;
+    });
+    const stack = heights.reduce((sum, height) => sum + height, 0) + liftStackGap * (ordered.length - 1);
+    /** Centre the stack on the active row, but never so high that the scroll container clips it
+     *  or the sticky column header covers it. */
+    let cursor = Math.max(liftTopReserve, targetY - stack / 2);
+
+    ordered.forEach((anchorId, index) => {
+      const box = boxes.get(anchorId) as RestingBox;
+      lift.set(anchorId, Math.round(cursor - box.top));
+      cursor += heights[index] + liftStackGap;
+    });
+  });
+
+  return lift;
 }
 
 function collectChain(

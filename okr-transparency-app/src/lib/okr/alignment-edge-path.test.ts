@@ -8,7 +8,7 @@ const columns = [
 ];
 
 describe("alignment edge path", () => {
-  it("gives each edge in a column gap its own vertical channel", () => {
+  it("gives edges with different parents their own vertical channels", () => {
     const paths = buildEdgePaths(
       [
         edge("a", box(382, 40), box(0, 400)),
@@ -21,17 +21,47 @@ describe("alignment edge path", () => {
     expect(paths.map((path) => channelOf(path.d))).toEqual([298, 326, 354]);
   });
 
-  it("orders channels by the vertical position of the child card", () => {
+  it("orders channels by the vertical position of the parent card", () => {
     const paths = buildEdgePaths(
       [
-        edge("low", box(382, 500), box(0, 40)),
-        edge("high", box(382, 60), box(0, 300))
+        edge("to-top", box(382, 500), box(0, 40)),
+        edge("to-bottom", box(382, 60), box(0, 300))
       ],
       columns
     );
 
-    expect(paths.map((path) => path.id)).toEqual(["high", "low"]);
-    expect(channelOf(paths[0].d)).toBeLessThan(channelOf(paths[1].d));
+    const channelFor = (id: string) => channelOf(paths.find((path) => path.id === id)?.d as string);
+    expect(channelFor("to-top")).toBeLessThan(channelFor("to-bottom"));
+  });
+
+  it("runs everything landing on one parent down the same channel", () => {
+    const parent = box(0, 400);
+    const paths = buildEdgePaths(
+      [
+        edge("a", box(382, 40), parent),
+        edge("b", box(382, 140), parent),
+        edge("c", box(382, 240), parent),
+        edge("elsewhere", box(382, 340), box(0, 800))
+      ],
+      columns
+    );
+
+    const channelFor = (id: string) => channelOf(paths.find((path) => path.id === id)?.d as string);
+    expect(channelFor("a")).toBe(channelFor("b"));
+    expect(channelFor("b")).toBe(channelFor("c"));
+    /** Two parents, so two channels -- not four. */
+    expect(new Set(paths.map((path) => channelOf(path.d))).size).toBe(2);
+  });
+
+  it("gives the three routes into one parent an identical approach to merge along", () => {
+    const parent = box(0, 400);
+    const paths = buildEdgePaths(
+      [edge("a", box(382, 40), parent), edge("b", box(382, 140), parent)],
+      columns
+    );
+
+    const approachOf = (d: string) => d.slice(d.lastIndexOf("Q "));
+    expect(approachOf(paths[0].d)).toBe(approachOf(paths[1].d));
   });
 
   it("routes downward and upward edges with matching corner directions", () => {
@@ -62,6 +92,21 @@ describe("alignment edge path", () => {
     const [path] = buildEdgePaths([{ ...edge("same", box(0, 40), box(0, 400)), toColumn: 0 }], columns);
 
     expect(path.d).toBe("M 0 52 L 270 412");
+  });
+
+  it("draws edges that resolved to the same pair of anchors as one identical route", () => {
+    const folded = box(0, 400);
+    const paths = buildEdgePaths(
+      [
+        edge("first", box(382, 40), folded),
+        edge("second", box(382, 40), folded),
+        edge("other", box(382, 240), box(0, 800))
+      ],
+      columns
+    );
+
+    expect(paths.find((path) => path.id === "first")?.d).toBe(paths.find((path) => path.id === "second")?.d);
+    expect(new Set(paths.map((path) => channelOf(path.d))).size).toBe(2);
   });
 
   it("keeps channels independent per column gap", () => {

@@ -41,6 +41,58 @@ describe("alignment map model", () => {
     expect(model.metrics.shouldAlignCount).toBe(1);
   });
 
+  it("folds the second-level column into one band per team, keeping the column's own order", () => {
+    const model = buildAlignmentMapModel([
+      record("SW-O1", "Software"),
+      record("QA-O1", "QA Team", "SW-O1"),
+      record("TPM-O1", "TPM Team", "SW-O1"),
+      record("QA-O2", "QA Team", "SW-O1")
+    ], teams);
+
+    /** A team with no Objective gets no band at all -- it is already reported as a dashed note. */
+    expect(model.secondLevelGroups.map((band) => band.team)).toEqual(["QA Team", "TPM Team"]);
+    expect(model.secondLevelGroups.map((band) => band.objectives.map((objective) => objective.okrId))).toEqual([
+      ["QA-O1", "QA-O2"],
+      ["TPM-O1"]
+    ]);
+  });
+
+  it("aggregates a band over its own Objectives and counts its own team's members", () => {
+    const model = buildAlignmentMapModel([
+      record("SW-O1", "Software"),
+      record("QA-O1", "QA Team", "SW-O1", "team", "Green", 0.6),
+      record("QA-O2", "QA Team", "SW-O1", "team", "Red", 0.2),
+      record("QA-M1", "QA Team", "QA-O1", "member", "Yellow", 0.9),
+      record("QA-M2", "QA Team", "QA-O2", "member", "Yellow", 0.9)
+    ], teams);
+
+    const band = model.secondLevelGroups.find((candidate) => candidate.team === "QA Team");
+
+    expect(band?.statusCounts).toEqual({ Green: 1, Yellow: 0, Red: 1 });
+    expect(band?.averageProgress).toBeCloseTo(0.4);
+    expect(band?.memberCount).toBe(2);
+  });
+
+  it("gives a band the anchor node id its collapsed summary strip renders under", () => {
+    const model = buildAlignmentMapModel([
+      record("SW-O1", "Software"),
+      record("QA-O1", "QA Team", "SW-O1")
+    ], teams);
+
+    expect(model.secondLevelGroups.find((band) => band.team === "QA Team")?.nodeId)
+      .toBe("second-level-group:QA Team");
+  });
+
+  it("labels a band with the resolved owner display name, like the top-level column", () => {
+    const model = buildAlignmentMapModel(
+      [record("SW-O1", "Software"), record("QA-O1", "QA Team", "SW-O1")],
+      teams,
+      { "QA Team": "Yating Li" }
+    );
+
+    expect(model.secondLevelGroups.find((band) => band.team === "QA Team")?.owner).toBe("Yating Li");
+  });
+
   it("folds every member Objective of a team into one card with one edge per distinct parent", () => {
     const model = buildAlignmentMapModel([
       record("SW-O1", "Software"),
