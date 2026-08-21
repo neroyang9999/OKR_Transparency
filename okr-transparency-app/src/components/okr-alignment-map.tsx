@@ -30,6 +30,8 @@ const dimmed = "opacity-[.14]";
 /** A band folds itself on first paint from this many Objectives up. Below it the rows cost less
  *  scroll than the click needed to reveal them. */
 const secondLevelAutoCollapseFrom = 3;
+/** Breathing room between two cards of one column that land on the same row. */
+const liftStackGap = 8;
 
 /** The design's canvas height, used until the client can measure the real viewport. */
 const designCanvasHeight = 604;
@@ -74,8 +76,17 @@ export function OkrAlignmentMap({
   const [pinnedNodeId, setPinnedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [edgePaths, setEdgePaths] = useState<EdgePath[]>([]);
+  /** Vertical offsets that bring the focused chain onto one row. Derived from the resting layout,
+   *  so it is computed in an effect rather than during render. */
+  const [lift, setLift] = useState<Map<string, number>>(() => new Map());
   const [canvasHeight, setCanvasHeight] = useState(designCanvasHeight);
   const [canvasZoom, setCanvasZoom] = useState(1);
+
+  /** Where every anchor sits with nothing lifted. Lifting moves cards with a transform, and
+   *  `getBoundingClientRect` reports the moved position, so offsets have to be measured against
+   *  the layout as it rests -- otherwise each pass would compound the previous one. */
+  const restingBoxes = useRef(new Map<string, RestingBox>());
+  const liftRef = useRef(new Map<string, number>());
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -169,6 +180,7 @@ export function OkrAlignmentMap({
     return fallback;
   }, [model.groups, model.secondLevelGroups]);
 
+
   const measure = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -203,6 +215,15 @@ export function OkrAlignmentMap({
       anchors.set(id, { element, box: toLocal(element), column: Number(element.dataset.column ?? "0") });
     });
 
+    if (liftRef.current.size === 0) {
+      restingBoxes.current = new Map(
+        Array.from(anchors, ([id, anchor]): [string, RestingBox] => [
+          id,
+          { top: anchor.box.top, bottom: anchor.box.bottom, column: anchor.column }
+        ])
+      );
+    }
+
     const resolve = (nodeId: string) => anchors.get(nodeId) ?? anchors.get(anchorFallback.get(nodeId) ?? "");
     const columns = columnRefs.current.flatMap((column) => {
       if (!column) return [];
@@ -228,6 +249,20 @@ export function OkrAlignmentMap({
   }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
+    /** Keeping the previous map when nothing moved stops an unchanged focus from re-measuring. */
+    setLift((current) => {
+      const next = buildLift(activeNodeId, chain, restingBoxes.current, anchorFallback);
+      return sameLift(current, next) ? current : next;
+    });
+  }, [activeNodeId, chain, anchorFallback]);
+
+  /** Declared ahead of the measuring effect so `measure` already knows whether a lift is applied
+   *  by the time it reads the anchors back. */
+  useLayoutEffect(() => {
+    liftRef.current = lift;
+  }, [lift]);
+
+  useLayoutEffect(() => {
     /** Measure before the browser paints: a zoom change re-lays the cards out, and edges routed
      *  against the previous layout would show in the wrong place for a frame. */
     measure();
@@ -244,6 +279,7 @@ export function OkrAlignmentMap({
     };
   }, [
     measure,
+    lift,
     collapsedGroups,
     collapsedSecondLevel,
     openMemberGroups,
@@ -295,7 +331,8 @@ export function OkrAlignmentMap({
   const cardState = (nodeId: string, hit: boolean) => ({
     faded: isFaded(nodeId, hit),
     active: activeNodeId === nodeId,
-    linked: chain !== null && chain.has(nodeId) && activeNodeId !== nodeId
+    linked: chain !== null && chain.has(nodeId) && activeNodeId !== nodeId,
+    lift: lift.get(nodeId)
   });
 
   if (model.metrics.objectiveCount === 0) {
@@ -448,6 +485,7 @@ export function OkrAlignmentMap({
                     ? `${group.objectives.length} root Objectives collapsed`
                     : `${group.objectives.length} 个根目标已折叠`}
                   collapsed={isBandCollapsed(group.nodeId, collapsedGroups)}
+                  lift={lift.get(group.nodeId)}
                   onToggle={() => toggleGroup(group.nodeId)}
                 >
                   {group.objectives.map((objective) => (
@@ -488,6 +526,7 @@ export function OkrAlignmentMap({
                     ? `${band.objectives.length} Objectives collapsed`
                     : `${band.objectives.length} 个目标已折叠`}
                   collapsed={isBandCollapsed(band.nodeId, collapsedSecondLevel)}
+                  lift={lift.get(band.nodeId)}
                   onToggle={() => toggleSecondLevel(band.nodeId)}
                 >
                   {band.objectives.map((objective) => (
@@ -642,6 +681,7 @@ function GroupBand({
   stats,
   collapsedLabel,
   collapsed,
+  lift,
   onToggle,
   children
 }: {
@@ -650,6 +690,7 @@ function GroupBand({
   stats: string;
   collapsedLabel: string;
   collapsed: boolean;
+  lift?: number;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
@@ -675,7 +716,12 @@ function GroupBand({
         <div
           data-node-id={band.nodeId}
           data-column={column}
-          className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-[11px] py-[9px]"
+          style={liftStyle(lift)}
+          className={cn(
+            "flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-[11px] py-[9px]",
+            "transition-transform duration-150 motion-reduce:transition-none",
+            lift !== undefined && liftedCard
+          )}
         >
           <span className="flex-none text-[11px] text-muted-foreground">{collapsedLabel}</span>
           <StatusDots counts={band.statusCounts} />
@@ -712,6 +758,7 @@ function ObjectiveCard({
   faded,
   active,
   linked,
+  lift,
   onHover,
   onPin
 }: {
@@ -724,6 +771,7 @@ function ObjectiveCard({
   faded: boolean;
   active: boolean;
   linked: boolean;
+  lift?: number;
   onHover: (nodeId: string | null) => void;
   onPin: (nodeId: string) => void;
 }) {
@@ -734,14 +782,17 @@ function ObjectiveCard({
       onMouseEnter={() => onHover(objective.nodeId)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(objective.nodeId)}
+      style={liftStyle(lift)}
       className={cn(
-        "relative cursor-pointer rounded-lg border border-l-[3px] bg-white px-[11px] pb-2.5 pt-[9px] shadow-subtle transition-[opacity,box-shadow] duration-150",
+        "relative cursor-pointer rounded-lg border border-l-[3px] bg-white px-[11px] pb-2.5 pt-[9px] shadow-subtle",
+        "transition-[opacity,box-shadow,transform] duration-150 motion-reduce:transition-none",
         objective.unaligned ? "border-amber-300" : "border-[#e4e9f0]",
         confidenceTone[objective.confidence].rail,
         faded && dimmed,
         active && "shadow-[0_0_0_2px_#2563eb,0_12px_28px_rgba(37,99,235,0.18)]",
         linked && "shadow-[0_4px_14px_rgba(16,24,40,0.10)]",
-        !active && !linked && "hover:shadow-[0_8px_22px_rgba(16,24,40,0.13)]"
+        !active && !linked && "hover:shadow-[0_8px_22px_rgba(16,24,40,0.13)]",
+        lift !== undefined && liftedCard
       )}
     >
       <div className="mb-[5px] flex items-center gap-1.5">
@@ -784,6 +835,7 @@ function MemberGroupCard({
   faded,
   active,
   linked,
+  lift,
   onToggle,
   onHover,
   onPin
@@ -797,6 +849,7 @@ function MemberGroupCard({
   faded: boolean;
   active: boolean;
   linked: boolean;
+  lift?: number;
   onToggle: () => void;
   onHover: (nodeId: string | null) => void;
   onPin: (nodeId: string) => void;
@@ -811,13 +864,16 @@ function MemberGroupCard({
       onMouseEnter={() => onHover(group.nodeId)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(group.nodeId)}
+      style={liftStyle(lift)}
       className={cn(
-        "relative cursor-pointer overflow-hidden rounded-lg border border-l-[3px] bg-white shadow-subtle transition-[opacity,box-shadow] duration-150",
+        "relative cursor-pointer overflow-hidden rounded-lg border border-l-[3px] bg-white shadow-subtle",
+        "transition-[opacity,box-shadow,transform] duration-150 motion-reduce:transition-none",
         group.unalignedCount > 0 ? "border-amber-300" : group.crossLevel ? "border-blue-100" : "border-[#e4e9f0]",
         confidenceTone[group.confidence].rail,
         faded && dimmed,
         active && "shadow-[0_0_0_2px_#2563eb,0_12px_28px_rgba(37,99,235,0.18)]",
-        linked && "shadow-[0_4px_14px_rgba(16,24,40,0.10)]"
+        linked && "shadow-[0_4px_14px_rgba(16,24,40,0.10)]",
+        lift !== undefined && liftedCard
       )}
     >
       <div
@@ -1085,6 +1141,72 @@ function buildNodeIndex(model: ReturnType<typeof buildAlignmentMapModel>, lang: 
   });
 
   return index;
+}
+
+type RestingBox = { top: number; bottom: number; column: number };
+
+/** A lifted card floats over whatever it landed on, which is already faded out of the way. */
+const liftedCard = "z-20 shadow-[0_10px_30px_rgba(16,24,40,0.18)]";
+
+function sameLift(a: Map<string, number>, b: Map<string, number>) {
+  return a.size === b.size && Array.from(a).every(([nodeId, offset]) => b.get(nodeId) === offset);
+}
+
+function liftStyle(lift?: number) {
+  return lift === undefined ? undefined : { transform: `translateY(${lift}px)` };
+}
+
+/**
+ * Vertical offsets that bring the active node's chain onto its own row.
+ *
+ * Only the other columns move: a chain never has two cards of the same column that both need to
+ * sit beside the active one, and moving the column the cursor is in would slide the card out from
+ * under the pointer. Offsets are transforms rather than layout, so nothing reflows and the edges
+ * re-route on their own once `measure` reads the moved rects back.
+ */
+function buildLift(
+  activeNodeId: string | null,
+  chain: Set<string> | null,
+  boxes: Map<string, RestingBox>,
+  anchorFallback: Map<string, string>
+) {
+  const lift = new Map<string, number>();
+  /** A card inside a folded band is not rendered, so the chain travels through its summary strip. */
+  const anchorOf = (nodeId: string) => (boxes.has(nodeId) ? nodeId : anchorFallback.get(nodeId));
+  const activeAnchor = activeNodeId ? anchorOf(activeNodeId) : undefined;
+  const anchorBox = activeAnchor ? boxes.get(activeAnchor) : undefined;
+  if (!chain || !activeAnchor || !anchorBox) return lift;
+
+  const targetY = (anchorBox.top + anchorBox.bottom) / 2;
+  const byColumn = new Map<number, string[]>();
+  chain.forEach((nodeId) => {
+    const anchorId = anchorOf(nodeId);
+    const box = anchorId ? boxes.get(anchorId) : undefined;
+    if (!anchorId || !box || anchorId === activeAnchor || box.column === anchorBox.column) return;
+    const column = byColumn.get(box.column) ?? [];
+    if (column.includes(anchorId)) return;
+    byColumn.set(box.column, [...column, anchorId]);
+  });
+
+  byColumn.forEach((anchorIds) => {
+    const ordered = [...anchorIds].sort((a, b) => (boxes.get(a)?.top ?? 0) - (boxes.get(b)?.top ?? 0));
+    const heights = ordered.map((anchorId) => {
+      const box = boxes.get(anchorId) as RestingBox;
+      return box.bottom - box.top;
+    });
+    const stack = heights.reduce((sum, height) => sum + height, 0) + liftStackGap * (ordered.length - 1);
+    /** Centre the stack on the active row, but never above the top of the canvas, where the
+     *  scroll container would clip it. */
+    let cursor = Math.max(0, targetY - stack / 2);
+
+    ordered.forEach((anchorId, index) => {
+      const box = boxes.get(anchorId) as RestingBox;
+      lift.set(anchorId, Math.round(cursor - box.top));
+      cursor += heights[index] + liftStackGap;
+    });
+  });
+
+  return lift;
 }
 
 function collectChain(
