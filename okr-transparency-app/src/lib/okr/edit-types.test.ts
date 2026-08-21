@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDraftObjectiveScope, createEmptyObjective, draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
+import { applyDraftObjectiveScope, createEmptyObjective, draftToRecords, filterDraftByOwner, localizeDraftForLanguage, mergeDraftByOwner, normalizeDraft, recordsToDraft, validateDraft, withExistingLocalizedContent, type OkrDraft } from "./edit-types";
 
 const draft: OkrDraft = {
   version: 1,
@@ -38,6 +38,27 @@ const draft: OkrDraft = {
   ]
 };
 
+const baseRecord = {
+  okr_id: "",
+  parent_id: "",
+  level: "Team" as const,
+  team: "QA Team",
+  objective: "",
+  kr: "",
+  type: "Committed" as const,
+  owner: "Xiaojun (June) Duan",
+  baseline: "",
+  target: "",
+  actual: "",
+  score: null,
+  confidence: "Green" as const,
+  dependencies: "",
+  risks: "",
+  decisions_needed: "",
+  source_doc_url: "",
+  last_update: "",
+  objective_scope: "member" as const
+};
 describe("OKR edit draft helpers", () => {
   it("starts a new objective with one KR that owns the full weight", () => {
     const objective = createEmptyObjective("QA Team", "2026-q3", "QA Lead");
@@ -46,6 +67,27 @@ describe("OKR edit draft helpers", () => {
     expect(objective.keyResults[0]).toMatchObject({ owner: "QA Lead", title: "", weight: 100 });
   });
 
+  it("leaves a new objective unaligned so the member chooses their own upper-level target", () => {
+    const objective = createEmptyObjective("QA Team", "2026-q3", "QA Lead");
+
+    expect(objective.alignedToId).toBeUndefined();
+  });
+
+  it("carries a published alignment into the draft rather than inventing one", () => {
+    const aligned = recordsToDraft([
+      {
+        ...baseRecord,
+        okr_id: "QA-M1",
+        team: "QA Team",
+        objective: "Member objective",
+        aligned_to_id: "QA-O1"
+      },
+      { ...baseRecord, okr_id: "QA-M2", team: "QA Team", objective: "Unaligned member objective" }
+    ], "QA Team", "2026-q3");
+
+    expect(aligned.objectives.find((objective) => objective.id === "QA-M1")?.alignedToId).toBe("QA-O1");
+    expect(aligned.objectives.find((objective) => objective.id === "QA-M2")?.alignedToId).toBeUndefined();
+  });
   it("validates a complete draft", () => {
     const result = validateDraft(draft);
     expect(result.errors).toEqual([]);
