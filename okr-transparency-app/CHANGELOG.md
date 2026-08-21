@@ -4,6 +4,10 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.4 - 2026-08-21
+
+- Stop pre-selecting an upper-level alignment target in a member's editor. Adding an Objective, opening the editor, and paste import no longer fill in the team's first Objective, so an alignment is only ever recorded when the member picks one. Alignments already published are unaffected.
+
 ## v0.8.3 - 2026-08-21
 
 - Restore upper-level alignment for members: the picker matched candidates against the configured team owner label while publishing records the resolved owner display name, so every team with a configured leader offered its members no alignment target at all.
