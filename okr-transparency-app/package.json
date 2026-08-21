@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run --environment node src",
+    "typecheck": "tsc --noEmit",
     "seed:local": "node scripts/seed-local.mjs",
     "seed:local:restore": "node scripts/seed-local.mjs --restore",
     "migrate:firestore": "node scripts/migrate-json-to-firestore.mjs",
