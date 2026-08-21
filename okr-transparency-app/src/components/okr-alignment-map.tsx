@@ -15,7 +15,7 @@ import {
   type AlignmentObjective,
   type AlignmentStatusCounts
 } from "@/lib/okr/alignment-map";
-import { buildEdgePaths, type EdgeInput, type EdgePath } from "@/lib/okr/alignment-edge-path";
+import { buildEdgeRouting, type EdgeInput, type EdgeRouting } from "@/lib/okr/alignment-edge-path";
 import type { ConfidenceLevel, OkrRecord } from "@/lib/okr/types";
 import { teamColor, teamInitials } from "@/lib/team-colors";
 import { cn } from "@/lib/utils";
@@ -75,7 +75,7 @@ export function OkrAlignmentMap({
   const [query, setQuery] = useState("");
   const [pinnedNodeId, setPinnedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [edgePaths, setEdgePaths] = useState<EdgePath[]>([]);
+  const [routing, setRouting] = useState<EdgeRouting>(() => ({ segments: [], junctions: [] }));
   /** Vertical offsets that bring the focused chain onto one row. Derived from the resting layout,
    *  so it is computed in an effect rather than during render. */
   const [lift, setLift] = useState<Map<string, number>>(() => new Map());
@@ -145,21 +145,6 @@ export function OkrAlignmentMap({
   const trail = useMemo(() => collectTrail(activeNodeId, graph.parents), [activeNodeId, graph.parents]);
 
   const nodeIndex = useMemo(() => buildNodeIndex(model, lang), [model, lang]);
-
-  /** Edges routed onto the same pair of anchors come back with the same geometry, so draw one
-   *  stroke and let it light up for any of the pairs it stands for. */
-  const drawnEdges = useMemo(() => {
-    const byShape = new Map<string, { id: string; d: string; endpoints: Array<[string, string]> }>();
-    edgePaths.forEach((path) => {
-      const shape = byShape.get(path.d);
-      if (shape) {
-        shape.endpoints.push([path.fromNodeId, path.toNodeId]);
-        return;
-      }
-      byShape.set(path.d, { id: path.id, d: path.d, endpoints: [[path.fromNodeId, path.toNodeId]] });
-    });
-    return Array.from(byShape.values());
-  }, [edgePaths]);
 
   /** A folded band renders a summary strip instead of its cards, so the edges those cards owned
    *  re-anchor onto the strip. Applied to both sides of an edge by `resolve` below. */
@@ -243,7 +228,7 @@ export function OkrAlignmentMap({
       }];
     });
 
-    setEdgePaths(buildEdgePaths(inputs, columns));
+    setRouting(buildEdgeRouting(inputs, columns));
   }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
@@ -437,14 +422,12 @@ export function OkrAlignmentMap({
                 <path d="M 0 0 L 7 3.5 L 0 7 z" fill="currentColor" />
               </marker>
             </defs>
-            {drawnEdges.map((edge) => {
-              const highlighted =
-                chain !== null
-                && edge.endpoints.some(([fromNodeId, toNodeId]) => chain.has(fromNodeId) && chain.has(toNodeId));
+            {routing.segments.map((segment) => {
+              const highlighted = onChain(chain, segment.endpoints);
               return (
                 <path
-                  key={edge.id}
-                  d={edge.d}
+                  key={segment.id}
+                  d={segment.d}
                   fill="none"
                   className={cn(
                     "transition-[stroke,opacity] duration-150",
@@ -452,8 +435,27 @@ export function OkrAlignmentMap({
                   )}
                   stroke="currentColor"
                   strokeWidth={highlighted ? 2.2 : 1.4}
+                  strokeLinecap="round"
                   opacity={highlighted ? 1 : chain !== null ? 0.06 : 0.5}
-                  markerEnd="url(#alignment-arrow)"
+                  markerEnd={segment.arrow ? "url(#alignment-arrow)" : undefined}
+                />
+              );
+            })}
+            {/* Where three or more runs meet. Without it a junction and a crossing look alike. */}
+            {routing.junctions.map((junction) => {
+              const highlighted = onChain(chain, junction.endpoints);
+              return (
+                <circle
+                  key={junction.id}
+                  cx={junction.x}
+                  cy={junction.y}
+                  r={highlighted ? 2.8 : 2.2}
+                  className={cn(
+                    "transition-[fill,opacity] duration-150",
+                    highlighted ? "text-blue-600" : "text-slate-400"
+                  )}
+                  fill="currentColor"
+                  opacity={highlighted ? 1 : chain !== null ? 0.06 : 0.5}
                 />
               );
             })}
@@ -1181,6 +1183,11 @@ function appliedTranslateY(element: HTMLElement) {
 
 /** A lifted card floats over whatever it landed on, which is already faded out of the way. */
 const liftedCard = "z-20 shadow-[0_10px_30px_rgba(16,24,40,0.18)]";
+
+/** A run belongs to the focused chain when any pair travelling it has both ends on the chain. */
+function onChain(chain: Set<string> | null, endpoints: Array<[string, string]>) {
+  return chain !== null && endpoints.some(([fromNodeId, toNodeId]) => chain.has(fromNodeId) && chain.has(toNodeId));
+}
 
 function sameLift(a: Map<string, number>, b: Map<string, number>) {
   return a.size === b.size && Array.from(a).every(([nodeId, offset]) => b.get(nodeId) === offset);

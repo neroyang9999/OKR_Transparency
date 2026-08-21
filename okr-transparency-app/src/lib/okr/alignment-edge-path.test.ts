@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEdgePaths, type EdgeInput } from "./alignment-edge-path";
+import { buildEdgeRouting, type EdgeBox, type EdgeInput } from "./alignment-edge-path";
 
 const columns = [
   { left: 0, right: 270 },
@@ -7,102 +7,148 @@ const columns = [
   { left: 764, right: 1060 }
 ];
 
-describe("alignment edge path", () => {
-  it("gives each edge in a column gap its own vertical channel", () => {
-    const paths = buildEdgePaths(
+describe("alignment edge routing", () => {
+  it("puts every child of one parent on a single bus with a single arrow", () => {
+    const parent = box(0, 400);
+    const { segments } = buildEdgeRouting(
       [
-        edge("a", box(382, 40), box(0, 400)),
-        edge("b", box(382, 140), box(0, 600)),
-        edge("c", box(382, 240), box(0, 800))
+        edge("a", box(382, 40), parent),
+        edge("b", box(382, 140), parent),
+        edge("c", box(382, 240), parent)
       ],
       columns
     );
 
-    expect(paths.map((path) => channelOf(path.d))).toEqual([298, 326, 354]);
+    expect(new Set(segments.filter(isBus).map((segment) => startXOf(segment.d))).size).toBe(1);
+    expect(segments.filter((segment) => segment.arrow)).toHaveLength(1);
   });
 
-  it("orders channels by the vertical position of the child card", () => {
-    const paths = buildEdgePaths(
+  it("cuts the bus at each join so a focus lights only the part in use", () => {
+    const parent = box(0, 400);
+    const { segments } = buildEdgeRouting(
       [
-        edge("low", box(382, 500), box(0, 40)),
-        edge("high", box(382, 60), box(0, 300))
+        edge("a", box(382, 40), parent),
+        edge("b", box(382, 140), parent),
+        edge("c", box(382, 240), parent)
       ],
       columns
     );
 
-    expect(paths.map((path) => path.id)).toEqual(["high", "low"]);
-    expect(channelOf(paths[0].d)).toBeLessThan(channelOf(paths[1].d));
+    /** The run thickens towards the parent: one edge above the second join, three below the last. */
+    expect(segments.filter(isBus).map((segment) => segment.endpoints.length)).toEqual([1, 2, 3]);
   });
 
-  it("routes downward and upward edges with matching corner directions", () => {
-    const [down] = buildEdgePaths([edge("down", box(382, 400), box(0, 40))], columns);
-    const [up] = buildEdgePaths([edge("up", box(382, 40), box(0, 400))], columns);
-
-    expect(down.d).toContain("Q 326 412 326 403");
-    expect(up.d).toContain("Q 326 52 326 61");
-  });
-
-  it("falls back to a straight line when the two cards are nearly level", () => {
-    const [path] = buildEdgePaths([edge("level", box(382, 100), box(0, 110))], columns);
-
-    expect(path.d).toBe("M 382 112 L 270 122");
-  });
-
-  it("falls back to a straight line when the horizontal run is too short for a detour", () => {
-    const tight = [
-      { left: 0, right: 270 },
-      { left: 290, right: 560 }
-    ];
-    const [path] = buildEdgePaths([edge("tight", box(290, 40), box(0, 400))], tight);
-
-    expect(path.d).toBe("M 290 52 L 270 412");
-  });
-
-  it("falls back to a straight line for edges inside a single column", () => {
-    const [path] = buildEdgePaths([{ ...edge("same", box(0, 40), box(0, 400)), toColumn: 0 }], columns);
-
-    expect(path.d).toBe("M 0 52 L 270 412");
-  });
-
-  it("shares one channel between edges that resolved to the same pair of anchors", () => {
-    const folded = box(0, 400);
-    const paths = buildEdgePaths(
+  it("keeps the edges leaving one card on one run until each peels off", () => {
+    const child = box(382, 40);
+    const { segments } = buildEdgeRouting(
       [
-        edge("first", box(382, 40), folded),
-        edge("second", box(382, 40), folded),
-        edge("other", box(382, 240), box(0, 800))
+        edge("near", child, box(0, 20)),
+        edge("mid", child, box(0, 120)),
+        edge("far", child, box(0, 220))
       ],
       columns
     );
 
-    expect(paths.find((path) => path.id === "first")?.d).toBe(paths.find((path) => path.id === "second")?.d);
-    expect(new Set(paths.map((path) => channelOf(path.d))).size).toBe(2);
+    const runs = segments.filter((segment) => segment.id.startsWith("run:"));
+    expect(runs.map((segment) => segment.endpoints.length)).toEqual([3, 2, 1]);
+    /** Each run starts where the previous stopped, so the shared stretch is drawn once. */
+    expect(runs.map((segment) => segment.d)).toEqual([
+      "M 382 52 L 368 52",
+      "M 368 52 L 326 52",
+      "M 326 52 L 284 52"
+    ]);
+  });
+
+  it("marks three runs meeting with a junction and leaves a corner unmarked", () => {
+    const parent = box(0, 400);
+    const { junctions } = buildEdgeRouting(
+      [edge("a", box(382, 40), parent), edge("b", box(382, 140), parent)],
+      columns
+    );
+
+    /** The join at 152 is a junction; the two ends of the bus are corners. */
+    expect(junctions.map((junction) => `${junction.x},${junction.y}`)).toEqual(["326,152"]);
+  });
+
+  it("arches a run over a bus it only passes over", () => {
+    const { segments } = buildEdgeRouting(
+      [
+        edge("passes", box(382, 40), box(0, 20)),
+        edge("crossed", box(382, 8), box(0, 188))
+      ],
+      columns
+    );
+
+    const passing = segments.find((segment) => segment.endpoints.some(([from]) => from === "from:passes"));
+    expect(passing?.d).toBe("M 382 52 L 372 52 A 4 4 0 0 0 364 52 L 284 52");
+  });
+
+  it("does not arch over a bus the run ends on", () => {
+    const child = box(382, 40);
+    const { segments } = buildEdgeRouting(
+      [edge("near", child, box(0, 20)), edge("far", child, box(0, 220))],
+      columns
+    );
+
+    expect(segments.filter((segment) => segment.d.includes("A "))).toEqual([]);
+  });
+
+  it("orders buses by parent position and insets them from both columns", () => {
+    const { segments } = buildEdgeRouting(
+      [
+        edge("low", box(382, 300), box(0, 220)),
+        edge("high", box(382, 40), box(0, 20))
+      ],
+      columns
+    );
+
+    const laneOf = (key: string) =>
+      startXOf(segments.find((segment) => segment.id === `land:${key}`)?.d as string);
+
+    /** Gap 270..382 inset by 14 either side; the topmost parent takes the near lane. */
+    expect(laneOf("270,32")).toBe(284);
+    expect(laneOf("270,232")).toBe(368);
   });
 
   it("keeps channels independent per column gap", () => {
-    const paths = buildEdgePaths(
+    const { segments } = buildEdgeRouting(
       [
         edge("l2", box(382, 40), box(0, 40)),
-        { ...edge("l3", box(764, 40), box(382, 40)), toColumn: 1 }
+        edge("l3", box(764, 40), box(382, 40), 1)
       ],
       columns
     );
 
-    expect(paths.map((path) => path.id).sort()).toEqual(["l2", "l3"]);
-    expect(paths.every((path) => path.d.startsWith("M "))).toBe(true);
+    expect(segments.filter((segment) => segment.arrow)).toHaveLength(2);
+    expect(segments.every((segment) => segment.d.startsWith("M "))).toBe(true);
+  });
+
+  it("falls back to the midpoint between the cards when there is no column gap to use", () => {
+    const { segments } = buildEdgeRouting([edge("orphan", box(764, 40), box(382, 400), 2)], columns);
+
+    /** No column beyond the parent's, so the bus sits halfway between the two cards. */
+    expect(segments.find((segment) => segment.arrow)?.d).toBe("M 708 412 L 652 412");
+  });
+
+  it("returns nothing for no edges", () => {
+    expect(buildEdgeRouting([], columns)).toEqual({ segments: [], junctions: [] });
   });
 });
 
-function edge(id: string, from: ReturnType<typeof box>, to: ReturnType<typeof box>): EdgeInput {
-  return { id, fromNodeId: `from:${id}`, toNodeId: `to:${id}`, from, to, toColumn: 0 };
+function edge(id: string, from: EdgeBox, to: EdgeBox, toColumn = 0): EdgeInput {
+  return { id, fromNodeId: `from:${id}`, toNodeId: `to:${id}`, from, to, toColumn };
 }
 
-function box(left: number, top: number, width = 270, height = 24) {
+function box(left: number, top: number, width = 270, height = 24): EdgeBox {
   return { left, top, right: left + width, bottom: top + height };
 }
 
-function channelOf(d: string) {
-  const match = /Q (-?[\d.]+) /.exec(d);
-  if (!match) throw new Error(`no channel in ${d}`);
+function isBus(segment: { id: string }) {
+  return segment.id.startsWith("bus:");
+}
+
+function startXOf(d: string) {
+  const match = /^M (-?[\d.]+) /.exec(d);
+  if (!match) throw new Error(`no start in ${d}`);
   return Number(match[1]);
 }
