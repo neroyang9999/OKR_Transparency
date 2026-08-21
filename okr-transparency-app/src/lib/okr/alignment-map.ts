@@ -99,7 +99,13 @@ export function groupNodeId(team: string) {
   return `group:${team}`;
 }
 
-export function buildAlignmentMapModel(records: OkrRecord[], teams: AdminTeam[]): AlignmentMapModel {
+export function buildAlignmentMapModel(
+  records: OkrRecord[],
+  teams: AdminTeam[],
+  /** Owner display names by team, from `teamOwnerDisplayNames`. The configured owner label is
+   *  only a lookup key, so falling back to it shows a different name than every other view. */
+  teamOwners: Record<string, string> = {}
+): AlignmentMapModel {
   const teamByName = new Map(teams.filter((team) => team.enabled).map((team) => [team.name, team]));
   const topLevelTeamOf = buildTopLevelResolver(teamByName);
   const isTopLevelTeam = (team: string) => teamByName.has(team) && !hasVisibleParent(teamByName.get(team), teamByName);
@@ -162,7 +168,7 @@ export function buildAlignmentMapModel(records: OkrRecord[], teams: AdminTeam[])
   const rootObjectives = teamObjectives.filter((objective) => isTopLevelTeam(objective.team));
   const secondLevelRaw = teamObjectives.filter((objective) => !isTopLevelTeam(objective.team));
 
-  const groups = buildGroups(objectives, rootObjectives, teamByName, topLevelTeamOf);
+  const groups = buildGroups(objectives, rootObjectives, teamByName, topLevelTeamOf, teamOwners);
   const rootOrder = new Map(groups.flatMap((group) => group.objectives).map((objective, index) => [objective.nodeId, index]));
   const secondLevel = [...secondLevelRaw].sort(
     (a, b) => parentRank(a, rootOrder) - parentRank(b, rootOrder)
@@ -201,7 +207,8 @@ function buildGroups(
   objectives: AlignmentObjective[],
   rootObjectives: AlignmentObjective[],
   teamByName: Map<string, AdminTeam>,
-  topLevelTeamOf: (team: string) => string | null
+  topLevelTeamOf: (team: string) => string | null,
+  teamOwners: Record<string, string>
 ): AlignmentGroup[] {
   const subtreeByTeam = new Map<string, AlignmentObjective[]>();
   objectives.forEach((objective) => {
@@ -222,7 +229,7 @@ function buildGroups(
       return {
         nodeId: groupNodeId(team),
         team,
-        owner: teamByName.get(team)?.owner ?? "",
+        owner: teamOwners[team] || teamByName.get(team)?.owner || "",
         color: teamByName.get(team)?.color ?? "",
         objectives: (rootsByTeam.get(team) ?? []).sort(
           (a, b) => b.alignedChildCount - a.alignedChildCount || a.okrId.localeCompare(b.okrId)

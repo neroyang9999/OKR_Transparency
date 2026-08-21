@@ -152,6 +152,17 @@ describe("alignment map model", () => {
     expect(model.secondLevel[0].unaligned).toBe(false);
   });
 
+  it("labels a group with the resolved owner display name, not the configured owner label", () => {
+    const model = buildAlignmentMapModel([record("SW-O1", "Software")], teams, { Software: "Max Zheng" });
+
+    expect(model.groups[0].owner).toBe("Max Zheng");
+  });
+
+  it("falls back to the configured owner label when no owner resolves", () => {
+    const model = buildAlignmentMapModel([record("SW-O1", "Software")], teams);
+
+    expect(model.groups[0].owner).toBe("Software Lead");
+  });
   it("returns an empty model for no records", () => {
     const model = buildAlignmentMapModel([], teams);
 

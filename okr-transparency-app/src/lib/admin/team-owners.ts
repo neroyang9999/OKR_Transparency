@@ -16,6 +16,16 @@ export function resolveTeamOwner(users: AdminUser[], team: Pick<AdminTeam, "name
     ?? null;
 }
 
+/** The name to show for a team's owner. Falls back to the configured label when no user resolves. */
+export function teamOwnerDisplayName(users: AdminUser[], team: Pick<AdminTeam, "name" | "owner">) {
+  return resolveTeamOwner(users, team)?.displayName || team.owner;
+}
+
+/** Owner display names keyed by team name, for views that render many teams at once. */
+export function teamOwnerDisplayNames(users: AdminUser[], teams: AdminTeam[]): Record<string, string> {
+  return Object.fromEntries(teams.map((team) => [team.name, teamOwnerDisplayName(users, team)]));
+}
+
 function hasCompleteIdentity(user: AdminUser) {
   const displayName = user.displayName.trim();
   const email = user.email.trim().toLowerCase();

@@ -19,7 +19,7 @@ import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import type { OkrRecord } from "@/lib/okr/types";
 import { getOkrQualityStats } from "@/lib/okr/graph-validation";
 import { filterDraftByOwner } from "@/lib/okr/edit-types";
-import type { AlignmentOption } from "@/lib/okr/alignment-options";
+import { getAlignmentOptions } from "@/lib/okr/alignment-candidates";
 import { readDraft } from "@/lib/okr/drafts";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { ownerScopeForTeam, ownerScopeForUser, teamScopedRecords } from "@/lib/okr/owner-scope";
@@ -84,9 +84,7 @@ export default async function HomePage({
         const parent = record.parent_id ? recordById.get(record.parent_id) : null;
         return !parent || parent.team !== selectedTeam;
       });
-  const alignmentOptions = selectedMember
-    ? getAlignmentOptions(periodRecords, selectedTeam, adminConfig, { targetTeam: selectedTeam, ownerAliases: [selectedTeamOwner, selectedTeam] })
-    : getAlignmentOptions(periodRecords, selectedTeam, adminConfig);
+  const alignmentOptions = getAlignmentOptions(periodRecords, selectedTeam, adminConfig, selectedMember ? "member" : "team");
   const detailHref = (okrId: string) => hrefWithLang(
     buildOverviewHref({
       team: selectedTeam,
@@ -492,41 +490,6 @@ function initials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-}
-
-function getAlignmentOptions(
-  records: OkrRecord[],
-  team: string,
-  config: AdminConfig,
-  scope?: { targetTeam?: string; ownerAliases?: string[] }
-): AlignmentOption[] {
-  const targetTeam = scope?.targetTeam ?? parentTeamFor(team, config);
-  if (!targetTeam) return [];
-  const ownerAliases = (scope?.ownerAliases ?? []).map(normalizeToken).filter(Boolean);
-
-  const recordById = new Map(records.map((record) => [record.okr_id, record]));
-  return records
-    .filter((record) => record.team === targetTeam)
-    .filter((record) => ownerAliases.length === 0 || ownerAliases.includes(normalizeToken(record.owner)))
-    .sort((left, right) => Number(Boolean(left.kr)) - Number(Boolean(right.kr)))
-    .map((record) => {
-      const parent = record.parent_id ? recordById.get(record.parent_id) : null;
-      return {
-        id: record.okr_id,
-        kind: record.kr ? "KR" : "O",
-        team: record.team,
-        owner: record.owner,
-        title: record.kr || record.objective,
-        parentId: record.kr ? record.parent_id : undefined,
-        parentTitle: record.kr ? parent?.objective ?? record.objective : undefined,
-        progress: record.score === null ? null : Math.round(record.score * 100),
-        confidence: record.confidence
-      } satisfies AlignmentOption;
-    });
-}
-
-function parentTeamFor(team: string, config: AdminConfig) {
-  return config.teams.find((item) => item.name === team && item.enabled)?.parentTeam || null;
 }
 
 function normalizePeriodFromConfig(period: string | undefined, config: AdminConfig) {
