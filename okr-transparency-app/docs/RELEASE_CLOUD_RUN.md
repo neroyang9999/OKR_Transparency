@@ -47,22 +47,13 @@ npm run lint
 npm run build
 ```
 
-## Terraform 与应用发布边界
+## 基础设施的边界
 
-**这套 Terraform 配置从未被应用过，任何地方都不存在 `terraform.tfstate`。** 线上是用
-`deploy/scripts/provisioning/` 里的 gcloud 脚本建的（产出当前配置的是 `okr_finish_prod.sh`）。
-所以不要执行 `terraform apply`：空 state 会把已经存在的 Artifact Registry、Cloud Run、IAP、Secret
-和 IAM 资源视为未创建，绝大多数会以 `ALREADY_EXISTS` 失败。详见 `deploy/terraform/README.md`。
+本流程只换镜像和切流量，**不改基础设施，也不迁移/覆盖/删除 Firestore 数据。**
 
-本次代码发布采用 Cloud Build 构建镜像，再通过 Cloud Run 创建 0 流量候选修订、完成冒烟验证后切换流量，不需要 Terraform，也不会迁移、覆盖或删除 Firestore 数据。
-
-镜像和流量分配归发布流程所有，Terraform 不再管这两个字段（`run.tf` 的 `lifecycle.ignore_changes`）。所以按本文档发布**不会**再产生 Terraform drift，也不需要在发布后手工去改 `terraform.tfvars`。
-
-而且现在根本没有漂移可言：**这套 Terraform 配置从未被应用过**，线上是用 gcloud 脚本建的，任何机器上都不存在 `terraform.tfstate`。详见 `deploy/terraform/README.md`。上面那条 `ignore_changes` 是预防性的，为将来真的用 Terraform 接管时准备。
-
-但要在切流后更新 `deploy/terraform/image_tag.auto.tfvars`，见第 7 节。它是「线上现在跑什么」的记录，不是控制开关 —— 改它不会部署任何东西。
-
-以下变更仍应通过持有正确 state 的部署环境执行 Terraform：Cloud Run 服务配置、IAP、IAM、Secret、环境变量、扩缩容参数、Artifact Registry 和其他基础设施。
+Cloud Run 服务本身、IAP、IAM、Secret、环境变量、扩缩容参数、Artifact Registry 是用
+`deploy/scripts/provisioning/` 里的 gcloud 脚本建立的（产出当前配置的是 `okr_finish_prod.sh`）。
+要改这些，改脚本并走 PR，不要在控制台里手工改 —— 否则又会出现一份没人能 review 的线上状态。
 
 ## 1. 准备干净主线
 
@@ -210,21 +201,7 @@ gcloud run services describe okr-transparency-app \
   --format='value(status.traffic)'
 ```
 
-## 7. 记录已部署的镜像 tag
-
-切流成功后，把 `deploy/terraform/image_tag.auto.tfvars` 更新为本次的 tag 并提交：
-
-```hcl
-image_tag = "v085-pr25-pr28-693dcb8"
-```
-
-为什么要做这件事：
-
-- 这是仓库里唯一一处记录「线上此刻跑的是哪个镜像」的地方，可 review、可查历史。`terraform.tfvars` 是 gitignore 的，只存在于某台机器上，谁都看不到。
-- Terraform 自动加载 `*.auto.tfvars`，且它的优先级**高于** `terraform.tfvars`，所以这个纳管的值会覆盖部署机器上可能早已过期的本地值（`terraform.tfvars.example` 里的示例值是 `staging`）。
-- 它只在 Terraform **首次创建**服务时被真正使用。既有服务的镜像由 `ignore_changes` 排除在外，所以改这个文件不会部署任何东西。
-
-## 8. 回滚
+## 7. 回滚
 
 保留上一版本 revision，不要立即删除。出现线上错误时，将流量切回已验证的 revision：
 
@@ -252,6 +229,5 @@ Cloud Build：...
 生产 revision：...
 生产流量：100%
 回滚 revision：...
-image_tag.auto.tfvars：已更新为本次 tag
 数据：Firestore 未迁移、未修改
 ```
