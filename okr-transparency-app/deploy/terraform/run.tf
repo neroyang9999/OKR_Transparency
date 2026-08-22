@@ -109,6 +109,22 @@ resource "google_cloud_run_v2_service" "api" {
     }
   }
 
+  lifecycle {
+    # The release process owns which image is serving and how traffic is split across revisions:
+    # docs/RELEASE_CLOUD_RUN.md builds an image, deploys it as a candidate at 0% traffic, and
+    # shifts traffic only after the candidate has been checked. Terraform owns the shape of the
+    # service instead -- IAP, secrets, IAM, scaling, environment.
+    #
+    # Without this, both sides own the same two fields, and the release leaves Terraform holding a
+    # stale value. The next apply would then quietly roll production back to it: a new revision
+    # built from var.image_tag, with the traffic split reset to send everything to it. Ignoring
+    # them here is what makes that impossible rather than merely unlikely.
+    ignore_changes = [
+      template[0].containers[0].image,
+      traffic,
+    ]
+  }
+
   depends_on = [
     google_secret_manager_secret_version.auth_secret,
     google_secret_manager_secret_version.admin_token,

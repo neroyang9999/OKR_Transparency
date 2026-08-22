@@ -1,9 +1,9 @@
 project_id = "knowledge-base-496322"
 region     = "us-west1"
 
-# Push first with:
-#   powershell -ExecutionPolicy Bypass -File ..\scripts\push-image.ps1 -Tag staging
-image_tag = "staging"
+# image_tag is not set here. It lives in the tracked image_tag.auto.tfvars, which records what
+# production is serving and takes precedence over this file. Setting it here would only shadow that
+# record for whoever holds this machine's copy.
 
 allowed_google_domains = "unitxlabs.com"
 firestore_database_id  = "(default)"
