@@ -56,9 +56,9 @@ Terraform 之外。没有这一条，两边都认为自己拥有这两个字段�
 - 部署机器和 Cloud Shell 家目录里都**没有** `terraform.tfstate`、`terraform.tfvars`，
   连 `.terraform/` 都没有 —— 也就是说从来没执行过 `terraform init`；
 - 项目里 5 个 GCS 桶中没有任何 tfstate；
-- Cloud Shell 家目录里那批实际用来建站的脚本（`deploy_okr_to_kb_project.sh`、`okr_secretize.sh`、
-  `okr_finish_prod.sh` 等）**一个 terraform 字样都没有**，全部是 `gcloud run` / `gcloud secrets` /
-  `gcloud iam` / `gcloud artifacts` 调用。
+- 实际用来建站的那批脚本**一个 terraform 字样都没有**，全部是 `gcloud run` / `gcloud secrets` /
+  `gcloud iam` / `gcloud artifacts` 调用。它们原本只存在于一个 Cloud Shell 家目录里，
+  现已抓取进仓库：`deploy/scripts/provisioning/`。产出当前生产配置的是 `okr_finish_prod.sh`。
 
 所以不存在「state 丢了」的问题 —— 从来就没有 state。这套 `.tf` 文件是写好了但没走过的一条路。
 
