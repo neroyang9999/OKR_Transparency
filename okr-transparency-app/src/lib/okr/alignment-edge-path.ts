@@ -23,9 +23,18 @@ export type EdgePath = {
 export const edgeCornerRadius = 9;
 const straightLineDistance = 40;
 
+/** Where the eight points of the six commands sit along the straight chord, in order. With every
+ *  one of them on the chord both curves degenerate into straight segments and the path IS the
+ *  chord, which is what lets a route relax onto it without changing command structure. */
+const chordFractions = [0, 0.25, 0.375, 0.5, 0.5, 0.625, 0.75, 1];
+
 /**
- * Routes every edge as an orthogonal polyline through a vertical channel. Short or nearly-
- * horizontal edges stay straight — a rounded detour there reads as a hook rather than a connection.
+ * Routes every edge as an orthogonal polyline through a vertical channel. Edges whose cards nearly
+ * touch stay straight — a rounded detour squeezed into that gap reads as a hook rather than a
+ * connection. Everything else keeps the same six commands whatever the rise, relaxing from the
+ * orthogonal route onto the straight chord as the two cards level out, so a card moving under a
+ * cursor never makes the route change shape and a level pair never bends around a channel it
+ * contributes nothing to.
  *
  * One channel per parent, not per edge: everything landing on one card runs down the same line and
  * along the same approach, so the routes that coincide are drawn over each other instead of fanning
@@ -91,21 +100,44 @@ function edgePath({
   channel: number;
   radius: number;
 }) {
-  const straight = `M ${round(ax)} ${round(ay)} L ${round(bx)} ${round(by)}`;
+  /** Set by the columns, so it cannot flip while a card is moving: two cards this close together
+   *  horizontally get a straight line, because a detour squeezed into the gap reads as a hook. */
+  if (ax - bx < straightLineDistance) return `M ${round(ax)} ${round(ay)} L ${round(bx)} ${round(by)}`;
+
   const rise = by - ay;
-  const hasRoomForCorners = ax - channel >= radius && channel - bx >= radius;
-
-  if (Math.abs(rise) < radius * 2 || ax - bx < straightLineDistance || !hasRoomForCorners) return straight;
-
   const direction = rise > 0 ? 1 : -1;
-  return [
-    `M ${round(ax)} ${round(ay)}`,
-    `L ${round(channel + radius)} ${round(ay)}`,
-    `Q ${round(channel)} ${round(ay)} ${round(channel)} ${round(ay + direction * radius)}`,
-    `L ${round(channel)} ${round(by - direction * radius)}`,
-    `Q ${round(channel)} ${round(by)} ${round(channel - radius)} ${round(by)}`,
-    `L ${round(bx)} ${round(by)}`
-  ].join(" ");
+  const corner = Math.max(0, Math.min(radius, Math.abs(rise) / 2, ax - channel, channel - bx));
+
+  /** How much of a vertical trunk this route has to offer. The channel earns its detour by being
+   *  the line several routes run down together; a pair of cards level with each other contributes
+   *  no such line, and bending around the channel anyway leaves a kink with nothing to share it
+   *  with — worse where the lane sits close to one card, since the bend then has to happen inside
+   *  the short side and the rest of the run stays dead flat.
+   *
+   *  So the whole route relaxes onto the straight chord as its corner shrinks, rather than the
+   *  corner alone getting rounder. Continuously, because a lifted card drags the rise through zero
+   *  and anything that switches shape there pops however often the geometry is recomputed. */
+  const trunk = radius > 0 ? corner / radius : 1;
+
+  const elbow: Array<readonly [number, number]> = [
+    [ax, ay],
+    [channel + corner, ay],
+    [channel, ay],
+    [channel, ay + direction * corner],
+    [channel, by - direction * corner],
+    [channel, by],
+    [channel - corner, by],
+    [bx, by]
+  ];
+
+  const points = elbow.map(([x, y], index) => {
+    const fraction = chordFractions[index];
+    const chordX = ax + (bx - ax) * fraction;
+    const chordY = ay + (by - ay) * fraction;
+    return `${round(chordX + (x - chordX) * trunk)} ${round(chordY + (y - chordY) * trunk)}`;
+  });
+
+  return `M ${points[0]} L ${points[1]} Q ${points[2]} ${points[3]} L ${points[4]} Q ${points[5]} ${points[6]} L ${points[7]}`;
 }
 
 function channelBounds(columns: EdgeColumnBounds[], toColumn: number) {
