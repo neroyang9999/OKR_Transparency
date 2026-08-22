@@ -102,7 +102,9 @@ Firestore documents:
 - `okrAdminEvents/{eventId}`
 - `okrFeedback/{feedbackId}`
 
-Before switching production to Firestore, migrate local JSON state:
+Production has run on Firestore since the July 2026 cutover, so this is history rather than a
+step to perform -- `deploy/scripts/provisioning/okr_migrate_data.sh` is the run that did it.
+To seed a *new* environment from local JSON state:
 
 ```powershell
 $env:OKR_STORAGE = "firestore"
@@ -159,19 +161,15 @@ The production deployment target is the `knowledge-base-496322` GCP project:
 - Storage: Firestore
 - Bilingual content: Cloud Translation Advanced using the Cloud Run service identity
 
-Build and push an image:
+Releasing a new version follows **`docs/RELEASE_CLOUD_RUN.md`**: Cloud Build produces an image,
+Cloud Run takes it as a candidate revision at 0% traffic, and traffic shifts only after the
+candidate has been checked. Nothing else is needed to ship.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\deploy\scripts\push-image.ps1 -Tag staging
-```
+The infrastructure itself was created by the gcloud scripts in
+`deploy/scripts/provisioning/`, which are the only record of how it was set up.
+`okr_finish_prod.sh` is the one that produced the configuration running today.
 
-Apply infrastructure:
-
-```powershell
-cd .\deploy\terraform
-copy terraform.tfvars.example terraform.tfvars
-terraform init
-terraform apply
-```
-
-See `deploy/terraform/README.md` for the full setup and cutover checklist.
+`deploy/terraform/` describes the same infrastructure but **has never been applied** -- no
+`terraform.tfstate` exists on any machine or in any bucket, and `terraform apply` against the
+existing project would try to create resources that are already there. Do not run it. See
+`deploy/terraform/README.md` for the evidence and the two options it leaves open.

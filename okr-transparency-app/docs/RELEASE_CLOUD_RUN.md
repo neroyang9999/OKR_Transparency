@@ -49,7 +49,10 @@ npm run build
 
 ## Terraform 与应用发布边界
 
-当前 Terraform 配置没有声明 remote backend，因此 Terraform 默认使用执行机本地 state。若当前机器找不到与生产环境匹配的 `terraform.tfstate` 和 `terraform.tfvars`，不要执行 `terraform apply`：空 state 可能把已经存在的 Artifact Registry、Cloud Run、IAP、Secret 和 IAM 资源视为未创建，导致创建失败、重复资源或配置漂移。
+**这套 Terraform 配置从未被应用过，任何地方都不存在 `terraform.tfstate`。** 线上是用
+`deploy/scripts/provisioning/` 里的 gcloud 脚本建的（产出当前配置的是 `okr_finish_prod.sh`）。
+所以不要执行 `terraform apply`：空 state 会把已经存在的 Artifact Registry、Cloud Run、IAP、Secret
+和 IAM 资源视为未创建，绝大多数会以 `ALREADY_EXISTS` 失败。详见 `deploy/terraform/README.md`。
 
 本次代码发布采用 Cloud Build 构建镜像，再通过 Cloud Run 创建 0 流量候选修订、完成冒烟验证后切换流量，不需要 Terraform，也不会迁移、覆盖或删除 Firestore 数据。
 
