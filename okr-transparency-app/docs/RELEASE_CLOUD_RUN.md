@@ -53,7 +53,9 @@ npm run build
 
 本次代码发布采用 Cloud Build 构建镜像，再通过 Cloud Run 创建 0 流量候选修订、完成冒烟验证后切换流量，不需要 Terraform，也不会迁移、覆盖或删除 Firestore 数据。
 
-但 Cloud Run 的镜像由 Terraform 的 `image_tag` 管理。直接更新 Cloud Run 镜像会产生 Terraform drift；下一次执行 Terraform 前，必须在持有生产 state 的部署机器上把 `terraform.tfvars` 的 `image_tag` 更新为同一个镜像 tag，或改用 Terraform 完成发布。
+镜像和流量分配归发布流程所有，Terraform 不再管这两个字段（`run.tf` 的 `lifecycle.ignore_changes`）。所以按本文档发布**不会**再产生 Terraform drift，也不需要在发布后手工去改 `terraform.tfvars`。
+
+但要在切流后更新 `deploy/terraform/image_tag.auto.tfvars`，见第 7 节。它是「线上现在跑什么」的记录，不是控制开关 —— 改它不会部署任何东西。
 
 以下变更仍应通过持有正确 state 的部署环境执行 Terraform：Cloud Run 服务配置、IAP、IAM、Secret、环境变量、扩缩容参数、Artifact Registry 和其他基础设施。
 
@@ -203,7 +205,21 @@ gcloud run services describe okr-transparency-app \
   --format='value(status.traffic)'
 ```
 
-## 7. 回滚
+## 7. 记录已部署的镜像 tag
+
+切流成功后，把 `deploy/terraform/image_tag.auto.tfvars` 更新为本次的 tag 并提交：
+
+```hcl
+image_tag = "v085-pr25-pr28-693dcb8"
+```
+
+为什么要做这件事：
+
+- 这是仓库里唯一一处记录「线上此刻跑的是哪个镜像」的地方，可 review、可查历史。`terraform.tfvars` 是 gitignore 的，只存在于某台机器上，谁都看不到。
+- Terraform 自动加载 `*.auto.tfvars`，且它的优先级**高于** `terraform.tfvars`，所以这个纳管的值会覆盖部署机器上可能早已过期的本地值（`terraform.tfvars.example` 里的示例值是 `staging`）。
+- 它只在 Terraform **首次创建**服务时被真正使用。既有服务的镜像由 `ignore_changes` 排除在外，所以改这个文件不会部署任何东西。
+
+## 8. 回滚
 
 保留上一版本 revision，不要立即删除。出现线上错误时，将流量切回已验证的 revision：
 
@@ -231,5 +247,6 @@ Cloud Build：...
 生产 revision：...
 生产流量：100%
 回滚 revision：...
+image_tag.auto.tfvars：已更新为本次 tag
 数据：Firestore 未迁移、未修改
 ```

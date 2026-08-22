@@ -11,7 +11,10 @@ variable "region" {
 }
 
 variable "image_tag" {
-  description = "Docker image tag already pushed to Artifact Registry."
+  # Read only when Terraform first creates the service; after that the lifecycle block in run.tf
+  # ignores the image, and the release process decides what is serving. Kept as a tracked record of
+  # what production is actually running -- see image_tag.auto.tfvars.
+  description = "Image tag Terraform starts a newly created service on, and a record of what is deployed."
   type        = string
 }
 
