@@ -20,7 +20,10 @@ try {
   docker build --platform linux/amd64 -t $image .
   docker push $image
   Write-Host "Pushed $image"
-  Write-Host "Set image_tag = `"$Tag`" in deploy/terraform/terraform.tfvars, then run terraform apply."
+  Write-Host "NOTE: releases go through docs/RELEASE_CLOUD_RUN.md, which builds with Cloud Build"
+  Write-Host "      and deploys a 0-traffic candidate. This script is a local docker build kept"
+  Write-Host "      for one-off images; it does not use the Cloud Build dependency cache, and"
+  Write-Host "      deploy/terraform has never been applied, so there is no terraform apply step."
 } finally {
   Pop-Location
 }

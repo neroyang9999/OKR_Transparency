@@ -99,30 +99,30 @@ terraform init
 
 ## Apply
 
-> **重要：只允许在持有生产 `terraform.tfstate` 和实际 `terraform.tfvars` 的部署机器上执行。**
+> **不要执行 `terraform apply`。** 上一节说明了原因：这套配置从未被应用，空 state 会去创建已经存在的
+> 资源。这里**不给** apply 的命令序列 —— 之前给了，而它是行不通的。
 >
-> 当前机器缺少与生产匹配的 state 或 tfvars 时，禁止执行 `terraform apply`。先找到 state 所在的部署环境；代码发布本身请按 `docs/RELEASE_CLOUD_RUN.md` 的 Cloud Build + Cloud Run 候选流程执行。
->
-> **先读 plan 再 apply。** 在 `ignore_changes` 落地后的第一次 apply 尤其要看：state 已经和现实错开
-> 一段时间了，那一次可能想改动一些别的东西。验收标准是 plan 里**没有** `containers[0].image`
-> 和 `traffic` 的变更，理想情况是整体 `No changes`。
+> 要接管现有资源，路径是 import，见上一节。日常发布请用 `docs/RELEASE_CLOUD_RUN.md`。
 
-```powershell
-cd .\deploy\terraform
-copy terraform.tfvars.example terraform.tfvars
-terraform init
-terraform apply
-```
+配置本身描述的目标状态（供 import 时对照）：Cloud Run 直连 IAP、`roles/run.invoker` 只授予 IAP
+服务代理、把准确的 JWT audience 注入应用。`IAP_EXPECTED_AUDIENCE` 不能去掉 —— 缺少或无效的
+IAP 签名 JWT 时应用会 fail closed。
 
-Terraform enables Cloud Run direct IAP, grants `roles/run.invoker` only to the
-IAP service agent, and injects the exact expected JWT audience into the app.
-Do not remove `IAP_EXPECTED_AUDIENCE`; the app fails closed when a signed IAP
-JWT is missing or invalid.
+已知配置与现实的差异（import 之前都要处理）：
+
+| 配置声明 | 线上实际 |
+| --- | --- |
+| `run.tf` 设 `FIRESTORE_DATABASE_ID` | 服务上没有这个环境变量 |
+| `google_project_iam_member.api_secret_accessor`（项目级） | `secretmanager.secretAccessor` 是**按 secret** 绑定的 |
+| `secrets.tf` 用 `random_password` 生成密钥值 | 密钥由 `okr_finish_prod.sh` 创建；若 import，Terraform 会想轮换它们，而且值会明文进 state |
 
 ## Migrate data
 
-Before production cutover, run from `okr-transparency-app` with credentials that
-can write Firestore:
+**这一步在 2026 年 7 月已经做过了**，生产自那时起就在 Firestore 上。实际执行的是
+`deploy/scripts/provisioning/okr_migrate_data.sh`。下面的命令保留是为了给**新环境**灌初始数据 ——
+对着现有生产环境跑它会覆盖数据。
+
+需要时，从 `okr-transparency-app` 用有 Firestore 写权限的凭证执行：
 
 ```powershell
 $env:OKR_STORAGE = "firestore"
