@@ -41,33 +41,61 @@ powershell -ExecutionPolicy Bypass -File .\deploy\scripts\push-image.ps1 -Tag st
 | 发布流程 | 线上跑哪个镜像、流量怎么在 revision 之间分配 |
 
 `run.tf` 用 `lifecycle.ignore_changes` 把 `template[0].containers[0].image` 和 `traffic` 排除在
-Terraform 之外。没有这一条时两边都认为自己拥有这两个字段，发布会让 Terraform 留着一个过期值，
-下一次 apply 就会用那个旧 tag 建一个新 revision、并把流量全切给它 —— 静默回滚生产。
+Terraform 之外。没有这一条，两边都认为自己拥有这两个字段，发布会让 Terraform 留着一个过期值。
+
+**注意这是预防性的**：见下一节 —— Terraform 目前没有管理任何资源，所以此刻不存在会被兑现的漂移。
+这一条是为了将来真的接管时不会踩上去。
 
 `var.image_tag` 因此只在**首次创建**服务时被读取。`image_tag.auto.tfvars` 里跟踪的值是
 「线上现在跑什么」的记录，由发布流程的最后一步更新，见 `docs/RELEASE_CLOUD_RUN.md`。
 
-## State 后端
+## 这套配置从未被应用过
 
-`versions.tf` 里有一个注释掉的 `backend "gcs"` 块。当前 state 是本地的：只有最后执行过 apply 的
-那台机器能继续 apply，`terraform.tfstate` 又在 gitignore 里，所以没人能 review 生产配置，
-而那台机器一旦丢失，全新的 `init` 会从空 state 开始，试图创建已经存在的资源。
+**线上不是 Terraform 建的。** 2026-08-22 排查确认：
 
-启用步骤（必须在持有当前 state 的机器上执行）：
+- 部署机器和 Cloud Shell 家目录里都**没有** `terraform.tfstate`、`terraform.tfvars`，
+  连 `.terraform/` 都没有 —— 也就是说从来没执行过 `terraform init`；
+- 项目里 5 个 GCS 桶中没有任何 tfstate；
+- Cloud Shell 家目录里那批实际用来建站的脚本（`deploy_okr_to_kb_project.sh`、`okr_secretize.sh`、
+  `okr_finish_prod.sh` 等）**一个 terraform 字样都没有**，全部是 `gcloud run` / `gcloud secrets` /
+  `gcloud iam` / `gcloud artifacts` 调用。
+
+所以不存在「state 丢了」的问题 —— 从来就没有 state。这套 `.tf` 文件是写好了但没走过的一条路。
+
+一个可验证的推论：`run.tf` 会设的 `FIRESTORE_DATABASE_ID` 在线上服务上**不存在**（其余 8 个环境变量
+都在）。配置往前改过，而那次改动从没落到线上。
+
+### 因此 `terraform apply` 现在不能直接跑
+
+空 state 下 apply 会试图**创建** Artifact Registry、Cloud Run 服务、Secret、服务账号 ——
+这些都已经存在，多数会以 `ALREADY_EXISTS` 报错失败。它不会静默替换线上，但 IAM binding 这类
+累加型资源可能在报错前成功几条，留下多余绑定。
+
+要让 Terraform 接管现有资源，只有一条路：先 `terraform import` 把每个资源逐个导入，
+`terraform plan` 显示 `No changes` 之后才算接管成功。这是一次性的工作量，取决于你是否打算
+以后用 Terraform 管基础设施。
+
+### 如果决定接管，state 后端一并配好
+
+`versions.tf` 里有一个注释掉的 `backend "gcs"` 块。首次 `init` 之前就把它打开，
+可以省掉以后再迁一次：
 
 ```powershell
 gcloud storage buckets create gs://<BUCKET> --project=knowledge-base-496322 --location=us-west1 --uniform-bucket-level-access
 gcloud storage buckets update gs://<BUCKET> --versioning
-copy terraform.tfstate terraform.tfstate.before-backend-migration
 # 取消 versions.tf 中 backend 块的注释并填入桶名，然后：
-terraform init -migrate-state
+terraform init
+# 接着逐个 terraform import，直到 terraform plan 输出 No changes
 ```
 
-`init -migrate-state` 只是把 state 文件复制进桶里，不调用任何会改动基础设施的 GCP API，
-因此不会影响正在运行的服务。
+同时建议把 `.terraform.lock.hcl` 纳入版本控制（目前在 gitignore 里），
+否则不同机器 `init` 可能拉到不同的 provider 版本，plan 结果不可复现。
 
-迁移完成后建议把 `.terraform.lock.hcl` 也纳入版本控制（目前在 gitignore 里），
-否则不同机器 `init` 可能拉到不同的 provider 版本，plan 结果因此不可复现。
+### 如果决定不接管
+
+那就把「gcloud 脚本是唯一事实来源」这件事写明，并认真考虑删掉这批 `.tf` 文件。
+留一份从未运行、也没人敢运行的配置是最差的状态 —— 它会让读代码的人（包括
+写下这份文档之前的我）以为基础设施是被 IaC 管着的，并据此做出错误判断。
 
 ## Apply
 

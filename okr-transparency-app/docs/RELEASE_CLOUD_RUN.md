@@ -55,6 +55,8 @@ npm run build
 
 镜像和流量分配归发布流程所有，Terraform 不再管这两个字段（`run.tf` 的 `lifecycle.ignore_changes`）。所以按本文档发布**不会**再产生 Terraform drift，也不需要在发布后手工去改 `terraform.tfvars`。
 
+而且现在根本没有漂移可言：**这套 Terraform 配置从未被应用过**，线上是用 gcloud 脚本建的，任何机器上都不存在 `terraform.tfstate`。详见 `deploy/terraform/README.md`。上面那条 `ignore_changes` 是预防性的，为将来真的用 Terraform 接管时准备。
+
 但要在切流后更新 `deploy/terraform/image_tag.auto.tfvars`，见第 7 节。它是「线上现在跑什么」的记录，不是控制开关 —— 改它不会部署任何东西。
 
 以下变更仍应通过持有正确 state 的部署环境执行 Terraform：Cloud Run 服务配置、IAP、IAM、Secret、环境变量、扩缩容参数、Artifact Registry 和其他基础设施。

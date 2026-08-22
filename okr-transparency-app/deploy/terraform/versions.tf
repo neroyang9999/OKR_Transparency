@@ -1,24 +1,22 @@
 terraform {
   required_version = ">= 1.6.0"
 
-  # State currently lives on whichever machine last ran apply, and terraform.tfstate is gitignored:
-  # only one machine can apply, nobody can review what production is configured as, and losing that
-  # machine means a fresh init starts from empty state and tries to create the Artifact Registry,
-  # Cloud Run, IAP, Secret and IAM resources that already exist.
+  # There is no state to configure a backend for yet: this configuration has never been applied.
+  # The live project was built with the ad-hoc gcloud scripts described in README.md, and no
+  # terraform.tfstate exists on any machine or in any bucket in the project.
   #
-  # Left commented because the bucket does not exist yet -- an active backend block would break
-  # `terraform init` for everyone until it does. To turn it on, from the machine that holds the
-  # current state:
+  # So this block is for the day somebody adopts the existing resources -- turn it on *before* the
+  # first `init`, so the state is remote from the start and never needs migrating:
   #
   #   gcloud storage buckets create gs://<BUCKET> --project=knowledge-base-496322 \
   #     --location=us-west1 --uniform-bucket-level-access
   #   gcloud storage buckets update gs://<BUCKET> --versioning
-  #   cp terraform.tfstate terraform.tfstate.before-backend-migration
   #   # uncomment the block below, fill in the bucket, then:
-  #   terraform init -migrate-state
+  #   terraform init
+  #   # then import each existing resource until `terraform plan` reports No changes
   #
-  # `init -migrate-state` copies the state file into the bucket. It calls no GCP API that changes
-  # infrastructure, so it cannot affect the running service.
+  # Left commented because the bucket does not exist: an active backend block breaks
+  # `terraform init` for everyone until it does.
   #
   # backend "gcs" {
   #   bucket = "<BUCKET>"
