@@ -169,7 +169,8 @@ The infrastructure itself was created by the gcloud scripts in
 `deploy/scripts/provisioning/`, which are the only record of how it was set up.
 `okr_finish_prod.sh` is the one that produced the configuration running today.
 
-`deploy/terraform/` describes the same infrastructure but **has never been applied** -- no
-`terraform.tfstate` exists on any machine or in any bucket, and `terraform apply` against the
-existing project would try to create resources that are already there. Do not run it. See
-`deploy/terraform/README.md` for the evidence and the two options it leaves open.
+To see which version is live: `gcloud run services describe okr-transparency-app
+--project=knowledge-base-496322 --region=us-west1 --format='value(status.traffic)'`.
+
+`deploy/scripts/push-image.ps1` builds and pushes an image with local Docker. It is a one-off
+alternative that skips the Cloud Build dependency cache, so releases should use the runbook.

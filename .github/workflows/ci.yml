@@ -50,27 +50,3 @@ jobs:
             git status --porcelain -uno
             exit 1
           fi
-
-  # The HCL had no gate at all: it is only ever exercised on the one machine that holds the state,
-  # so a syntax or schema error would surface there rather than on the PR that introduced it.
-  # `init -backend=false` downloads the providers without touching any state, and `validate` makes
-  # no API calls -- so this needs no credentials and cannot reach the running service.
-  terraform:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: okr-transparency-app/deploy/terraform
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
-
-      - run: terraform fmt -check -recursive
-
-      - run: terraform init -backend=false
-
-      - run: terraform validate

@@ -46,8 +46,14 @@ tag。日常发布请用 `docs/RELEASE_CLOUD_RUN.md`。
 `OKR_ADMIN_TOKEN` 都是 secret 引用）。而 `okr_secretize.sh` 的存在说明当时就发现并修掉了这个问题。
 留在这里是为了完整记录，**不要照这个模式写新脚本**。
 
-## 和 `deploy/terraform/` 的关系
+## 曾经有一套 Terraform 配置
 
-那套 Terraform 配置**从未被应用过** —— 任何机器上都不存在 `terraform.tfstate`，连 `.terraform/`
-都没有，而这些脚本里一个 `terraform` 字样都没有。线上是这些 gcloud 脚本建的。
-详见 `deploy/terraform/README.md`。
+`deploy/terraform/` 里曾有一套描述同一套基础设施的 Terraform 配置。它**从未被应用过一次** ——
+任何机器和任何 GCS 桶里都不存在 `terraform.tfstate`，连 `.terraform/` 都没有。2026-08-22 删除。
+
+删除的原因不是「Terraform 不好」，而是那份配置唯一在产生的作用是误导读者：它让人以为基础设施被
+IaC 管着，并据此推断出一个并不存在的漂移风险。想接管现有资源需要逐个 `terraform import`，
+而且它的 `secrets.tf` 会让生产密钥明文进 state —— 对一个几乎不变的内部工具不划算。
+
+要考古的话在 git 历史里（删除提交的 message 记录了完整判断）。将来如果真的要用 Terraform，
+更合理的做法是从零建新环境，而不是 import 这套。
