@@ -4,4 +4,4 @@
 #
 # Update this as the last step of a release, once traffic has been shifted. It is a record, not a
 # control: run.tf ignores the image, so changing this does not deploy anything.
-image_tag = "v085-pr25-pr28-693dcb8"
+image_tag = "v086-pr29-pr30-17a6465"
