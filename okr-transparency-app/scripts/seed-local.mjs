@@ -23,7 +23,14 @@
  *   node scripts/seed-local.mjs --as liang.zhang@unitxlabs.com
  *   node scripts/seed-local.mjs --team "AP OPS" --as zhicheng@unitxlabs.com
  *   node scripts/seed-local.mjs --no-member-aligned    # member Objectives all start unaligned
+ *   node scripts/seed-local.mjs --map                  # every configured team, for the map view
  *   node scripts/seed-local.mjs --restore              # undo everything this wrote
+ *
+ * `--map` seeds the whole configured org rather than one chain, because the alignment map only
+ * shows what it was built for once all three columns are populated: several Objectives landing on
+ * one parent (which is what makes the channels share), cards of noticeably different heights (which
+ * is what puts a small rise between two that look level), and rows far enough apart that focusing
+ * one has to lift the others a long way.
  */
 
 import { execFileSync } from "node:child_process";
@@ -70,7 +77,7 @@ function seed() {
   assertDataDirClean();
   backup();
 
-  const records = buildRecords();
+  const records = args.map ? buildMapRecords() : buildRecords();
   writeJson(join(dataDir, "okr-snapshot.json"), {
     version: 1,
     meta: {
@@ -103,14 +110,30 @@ function seed() {
   const query = new URLSearchParams({ team, period: periodId, lang: "zh" });
   const memberQuery = new URLSearchParams({ team, member: memberEmail, period: periodId, mode: "edit", lang: "zh" });
 
-  console.log(`seeded ${records.length} records for ${team} / ${periodId}, signed in as ${memberEmail}`);
-  console.log(`  resolved: team owner "${teamOwner}", member "${memberName}"${parentTeam ? `, parent ${parentTeam} / "${parentOwner}"` : ", no parent team"}`);
-  console.log(`  member Objectives: ${memberAligned ? "one aligned, one unaligned" : "both unaligned"}`);
-  console.log("");
-  console.log("start the app, then open:");
-  console.log(`  team page    /?${query}`);
-  console.log(`  member edit  /?${memberQuery}`);
-  console.log("");
+  if (args.map) {
+    const teamObjectives = records.filter((item) => !item.parent_id && item.objective_scope === "team");
+    const memberObjectives = records.filter((item) => item.objective_scope === "member");
+    console.log(`seeded ${records.length} records across the whole configured org / ${periodId}, signed in as ${memberEmail}`);
+    console.log(`  ${teamObjectives.length} team Objectives, ${memberObjectives.length} member Objectives`);
+    const secondLevel = teamObjectives.filter((item) =>
+      (config.teams ?? []).some((entry) => entry.name === item.team && entry.parentTeam));
+    console.log(`  ${teamObjectives.length - secondLevel.length} root, ${secondLevel.length} second-level`);
+    console.log(`  unaligned on purpose: ${secondLevel.filter((item) => !item.aligned_to_id).length} second-level, ` +
+      `${memberObjectives.filter((item) => !item.aligned_to_id).length} member`);
+    console.log("");
+    console.log("start the app, then open:");
+    console.log(`  alignment map  /map?period=${periodId}&lang=zh`);
+    console.log("");
+  } else {
+    console.log(`seeded ${records.length} records for ${team} / ${periodId}, signed in as ${memberEmail}`);
+    console.log(`  resolved: team owner "${teamOwner}", member "${memberName}"${parentTeam ? `, parent ${parentTeam} / "${parentOwner}"` : ", no parent team"}`);
+    console.log(`  member Objectives: ${memberAligned ? "one aligned, one unaligned" : "both unaligned"}`);
+    console.log("");
+    console.log("start the app, then open:");
+    console.log(`  team page    /?${query}`);
+    console.log(`  member edit  /?${memberQuery}`);
+    console.log("");
+  }
   console.log("when done:  node scripts/seed-local.mjs --restore");
 }
 
@@ -162,6 +185,134 @@ function buildRecords() {
     })
   ];
   return records;
+}
+
+/**
+ * Every enabled team, shaped for the alignment map rather than for one editor.
+ *
+ * The shapes matter more than the volume. Objective titles come in three lengths on purpose: the
+ * cards they produce differ in height, which is the only way to get a pair whose centres sit a few
+ * pixels apart — the case where a route has to read as straight rather than as a step. Two
+ * Objectives per root team make the second level land on more than one parent, so the channels in
+ * the first gap have to share. And every fourth member starts unaligned, so the amber state is on
+ * screen without having to go and break something.
+ */
+function buildMapRecords() {
+  const enabledTeams = (config.teams ?? []).filter((item) => item.enabled);
+  const roots = enabledTeams.filter((item) => !item.parentTeam);
+  const children = enabledTeams.filter((item) => item.parentTeam);
+  const records = [];
+
+  const rootObjectiveIds = new Map();
+  roots.forEach((rootTeam, rootIndex) => {
+    const ids = [];
+    for (let n = 1; n <= 2; n += 1) {
+      const okrId = `${slug(rootTeam.name)}-O${n}`;
+      ids.push(okrId);
+      records.push(record({
+        okr_id: okrId,
+        team: rootTeam.name,
+        owner: ownerNameOf(rootTeam),
+        objective: objectiveTitle(rootTeam.name, rootIndex + n),
+        score: seededProgress(rootIndex + n),
+        confidence: seededConfidence(rootIndex + n)
+      }));
+      records.push(krFor(okrId, rootTeam.name, ownerNameOf(rootTeam), rootIndex + n));
+    }
+    rootObjectiveIds.set(rootTeam.name, ids);
+  });
+
+  children.forEach((childTeam, childIndex) => {
+    const parents = rootObjectiveIds.get(childTeam.parentTeam) ?? [];
+    /** A band needs three Objectives before it folds itself on first paint, so one team gets three
+     *  and the folded-band anchor is on screen without a click. */
+    const count = childIndex === 0 ? 3 : childIndex % 3 === 1 ? 2 : 1;
+    for (let n = 1; n <= count; n += 1) {
+      const okrId = `${slug(childTeam.name)}-O${n}`;
+      /** One Objective left off the tree: the map's whole point is showing what has not aligned. */
+      const orphan = childIndex === 2 && n === 1;
+      records.push(record({
+        okr_id: okrId,
+        team: childTeam.name,
+        owner: ownerNameOf(childTeam),
+        objective: objectiveTitle(childTeam.name, childIndex + n),
+        aligned_to_id: orphan || parents.length === 0 ? "" : parents[(childIndex + n) % parents.length],
+        score: seededProgress(childIndex + n + 1),
+        confidence: seededConfidence(childIndex + n + 1)
+      }));
+      records.push(krFor(okrId, childTeam.name, ownerNameOf(childTeam), childIndex + n));
+    }
+  });
+
+  enabledTeams.forEach((teamConfig, teamIndex) => {
+    const members = (config.users ?? []).filter((user) =>
+      user.enabled && (user.teams ?? []).includes(teamConfig.name));
+    const target = `${slug(teamConfig.name)}-O1`;
+    const hasTarget = records.some((item) => item.okr_id === target);
+
+    members.forEach((member, memberIndex) => {
+      const memberName = member.displayName || member.email.split("@")[0];
+      records.push(record({
+        okr_id: `${slug(teamConfig.name)}-${slug(member.email.split("@")[0])}-M1`,
+        team: teamConfig.name,
+        owner: memberName,
+        objective: memberTitle(memberName, teamIndex + memberIndex),
+        objective_scope: "member",
+        owner_email: member.email,
+        aligned_to_id: !hasTarget || memberIndex % 4 === 3 ? "" : target,
+        score: seededProgress(teamIndex + memberIndex),
+        confidence: seededConfidence(teamIndex + memberIndex)
+      }));
+    });
+  });
+
+  return records;
+}
+
+function krFor(objectiveId, teamName, owner, seed) {
+  return record({
+    okr_id: `${objectiveId}-KR1`,
+    team: teamName,
+    owner,
+    objective: objectiveTitle(teamName, seed),
+    kr: "把上面这件事拆成可度量的一条",
+    parent_id: objectiveId,
+    score: seededProgress(seed + 2),
+    confidence: seededConfidence(seed + 2)
+  });
+}
+
+/** Three lengths, cycled: the cards they produce differ in height, which is what the map's routing
+ *  has to cope with. A single length would put every card centre on the same row. */
+function objectiveTitle(teamName, seed) {
+  const shapes = [
+    `${teamName} 目标`,
+    `${teamName}：把交付节奏稳定在两周一个可用版本`,
+    `${teamName}：把端到端交付周期压到两周，并让每次发布都带上可回滚的验证脚本和一份回归基线`
+  ];
+  return shapes[Math.abs(seed) % shapes.length];
+}
+
+function memberTitle(memberName, seed) {
+  const shapes = [
+    `${memberName} 的个人目标`,
+    `${memberName}：承接团队目标，负责其中的验证与回归部分`,
+    `${memberName}：把手上这条链路的失败率降到 1% 以下，并补齐缺失的回归用例与告警`
+  ];
+  return shapes[Math.abs(seed) % shapes.length];
+}
+
+/** Spread across the range so the progress bars and the status filters both have something to do. */
+function seededProgress(seed) {
+  return [0.15, 0.4, 0.62, 0.85, 0.28, 0.7][Math.abs(seed) % 6];
+}
+
+function seededConfidence(seed) {
+  return ["Green", "Yellow", "Green", "Red", "Green", "Yellow"][Math.abs(seed) % 6];
+}
+
+function ownerNameOf(teamConfig) {
+  return resolveTeamOwner(teamConfig)?.displayName ?? teamConfig.owner;
 }
 
 function record(partial) {
@@ -252,6 +403,7 @@ function parseArgs(argv) {
     const key = camel(token.replace(/^--/, ""));
     if (key === "restore") { parsed.restore = true; continue; }
     if (key === "noMemberAligned") { parsed.memberAligned = false; continue; }
+    if (key === "map") { parsed.map = true; continue; }
     parsed[key] = argv[index + 1];
     index += 1;
   }

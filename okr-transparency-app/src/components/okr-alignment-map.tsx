@@ -46,6 +46,10 @@ const canvasBottomReserve = 80;
  *  the cards growing, so card, gap, and type sizes keep the ratios they were designed at. */
 const canvasBaselineWidth = 1900;
 const maxCanvasZoom = 1.4;
+/** How long the edges keep following the cards after a layout change. The cards glide for 150ms
+ *  (`duration-150`); the rest is headroom for a band that opened on the way and for the frame the
+ *  browser spends laying the column out again. Frames past the last movement cost a comparison. */
+const edgeFollowDuration = 320;
 
 export function OkrAlignmentMap({
   records,
@@ -205,20 +209,23 @@ export function OkrAlignmentMap({
     collapsed.has(nodeId) && !searchOpenedBands.has(nodeId) && !chainOpenedBands.has(nodeId);
 
 
-  const measure = useCallback(() => {
+  /** Grow the canvas to the bottom of the viewport. Offset is taken in document space so a
+   *  scrolled page (short viewports, where the floor kicks in) does not feed back into it. Kept
+   *  apart from the routing below, which runs every frame of a card transition and must not be
+   *  writing viewport state at 60fps. */
+  const measureViewport = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const documentTop = scroller.getBoundingClientRect().top + window.scrollY;
+    const available = window.innerHeight - documentTop - canvasBottomReserve;
+    setCanvasHeight(Math.max(minCanvasHeight, Math.floor(available)));
+    /** offsetWidth, not clientWidth: a scrollbar appearing must not feed back into the zoom. */
+    setCanvasZoom(zoomForWidth(scroller.offsetWidth));
+  }, []);
+
+  const routeEdges = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    /** Grow the canvas to the bottom of the viewport. Offset is taken in document space so a
-     *  scrolled page (short viewports, where the floor kicks in) does not feed back into it. */
-    const scroller = scrollRef.current;
-    if (scroller) {
-      const documentTop = scroller.getBoundingClientRect().top + window.scrollY;
-      const available = window.innerHeight - documentTop - canvasBottomReserve;
-      setCanvasHeight(Math.max(minCanvasHeight, Math.floor(available)));
-      /** offsetWidth, not clientWidth: a scrollbar appearing must not feed back into the zoom. */
-      setCanvasZoom(zoomForWidth(scroller.offsetWidth));
-    }
 
     const origin = canvas.getBoundingClientRect();
     /** Rects come back in screen pixels; the SVG draws in the canvas's own pre-zoom units. */
@@ -260,7 +267,10 @@ export function OkrAlignmentMap({
       }];
     });
 
-    setEdgePaths(buildEdgePaths(inputs, columns));
+    /** Routing runs on every frame of a transition, so most calls land on geometry that has not
+     *  moved. Bailing out here keeps those frames from re-rendering the whole map. */
+    const next = buildEdgePaths(inputs, columns);
+    setEdgePaths((current) => (sameEdgePaths(current, next) ? current : next));
   }, [model.edges, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
@@ -277,22 +287,31 @@ export function OkrAlignmentMap({
   }, [activeNodeId, chain, chainOpenedBands, anchorFallback, canvasZoom]);
 
   useLayoutEffect(() => {
-    /** Measure before the browser paints: a zoom change re-lays the cards out, and edges routed
-     *  against the previous layout would show in the wrong place for a frame. */
-    measure();
-    let firstFrame = 0;
-    let secondFrame = 0;
-    firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(measure);
-    });
-    const timers = [window.setTimeout(measure, 120), window.setTimeout(measure, 320)];
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      cancelAnimationFrame(secondFrame);
-      timers.forEach((timer) => window.clearTimeout(timer));
+    /** Both before the browser paints: the canvas is still at its design height until this runs,
+     *  and a zoom change re-lays the cards out -- edges routed against the previous layout would
+     *  show in the wrong place for a frame. */
+    measureViewport();
+    routeEdges();
+    /** With the transitions off the cards are already where they are going to be, so one pass is
+     *  the whole job -- and a frame loop would be motion nobody asked for. */
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    /** Then follow the cards frame by frame until they have settled. The cards interpolate their
+     *  transform on the compositor, so anything less than every frame leaves the line parked while
+     *  the card is already halfway across, and the catch-up reads as a jump rather than as the
+     *  same movement. Sampling this a handful of times is what made the bundle look unnatural. */
+    let frame = 0;
+    let start: number | null = null;
+    const step = (now: number) => {
+      if (start === null) start = now;
+      routeEdges();
+      if (now - start < edgeFollowDuration) frame = requestAnimationFrame(step);
     };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
   }, [
-    measure,
+    measureViewport,
+    routeEdges,
     lift,
     chainOpenedBands,
     collapsedGroups,
@@ -307,15 +326,19 @@ export function OkrAlignmentMap({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const observer = new ResizeObserver(() => measure());
+    const sync = () => {
+      measureViewport();
+      routeEdges();
+    };
+    const observer = new ResizeObserver(sync);
     observer.observe(canvas);
-    window.addEventListener("resize", measure);
-    void document.fonts.ready.then(() => measure());
+    window.addEventListener("resize", sync);
+    void document.fonts.ready.then(sync);
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", sync);
     };
-  }, [measure]);
+  }, [measureViewport, routeEdges]);
 
   /** Two fade-out rules at once would be unreadable, so filtering drops any locked focus. */
   const changeStatusFilter = (status: StatusFilter) => {
@@ -1240,6 +1263,10 @@ function appliedTranslateY(element: HTMLElement) {
 /** A lifted card floats over whatever it landed on, which is already faded out of the way. */
 const liftedCard = "z-20 shadow-[0_10px_30px_rgba(16,24,40,0.18)]";
 
+function sameEdgePaths(a: EdgePath[], b: EdgePath[]) {
+  return a.length === b.length && a.every((path, index) => path.id === b[index].id && path.d === b[index].d);
+}
+
 function sameLift(a: Map<string, number>, b: Map<string, number>) {
   return a.size === b.size && Array.from(a).every(([nodeId, offset]) => b.get(nodeId) === offset);
 }
@@ -1254,7 +1281,7 @@ function liftStyle(lift?: number) {
  * Only the other columns move: a chain never has two cards of the same column that both need to
  * sit beside the active one, and moving the column the cursor is in would slide the card out from
  * under the pointer. Offsets are transforms rather than layout, so nothing reflows and the edges
- * re-route on their own once `measure` reads the moved rects back.
+ * re-route on their own once `routeEdges` reads the moved rects back.
  */
 function buildLift(
   activeNodeId: string | null,
