@@ -37,6 +37,25 @@ tag。日常发布请用 `docs/RELEASE_CLOUD_RUN.md`。
 | `okr_migrate_data.sh` | 一次性把 `data/*.json` 灌进 Firestore。**内嵌的数据载荷已在抓取时移除**，见文件内说明 |
 | `deploy_okr_app.sh` | 更早的一次部署，目标是 **另一个项目** `gen-lang-client-0913302758`（已废弃） |
 
+## 这些脚本的扩缩容参数已经与线上不一致
+
+`deploy_okr_app.sh`、`deploy_okr_to_kb_project.sh`、`deploy_okr_smoke_kb.sh`、
+`deploy_okr_minimal_kb.sh` 里写的是 `--min-instances 0`；产出当前生产配置的
+`okr_finish_prod.sh` 干脆没提这个参数，用的是 Cloud Run 默认值 0。
+
+**2026-09-03 线上已改成 `min-instances=1`。** 原因是缩容到零导致几乎每次访问都是冷启动：
+7 天 71 次冷启动，每次冷启动前空闲 16.6–305 分钟（Cloud Run 空闲实例约保留 15 分钟），
+用户实际等待 4–6.6 秒；`request_latencies` 呈双峰 —— p50 只有 7.9 ms，p95 却是 2379 ms。
+代价约 $12.50/月。
+
+当时同一批数据还显示 7 天内 **0 次**是因容量不足扩容，所以 `--max-instances 3` 和
+`--concurrency 80` 保持未动。
+
+按上面「这是历史，不是 runbook」的定位，**这几个脚本没有跟着改** —— 它们记录的是当初实际
+跑过的命令，改了就不再是历史记录了。线上的当前值以 `docs/RELEASE_CLOUD_RUN.md` 的
+「生产环境固定信息」为准，改扩缩容参数的正确步骤也在那里（**注意流量是钉死的，
+改模板必须补一步 `update-traffic`，否则配置不生效而 gcloud 输出看起来正常**）。
+
 ## 一条安全说明
 
 `deploy_okr_minimal_kb.sh` 用 `--set-env-vars AUTH_SECRET=${AUTH_SECRET}` 传密钥。Cloud Run 的
