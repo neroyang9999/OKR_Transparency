@@ -76,6 +76,8 @@ npm run seed:local:restore                          # 还原（务必执行）
 - **`data/okr-drafts.json` 和 `data/okr-period-snapshots.json` 列在 `.gitignore` 里却仍被跟踪**（先提交后加规则，gitignore 对已跟踪文件无效）。本地跑应用照样会把它们改脏，提交前务必 `git status -- data`。CI 有一步专门拦这个。
 - **修"某功能拿不到数据"类 bug 时，先查谁消费这个返回值。** 数据一旦出现，所有依赖它的休眠代码会同时激活。真实案例：修好成员对齐候选后，一段一直是死代码的 `withDefaultAlignment` 被唤醒，开始自动预选对齐目标，导致又发一版。改前先 `grep` 消费点，并把它们列进验证清单。
 - **验证时"没要求却发生的行为"是疑点，不是成功信号。** 上面那次自动预选，第一轮本地验证就看到了，却被当成"修复生效"的证据。
+- **线上 Cloud Run 的流量钉死在具体 revision，改配置必须补一步 `update-traffic`。** `gcloud run services update --min-instances=1` 只会新建一个拿不到流量的 revision，生产继续跑旧配置 —— 而 gcloud 会打印 `revision <旧名字> has been deployed and is serving 100 percent of traffic`，看起来完全成功（那个名字是当前 serving 的旧 revision，不是它刚建的）。service 模板里的 `minScale: '1'` 也确实写上了，看配置 diff 同样像成功。**验证要查实际 serving 的那个 revision，不要查 service 模板。** 详见 `okr-transparency-app/docs/RELEASE_CLOUD_RUN.md` 的"改扩缩容参数"一节。
+- **`instance_count` 指标不上报 min-instance 常驻的实例。** 上面那次是靠"指标 24 分钟没数据"发现没生效的 —— 但改对之后该指标的 active/idle 依然全是 0，差点被反向误判成失败。验证常驻实例要看 `billable_instance_time`（持续 `1.00` = 1 个实例在计费）和 revision 状态里的 `MinInstancesProvisioned`。**一个指标能证伪不代表它能证实。**
 
 ## 其他
 

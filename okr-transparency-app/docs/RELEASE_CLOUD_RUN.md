@@ -12,6 +12,7 @@
 - Cloud Run 原始 URL：`https://okr-transparency-app-403984849396.us-west1.run.app/`
 - 生产认证：IAP；测试账号通常为 `xinyang.yang@unitxlabs.com`
 - 生产存储：Firestore
+- 扩缩容：`min-instances=1` / `max-instances=3` / `concurrency=80`（`cpu:1` / `memory:1Gi`）
 
 生产 OKR 数据不在镜像中。构建和切换镜像不会迁移、覆盖或删除 Firestore 数据。
 
@@ -54,6 +55,69 @@ npm run build
 Cloud Run 服务本身、IAP、IAM、Secret、环境变量、扩缩容参数、Artifact Registry 是用
 `deploy/scripts/provisioning/` 里的 gcloud 脚本建立的（产出当前配置的是 `okr_finish_prod.sh`）。
 要改这些，改脚本并走 PR，不要在控制台里手工改 —— 否则又会出现一份没人能 review 的线上状态。
+
+## 改扩缩容参数：流量是钉死的，必须补一步切流量
+
+这个 service 的 traffic 块把 `percent: 100` 显式钉在具体 `revisionName` 上，**不是**
+`latestRevision: true`（服务上还挂着十几个 tag 化 revision）。
+
+后果：任何改 revision 模板的操作 —— `--min-instances`、`--cpu`、`--memory`、改环境变量 ——
+只会**新建一个拿不到流量的 revision**，生产继续跑旧配置。
+
+**这个坑的恶劣之处在于 gcloud 的输出看起来完全正常。** 2026-09-03 实际踩到：跑完
+`gcloud run services update --min-instances=1` 后 gcloud 打印
+
+```text
+revision okr-transparency-app-v086-pr29-pr30-17a6465 has been deployed and is serving 100 percent of traffic
+```
+
+那个名字是**当前 serving 的旧 revision**，不是它刚建的那个。而 `describe --format=export`
+里模板确实写着 `minScale: '1'`，看配置 diff 也像成功了。
+
+正确做法是两步，并且按本文的命名习惯给 revision 起可追溯的名字：
+
+```bash
+# 1) 建带新配置的 0 流量 revision
+gcloud run services update okr-transparency-app \
+  --project=knowledge-base-496322 --region=us-west1 \
+  --min-instances=1 \
+  --revision-suffix=<发布tag>-min1 \
+  --no-traffic
+
+# 2) 切流量过去（不做这步等于没改）
+gcloud run services update-traffic okr-transparency-app \
+  --project=knowledge-base-496322 --region=us-west1 \
+  --to-revisions=okr-transparency-app-<发布tag>-min1=100
+```
+
+### 验证要查 serving revision，不要查 service 模板
+
+```bash
+SERVING=$(gcloud run services describe okr-transparency-app --region us-west1 \
+  --project knowledge-base-496322 \
+  --format='value(status.traffic.filter("percent=100").extract("revisionName").flatten())')
+gcloud run revisions describe "$SERVING" --region us-west1 --project knowledge-base-496322 \
+  --format="value(metadata.annotations['autoscaling.knative.dev/minScale'])"
+```
+
+### 验证 min-instances 生效：别看 `instance_count`
+
+`run.googleapis.com/container/instance_count` **不上报 min-instance 常驻的实例**（active 和
+idle 都是 0），会让人误判成没生效。看这两个：
+
+- `run.googleapis.com/container/billable_instance_time` —— 持续为 `1.00` 即 1 个实例常驻在计费；
+- revision 的 status 条件里的 `MinInstancesProvisioned`。
+
+```bash
+gcloud run revisions describe <REVISION> --region us-west1 --project knowledge-base-496322 \
+  --format='value(status.conditions)' | tr ';' '\n' | grep -i mininstances
+```
+
+### 日常发版不会带掉 min-instances
+
+第 4 步的 `gcloud run deploy` 不带 `--min-instances`，会从 service 模板继承当前值；第 6 步
+切流量后旧 revision 自动缩到零（已验证不会双份计费）。所以按本文流程发版是安全的，
+**不需要**每次重新指定扩缩容参数。
 
 ## 1. 准备干净主线
 
