@@ -4,6 +4,10 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.7 - 2026-09-03
+
+- Stop prefetching every team, period and KR detail link on the overview page. One load fired 63 requests in 15 sequential waves over 6.6 seconds, 59 of them link prefetches the server answered in 6-41ms each -- the wait was round trips, not work, and the waves were spaced at the round-trip time to the region. Because the page navigates by query parameter, each team, period and detail panel is a separate payload, so the request count grew with the org and the OKR tree. The detail panels, team sidebar, period switcher, language toggle and edit button no longer prefetch: 44 prefetch requests on a seeded org drop to 10. Clicking one of those links now costs a single round trip for a payload under a kilobyte. The top navigation still prefetches.
+
 ## v0.8.6 - 2026-08-22
 
 - Make the alignment view's connector lines move with the cards they join. The lines were re-routed at a handful of sampled moments while the cards glide continuously, so a line stayed put while its card was already halfway across and then jumped to catch up. A route also changed shape as two cards levelled out, and a near-level pair on the outermost channel held a flat run before kinking beside it — the map's first row did that for less than a pixel of height difference. Lines now follow the cards every frame and settle onto a straight line as a pair levels out.
