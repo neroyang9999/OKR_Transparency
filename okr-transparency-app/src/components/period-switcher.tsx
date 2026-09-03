@@ -79,6 +79,7 @@ function PeriodTab({
   return (
     <Link
       href={periodHref(period.id, selectedTeam, lang, mode, selectedMemberEmail)}
+      prefetch={false}
       className={cn(
         "grid h-10 min-w-40 place-items-center border-l border-border px-5 text-sm font-medium transition-colors",
         selected ? "bg-blue-50/70 text-blue-600" : "text-slate-700 hover:bg-slate-50"
@@ -137,6 +138,7 @@ function PeriodArrow({
   return (
     <Link
       href={periodHref(period.id, selectedTeam, lang, mode, selectedMemberEmail)}
+      prefetch={false}
       className="group relative grid h-10 w-10 shrink-0 place-items-center border-l border-border text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-950"
       aria-label={label}
     >

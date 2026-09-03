@@ -152,6 +152,7 @@ function LanguageToggle({
         <Link
           key={lang}
           href={hrefFor(lang)}
+          prefetch={false}
           className={cn(
             "grid h-7 min-w-9 place-items-center rounded px-2 text-slate-600 hover:bg-slate-100 hover:text-slate-950",
             currentLang === lang && "bg-blue-50 text-blue-700"

@@ -145,6 +145,7 @@ export default async function HomePage({
                     detail: "",
                     mode: "edit"
                   }), lang)}
+                  prefetch={false}
                   className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
                 >
                   {t(lang, "editOkrs")}
