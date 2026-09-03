@@ -82,6 +82,7 @@ export function TeamSidebar({
                 >
                   <Link
                     href={hrefWithLang(`/?team=${encodeURIComponent(item.name)}`, lang)}
+                    prefetch={false}
                     className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5"
                   >
                     <span className={cn(
@@ -138,6 +139,7 @@ export function TeamSidebar({
                           >
                             <Link
                               href={hrefWithLang(`/?team=${encodeURIComponent(child.name)}`, lang)}
+                              prefetch={false}
                               className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
                             >
                               <TeamAvatar name={child.name} color={child.color} selected={selectedChild && !selectedMemberEmail} />
@@ -238,6 +240,7 @@ function MemberList({
           <Link
             key={`${teamName}-${member.email}`}
             href={hrefWithLang(`/?team=${encodeURIComponent(teamName)}&member=${encodeURIComponent(member.email)}`, lang)}
+            prefetch={false}
             className={cn(
               "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-slate-50",
               selected && "bg-blue-50 text-slate-950"

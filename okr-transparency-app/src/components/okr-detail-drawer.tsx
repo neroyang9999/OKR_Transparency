@@ -253,7 +253,7 @@ export function OkrDetailLink({
   className?: string;
 }) {
   return (
-    <Link href={href} scroll={false} className={className}>
+    <Link href={href} scroll={false} prefetch={false} className={className}>
       {children}
     </Link>
   );
