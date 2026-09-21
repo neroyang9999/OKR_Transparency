@@ -165,6 +165,9 @@ Releasing a new version follows **`docs/RELEASE_CLOUD_RUN.md`**: Cloud Build pro
 Cloud Run takes it as a candidate revision at 0% traffic, and traffic shifts only after the
 candidate has been checked. Nothing else is needed to ship.
 
+Custom-domain setup, DNS ownership handoff, certificate verification, and agent stop conditions
+are documented in **`docs/CUSTOM_DOMAIN_SETUP_RUNBOOK.md`**.
+
 The infrastructure itself was created by the gcloud scripts in
 `deploy/scripts/provisioning/`, which are the only record of how it was set up.
 `okr_finish_prod.sh` is the one that produced the configuration running today.
