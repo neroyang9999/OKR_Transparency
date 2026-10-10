@@ -10,7 +10,7 @@ import { getTeamEditPolicy } from "@/lib/admin/permissions";
 import { hrefWithLang, normalizeLang, translateText, type Lang } from "@/lib/i18n";
 import { readDraft, readPeriodRecords } from "@/lib/okr/drafts";
 import { readProgressNotes } from "@/lib/okr/progress-notes";
-import { readOkrSnapshot } from "@/lib/okr/store";
+import { okrDetailHref } from "@/lib/periods";
 
 export default async function MyActionsPage({
   searchParams
@@ -32,9 +32,8 @@ export default async function MyActionsPage({
   const reviewTeams = adminConfig.teams.filter((team) =>
     team.enabled && getTeamEditPolicy(adminConfig, team.name, access).canPublish
   );
-  const [storedPeriodRecords, snapshot, progressNotes, drafts] = await Promise.all([
+  const [periodRecords, progressNotes, drafts] = await Promise.all([
     readPeriodRecords(periodId),
-    readOkrSnapshot(),
     adminConfig.settings.allowProgressNotes ? readProgressNotes() : Promise.resolve([]),
     Promise.all(reviewTeams.map((team) => readDraft(team.name, periodId)))
   ]);
@@ -42,7 +41,7 @@ export default async function MyActionsPage({
     config: adminConfig,
     access,
     periodId,
-    records: storedPeriodRecords ?? snapshot.records,
+    records: periodRecords ?? [],
     progressNotes,
     drafts
   });
@@ -264,7 +263,7 @@ function KrActionRow({ item, accessEmail, periodId, lang, emphasizeUpdate = fals
         <ConfidenceBadge value={record.confidence} />
         {showUpdateDue && <Badge tone="yellow">{copy.overdue}</Badge>}
       </div>
-      <Link href={hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang)} className="mt-2 block text-sm font-semibold leading-6 text-slate-950 hover:text-blue-700">
+      <Link href={okrDetailHref(record.okr_id, periodId, lang)} className="mt-2 block text-sm font-semibold leading-6 text-slate-950 hover:text-blue-700">
         {translateText(record.kr, lang, record.localized?.kr)}
       </Link>
       <div className="mt-1 text-xs text-muted-foreground">

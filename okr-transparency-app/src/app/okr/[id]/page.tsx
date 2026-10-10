@@ -8,16 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { getPopulatedOkrDetailFields } from "@/lib/okr/detail-fields";
+import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readProgressNotesForObjective, type ProgressNote } from "@/lib/okr/progress-notes";
-import { readOkrSnapshot } from "@/lib/okr/store";
 import type { ConfidenceLevel, LocalizedText } from "@/lib/okr/types";
+import { normalizePeriod, okrDetailHref } from "@/lib/periods";
 
 export default async function OkrDetailPage({
   params,
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; period?: string }>;
 }) {
   const [{ id }, query, pageAccess] = await Promise.all([
     params,
@@ -33,16 +34,30 @@ export default async function OkrDetailPage({
     );
   }
 
-  const snapshot = await readOkrSnapshot();
-  const record = snapshot.records.find((item) => item.okr_id === decodeURIComponent(id));
+  const { adminConfig } = pageAccess;
+  const okrId = decodeURIComponent(id);
+  const period = normalizePeriod(query.period, adminConfig.periods, adminConfig.defaultPeriodId);
+  const records = await readPeriodRecords(period) ?? [];
+  const record = records.find((item) => item.okr_id === okrId);
 
-  if (!record) redirect(hrefWithLang("/teams", lang));
+  if (!record) {
+    // Links shared before they carried a period have none, and stop resolving
+    // once the default period moves on; send them to the period that has the OKR.
+    if (!query.period) {
+      for (const candidate of adminConfig.periods.filter((item) => item.id !== period)) {
+        if ((await readPeriodRecords(candidate.id))?.some((item) => item.okr_id === okrId)) {
+          redirect(okrDetailHref(okrId, candidate.id, lang));
+        }
+      }
+    }
+    redirect(hrefWithLang("/teams", lang));
+  }
 
-  const parent = record.parent_id ? snapshot.records.find((item) => item.okr_id === record.parent_id) : null;
-  const children = snapshot.records.filter((item) => item.parent_id === record.okr_id);
-  const showProgressNotes = pageAccess.adminConfig.settings.allowProgressNotes;
+  const parent = record.parent_id ? records.find((item) => item.okr_id === record.parent_id) : null;
+  const children = records.filter((item) => item.parent_id === record.okr_id);
+  const showProgressNotes = adminConfig.settings.allowProgressNotes;
   const progressNotes = showProgressNotes
-    ? await readProgressNotesForObjective(record.team, pageAccess.adminConfig.defaultPeriodId, record.okr_id)
+    ? await readProgressNotesForObjective(record.team, period, record.okr_id)
     : [];
   const title = record.kr || record.objective;
   const populatedDetailFields = getPopulatedOkrDetailFields(record);
@@ -51,7 +66,7 @@ export default async function OkrDetailPage({
     <AppShell active="teams">
       <div className="mb-4">
         <Link
-          href={hrefWithLang(`/?team=${encodeURIComponent(record.team)}`, lang)}
+          href={hrefWithLang(`/?team=${encodeURIComponent(record.team)}&period=${encodeURIComponent(period)}`, lang)}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-700"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -76,7 +91,7 @@ export default async function OkrDetailPage({
         {parent && (
           <div className="mt-4 rounded-md border border-border bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <span className="font-medium text-slate-900">{t(lang, "parent")}：</span>
-            <Link href={hrefWithLang(`/okr/${encodeURIComponent(parent.okr_id)}`, lang)} className="hover:text-blue-700">
+            <Link href={okrDetailHref(parent.okr_id, period, lang)} className="hover:text-blue-700">
               {translateText(parent.kr || parent.objective, lang, parent.kr ? parent.localized?.kr : parent.localized?.objective)}
             </Link>
           </div>
@@ -103,7 +118,7 @@ export default async function OkrDetailPage({
                 {children.map((child, index) => (
                   <Link
                     key={child.okr_id}
-                    href={hrefWithLang(`/okr/${encodeURIComponent(child.okr_id)}`, lang)}
+                    href={okrDetailHref(child.okr_id, period, lang)}
                     className="block p-3 hover:bg-slate-50"
                   >
                     <div className="flex flex-wrap items-center gap-2">

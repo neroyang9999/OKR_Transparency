@@ -17,5 +17,6 @@ data/seed-local-backups/
 data/firestore-reset-backups/
 data/local-sync-backups/
 data/okr-snapshot-versions.json
+data/*.tmp
 coverage
 tsconfig.tsbuildinfo

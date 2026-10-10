@@ -7,8 +7,9 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
-import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
+import { t, translateText, type Lang } from "@/lib/i18n";
 import { getPopulatedOkrDetailFields } from "@/lib/okr/detail-fields";
+import { okrDetailHref } from "@/lib/periods";
 import type { ProgressNote } from "@/lib/okr/progress-notes";
 import type { ConfidenceLevel, LocalizedText, OkrRecord } from "@/lib/okr/types";
 import { cn } from "@/lib/utils";
@@ -60,7 +61,7 @@ export function OkrDetailDrawer({
     note.objectiveId === noteTarget.okr_id
   ) : [];
   const title = record.kr || record.objective;
-  const fullHref = hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang);
+  const fullHref = okrDetailHref(record.okr_id, selectedPeriod, lang);
   const populatedDetailFields = getPopulatedOkrDetailFields(record);
 
   function close() {
@@ -219,7 +220,7 @@ export function OkrDetailDrawer({
               parent && (
                 <>
                   <SectionTitle title={copy.parentObjective} />
-                  <RelatedRecord record={parent} lang={lang} />
+                  <RelatedRecord record={parent} period={selectedPeriod} lang={lang} />
                 </>
               )
             ) : (
@@ -231,7 +232,7 @@ export function OkrDetailDrawer({
                   </div>
                 ) : (
                   <div className="divide-y divide-border rounded-md border border-border">
-                    {children.map((child) => <RelatedRecord key={child.okr_id} record={child} lang={lang} />)}
+                    {children.map((child) => <RelatedRecord key={child.okr_id} record={child} period={selectedPeriod} lang={lang} />)}
                   </div>
                 )}
               </>
@@ -286,9 +287,9 @@ function CompactField({ label, value, lang, localized }: { label: string; value:
   );
 }
 
-function RelatedRecord({ record, lang }: { record: OkrRecord; lang: Lang }) {
+function RelatedRecord({ record, period, lang }: { record: OkrRecord; period: string; lang: Lang }) {
   return (
-    <Link href={hrefWithLang(`/okr/${encodeURIComponent(record.okr_id)}`, lang)} className="block px-3 py-3 hover:bg-slate-50">
+    <Link href={okrDetailHref(record.okr_id, period, lang)} className="block px-3 py-3 hover:bg-slate-50">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="blue">{record.kr ? "KR" : "Objective"}</Badge>
         <ConfidenceBadge value={record.confidence} />

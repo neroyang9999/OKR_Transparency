@@ -2,7 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
 import { OkrRecordCard } from "@/components/okr-record-card";
 import { getPageAccess } from "@/lib/admin/page-access";
-import { getOkrTreeResponse } from "@/lib/okr/store";
+import { readPeriodSnapshot } from "@/lib/okr/drafts";
+import { toOkrTreeResponse } from "@/lib/okr/store";
 import { searchOkrs } from "@/lib/okr/search";
 import { confidenceLevels, okrTypes, type ConfidenceLevel, type OkrType } from "@/lib/okr/types";
 import { normalizeLang, t } from "@/lib/i18n";
@@ -21,7 +22,7 @@ export default async function SearchPage({
     );
   }
 
-  const data = await getOkrTreeResponse();
+  const data = toOkrTreeResponse(await readPeriodSnapshot(pageAccess.adminConfig.defaultPeriodId));
   const lang = normalizeLang(params.lang);
   const results = searchOkrs(data.records, {
     q: params.q ?? "",

@@ -95,8 +95,8 @@ The action center does not maintain a second task model. Its links open the exis
 Firestore documents:
 
 - `okrAdmin/config`
-- `okrSnapshots/current`
-- `okrPeriodSnapshots/{periodId}`
+- `okrSnapshots/current` (mirror of the default period, read only when taking over from an older build)
+- `okrPeriodSnapshots/{periodId}` (the records of each period, the default one included)
 - `okrDrafts/{periodId_team}`
 - `okrProgressNotes/{periodId_team_objectiveId_weekStart}`
 - `okrAdminEvents/{eventId}`
@@ -120,13 +120,13 @@ Authorized users can add `mode=edit` to the overview page to edit OKRs directly 
 
 OKRs are created and maintained directly in the browser page editor. The app no longer imports OKRs from Google Docs or CSV files.
 
-Drafts are saved first. Publishing writes normalized OKR records into the selected period and, for the configured default period, the current snapshot. Rollback restores a selected team-and-period version without changing other teams.
+Drafts are saved first. Publishing writes normalized OKR records into the selected period's snapshot, which is where every page and API reads that period from. A period nobody has published into is empty, and its drafts start blank. Rollback restores a selected team-and-period version without changing other teams.
 
 Objective, KR, risk, and decision text supports Chinese and English versions. The editor detects the language actually entered instead of assuming it from the page language, keeps acronym-only values unchanged, and generates the other language through Cloud Translation when running on GCP. Machine translations can be edited and are never overwritten after a user changes them. Translation failure never blocks saving the original text.
 
-Publishing validates the complete candidate graph before any public data changes. Structural Objective/KR relationships use `parent_id`; cross-team alignment uses `aligned_to_id`. Every publish stores a team-and-period version, and concurrent updates to the current Firestore snapshot are rejected instead of silently overwriting newer data.
+Publishing validates the complete candidate graph before any public data changes. Structural Objective/KR relationships use `parent_id`; cross-team alignment uses `aligned_to_id`. Every publish stores a team-and-period version. Each period snapshot carries its own optimistic lock: a publish or progress update that loses a race re-reads the period and retries, and is rejected rather than overwriting newer data if it keeps losing.
 
-For the active period, one publication candidate is used for both `okrSnapshots/current` and `okrPeriodSnapshots/{periodId}` so the public and period views have the same records. Structural parents must be Objectives in the same team. When a republished parent team removes an alignment target, child-team Objectives are kept but their optional `aligned_to_id` is cleared with a warning (`ON DELETE SET NULL`).
+After a change to the default period lands, the same records are copied to `okrSnapshots/current`, stamped with the period. That copy exists so rolling back to a build that still reads it shows current data; a failed copy is logged and does not fail the change. Builds up to v0.8.7 treated an unstamped `current` as the default period's source of truth and could lose a concurrent update in its period snapshot, so until a period snapshot is first written by a newer build (which marks it `authoritative`), the default period is read from an unstamped `current`. Structural parents must be Objectives in the same team. When a republished parent team removes an alignment target, child-team Objectives are kept but their optional `aligned_to_id` is cleared with a warning (`ON DELETE SET NULL`).
 
 Production OKR data can be inspected and reset without touching admin configuration, users, feedback, or audit events:
 

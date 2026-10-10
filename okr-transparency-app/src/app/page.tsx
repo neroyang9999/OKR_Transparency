@@ -20,12 +20,10 @@ import type { OkrRecord } from "@/lib/okr/types";
 import { getOkrQualityStats } from "@/lib/okr/graph-validation";
 import { filterDraftByOwner } from "@/lib/okr/edit-types";
 import { getAlignmentOptions } from "@/lib/okr/alignment-candidates";
-import { readDraft } from "@/lib/okr/drafts";
-import { readPeriodRecords } from "@/lib/okr/drafts";
+import { readDraft, readPeriodSnapshot } from "@/lib/okr/drafts";
 import { ownerScopeForTeam, ownerScopeForUser, teamScopedRecords } from "@/lib/okr/owner-scope";
 import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
-import { getOkrTreeResponse } from "@/lib/okr/store";
-import type { Period } from "@/lib/periods";
+import { okrDetailHref, type Period } from "@/lib/periods";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -61,14 +59,14 @@ export default async function HomePage({
     );
   }
 
-  const [data, progressNotes] = await Promise.all([
-    getOkrTreeResponse(),
+  const [periodSnapshot, progressNotes] = await Promise.all([
+    readPeriodSnapshot(selectedPeriod),
     adminConfig.settings.allowProgressNotes ? readProgressNotes() : Promise.resolve([])
   ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
   const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
   const draft = baseDraft ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner, selectedOwnerScope) : null;
-  const periodRecords = selectedPeriod === adminConfig.defaultPeriodId ? data.records : await readPeriodRecords(selectedPeriod) ?? [];
+  const periodRecords = periodSnapshot.records;
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
   const selectedRecords = selectedMember
     ? buildOwnerScopedRecords(teamRecords, selectedOwnerAliases)
@@ -130,7 +128,7 @@ export default async function HomePage({
                   <span>·</span>
                   <span>{displayRecordCount} {t(lang, "records")}</span>
                   <span>·</span>
-                  <span>{data.meta.source} {t(lang, "source")}</span>
+                  <span>{periodSnapshot.meta.source} {t(lang, "source")}</span>
                 </div>
               </div>
             </div>
@@ -289,7 +287,7 @@ function ObjectiveBlock({
                   ? translateText(objective.decisions_needed, lang, objective.localized?.decisionsNeeded)
                   : t(lang, "noHighRisk")}
               defaultStatus={objective.confidence}
-              fullHistoryHref={hrefWithLang(`/okr/${encodeURIComponent(objective.okr_id)}`, lang)}
+              fullHistoryHref={okrDetailHref(objective.okr_id, selectedPeriod, lang)}
               lang={lang}
             />
           )}
