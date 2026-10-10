@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { periodHref, periodLabel, periods, type Period } from "@/lib/periods";
+import { periodStageLabel } from "@/lib/period-stages";
 import { t, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -86,8 +87,26 @@ function PeriodTab({
       )}
       aria-current={selected ? "page" : undefined}
     >
-      {periodLabel(period, lang)}
+      <span className="flex items-center gap-1.5">
+        {periodLabel(period, lang)}
+        <PeriodStageTag period={period} lang={lang} />
+      </span>
     </Link>
+  );
+}
+
+/** Two periods can be open at once; the stage tells people which one takes OKRs and which takes check-ins. */
+export function PeriodStageTag({ period, lang }: { period: Period; lang: Lang }) {
+  if (period.status !== "setting" && period.status !== "closing" && period.status !== "planned") return null;
+  return (
+    <span className={cn(
+      "rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-none",
+      period.status === "setting" && "bg-violet-50 text-violet-700",
+      period.status === "closing" && "bg-amber-50 text-amber-700",
+      period.status === "planned" && "bg-slate-100 text-slate-500"
+    )}>
+      {periodStageLabel(period.status, lang)}
+    </span>
   );
 }
 

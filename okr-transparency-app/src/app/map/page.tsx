@@ -5,7 +5,9 @@ import { teamOwnerDisplayNames } from "@/lib/admin/team-owners";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { hrefWithLang, normalizeLang, t, type Lang } from "@/lib/i18n";
-import { normalizePeriod, periodLabel } from "@/lib/periods";
+import { periodLabel } from "@/lib/periods";
+import { periodsForViewer, resolveViewerPeriod } from "@/lib/period-stages";
+import { PeriodStageTag } from "@/components/period-switcher";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { buildMapTeamScope } from "@/lib/okr/map-team-scope";
@@ -25,8 +27,8 @@ export default async function MapPage({
   }
 
   const lang = normalizeLang(params.lang);
-  const configuredPeriods = pageAccess.adminConfig.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
-  const selectedPeriod = normalizePeriod(params.period, configuredPeriods, pageAccess.adminConfig.defaultPeriodId);
+  const configuredPeriods = periodsForViewer(pageAccess.adminConfig, pageAccess.access.role);
+  const selectedPeriod = resolveViewerPeriod(params.period, pageAccess.adminConfig, pageAccess.access.role);
   const periodRecords = await readPeriodRecords(selectedPeriod) ?? [];
   const teamScope = buildMapTeamScope(pageAccess.adminConfig.teams, periodRecords, params.team);
 
@@ -52,7 +54,10 @@ export default async function MapPage({
               )}
               aria-current={period.id === selectedPeriod ? "page" : undefined}
             >
-              {periodLabel(period, lang)}
+              <span className="flex items-center gap-1.5">
+                {periodLabel(period, lang)}
+                <PeriodStageTag period={period} lang={lang} />
+              </span>
             </Link>
           ))}
         </div>

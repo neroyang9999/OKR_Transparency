@@ -1,10 +1,12 @@
 import { hrefWithLang, type Lang } from "./i18n";
+import type { AdminPeriodStatus } from "./admin/config";
 
 export type Period = {
   id: string;
   label: string;
   labelEn: string;
   shortLabel: string;
+  status?: AdminPeriodStatus;
 };
 
 export const periods: Period[] = [

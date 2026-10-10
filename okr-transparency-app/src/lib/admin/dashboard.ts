@@ -1,6 +1,7 @@
 import { getOkrQualityStats } from "../okr/graph-validation";
 import type { OkrRecord } from "../okr/types";
 import type { AdminConfig, AdminEvent } from "./config";
+import { isOpenPeriod, periodStageLabel } from "../period-stages";
 
 export type AdminAttentionItem = {
   id: string;
@@ -27,13 +28,22 @@ export function getAdminRuntimeSummary(config: AdminConfig, events: AdminEvent[]
     ? measuredQuality
     : { ...measuredQuality, staleCount: 0 };
   const attention: AdminAttentionItem[] = [];
-  const activePeriod = config.periods.find((period) => period.status === "active");
+  const openPeriods = config.periods.filter((period) => isOpenPeriod(period.status));
   const enabledAdmins = config.users.filter((user) => user.enabled && user.role === "super_admin");
   const unpublished = enabledTeams.filter((team) => !publishedTeams.has(team.name));
   const failedEvents = events.filter((event) => event.status === "error");
 
-  if (!activePeriod) {
-    attention.push({ id: "no-active-period", level: "critical", title: "没有进行中的周期", description: "编辑和发布都会被阻止。", destination: "periods" });
+  if (openPeriods.length === 0) {
+    attention.push({ id: "no-open-period", level: "critical", title: "没有开放的周期", description: "填写、发布和进展更新都会被阻止。", destination: "periods" });
+  }
+  if (openPeriods.length > 2) {
+    attention.push({
+      id: "too-many-open-periods",
+      level: "warning",
+      title: `${openPeriods.length} 个周期同时开放`,
+      description: `${openPeriods.map((period) => `${period.shortLabel}（${periodStageLabel(period.status, "zh")}）`).join("、")}。检查收尾完成的周期是否忘了锁定。`,
+      destination: "periods"
+    });
   }
   if (enabledAdmins.length < 2) {
     attention.push({ id: "single-admin", level: "warning", title: "系统管理员少于 2 人", description: "建议至少保留两名启用的系统管理员，避免单点失效。", destination: "organization" });
@@ -52,7 +62,7 @@ export function getAdminRuntimeSummary(config: AdminConfig, events: AdminEvent[]
   }
 
   return {
-    activePeriodId: activePeriod?.id ?? config.defaultPeriodId,
+    activePeriodId: config.defaultPeriodId,
     enabledTeamCount: enabledTeams.length,
     publishedTeamCount: enabledTeams.filter((team) => publishedTeams.has(team.name)).length,
     lastPublishAt: events.find((event) => event.type === "publish" && event.status === "ok")?.createdAt ?? "",

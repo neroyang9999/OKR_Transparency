@@ -4,6 +4,7 @@ import { isIapAuthenticationRequired, verifyIapJwt } from "../iap-auth";
 import { emailMatchesAllowedGoogleDomain } from "../allowed-google-domains";
 import type { AdminConfig, AdminRole, AdminUser } from "./config";
 import type { EditableObjective, OkrDraft } from "../okr/edit-types";
+import { allowsOkrEdits, allowsProgressUpdates } from "../period-stages";
 
 export type SessionUser = {
   email: string;
@@ -187,15 +188,26 @@ export function canEditTeamOwner(config: AdminConfig, team: string, access: User
   return access?.role === "super_admin" || access?.role === "team_leader" || canEditOwner(access, owner);
 }
 
-export function validateEditablePeriod(config: AdminConfig, periodId: string) {
+/** Drafting and publishing Objectives and KRs: open while a period is being set and while it runs. */
+export function validateOkrEditablePeriod(config: AdminConfig, periodId: string) {
   const period = config.periods.find((item) => item.id === periodId);
   if (!period) return { ok: false, error: "Period is not configured" };
-  if (period.status !== "active") return { ok: false, error: "Period is locked" };
+  if (!allowsOkrEdits(period.status)) {
+    return { ok: false, error: period.status === "closing" ? "Period is closing: OKRs are frozen" : "Period is not open for OKR changes" };
+  }
+  return { ok: true, error: "" };
+}
+
+/** Weekly check-ins and progress values: open while a period runs and while it closes. */
+export function validateProgressPeriod(config: AdminConfig, periodId: string) {
+  const period = config.periods.find((item) => item.id === periodId);
+  if (!period) return { ok: false, error: "Period is not configured" };
+  if (!allowsProgressUpdates(period.status)) return { ok: false, error: "Period is not open for progress updates" };
   return { ok: true, error: "" };
 }
 
 export function authorizeDraftChange(config: AdminConfig, access: UserAccess | null, previous: OkrDraft, next: OkrDraft) {
-  const period = validateEditablePeriod(config, next.periodId);
+  const period = validateOkrEditablePeriod(config, next.periodId);
   if (!period.ok) return period;
 
   const policy = getTeamEditPolicy(config, next.team, access);
@@ -209,7 +221,7 @@ export function authorizeDraftChange(config: AdminConfig, access: UserAccess | n
 }
 
 export function authorizePublish(config: AdminConfig, access: UserAccess | null, team: string, periodId: string) {
-  const period = validateEditablePeriod(config, periodId);
+  const period = validateOkrEditablePeriod(config, periodId);
   if (!period.ok) return period;
 
   const policy = getTeamEditPolicy(config, team, access);

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireApiAccess } from "@/lib/admin/api-access";
 import { readPeriodSnapshot } from "@/lib/okr/drafts";
 import { findOkrLineage } from "@/lib/okr/tree";
-import { normalizePeriod } from "@/lib/periods";
+import { resolveViewerPeriod } from "@/lib/period-stages";
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function GET(
 
   const { id } = await context.params;
   const { config } = authorization;
-  const period = normalizePeriod(request.nextUrl.searchParams.get("period") ?? undefined, config.periods, config.defaultPeriodId);
+  const period = resolveViewerPeriod(request.nextUrl.searchParams.get("period"), config, authorization.access.role);
   const snapshot = await readPeriodSnapshot(period);
   const result = findOkrLineage(snapshot.records, decodeURIComponent(id));
 

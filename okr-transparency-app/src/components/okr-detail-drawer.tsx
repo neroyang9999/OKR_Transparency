@@ -19,6 +19,7 @@ type OkrDetailDrawerProps = {
   records: OkrRecord[];
   progressNotes: ProgressNote[];
   showProgressNotes: boolean;
+  progressReadOnlyNote?: string;
   selectedPeriod: string;
   selectedDetailId?: string;
   lang: Lang;
@@ -28,6 +29,7 @@ export function OkrDetailDrawer({
   records,
   progressNotes,
   showProgressNotes,
+  progressReadOnlyNote,
   selectedPeriod,
   selectedDetailId,
   lang
@@ -152,6 +154,7 @@ export function OkrDetailDrawer({
               currentActual={record.actual}
               currentProgress={record.score === null ? null : Math.round(record.score * 100)}
               syncPublishedState
+              readOnlyNote={progressReadOnlyNote}
             />
           )}
           {showProgressNotes && (

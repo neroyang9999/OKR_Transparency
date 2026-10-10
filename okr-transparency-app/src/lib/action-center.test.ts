@@ -144,6 +144,40 @@ describe("action center", () => {
 
     expect(result.pendingReviews.map((item) => item.team)).toEqual(["Application", "Software"]);
   });
+
+  it("asks for nothing to be updated in a period still being drafted", () => {
+    const access = accessFromAdminUser(config.users[1]);
+    const result = buildActionCenter({
+      config,
+      access,
+      periodId: "2026-q4",
+      records,
+      progressNotes: [],
+      drafts: [],
+      progressOpen: false,
+      now: new Date("2026-07-14T12:00:00.000Z")
+    });
+
+    // Freshly published KRs default to Yellow and have no check-ins yet; neither is a to-do before the period starts.
+    expect(result.ownedKrs.map((item) => item.record.okr_id)).toEqual(["SW-KR1", "SW-KR2"]);
+    expect(result.updateDueKrs).toEqual([]);
+    expect(result.attentionKrs).toEqual([]);
+  });
+
+  it("stops queueing draft reviews once a period's OKRs are frozen", () => {
+    const access = accessFromAdminUser(config.users[0]);
+    const result = buildActionCenter({
+      config,
+      access,
+      periodId: "2026-q3",
+      records: [],
+      progressNotes: [],
+      drafts: [draft("Software", "draft")],
+      okrOpen: false
+    });
+
+    expect(result.pendingReviews).toEqual([]);
+  });
 });
 
 function kr(id: string, team: string, owner: string, confidence: OkrRecord["confidence"], lastUpdate: string, risks = "", decisions = ""): OkrRecord {

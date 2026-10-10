@@ -148,8 +148,9 @@ Firestore：
 用途：
 
 - 保存不同季度/period 的发布记录。
-- 当前周期由 `AdminConfig.defaultPeriodId` 唯一决定。
-- publish draft 时会更新对应 period；如果是默认周期，还会同时更新当前 `okr-snapshot.json` / `okrSnapshots/current`。
+- 每个周期的记录只从自己的 period snapshot 读取，默认周期也一样。
+- 默认周期（`AdminConfig.defaultPeriodId`）由各周期的阶段推导：进行中的那个；没有则取最新的开放周期。
+- publish draft 时会更新对应 period；如果是默认周期，还会把同样的记录镜像到 `okr-snapshot.json` / `okrSnapshots/current`，仅供回滚到旧版本时使用。
 
 ## 6. 页面编辑草稿：`OkrDraft`
 
@@ -289,7 +290,7 @@ type AdminConfig = {
 
 | 结构 | 关键字段 | 用途 |
 | --- | --- | --- |
-| `AdminPeriod` | `id`, `label`, `status` | `planned` / `active` / `locked`，同时只允许一个 active period |
+| `AdminPeriod` | `id`, `label`, `status` | `planned`（计划中，仅管理员可见）/ `setting`（制定中：可填写、发布 OKR）/ `active`（进行中：OKR 和进展都可改）/ `closing`（收尾中：只能更新进展）/ `locked`（已锁定）；同时最多一个 `active`，另一个周期可同时处于制定中或收尾中 |
 | `AdminTeam` | `id`, `name`, `owner`, `parentTeam`, `color`, `enabled` | 控制团队列表、负责人、层级和显示；`id` 不在 UI 中编辑 |
 | `AdminUser` | `email`, `displayName`, `role`, `teams`, `ownerAliases`, `enabled` | Google OAuth 后的主要权限来源 |
 

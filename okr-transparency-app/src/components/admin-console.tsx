@@ -39,6 +39,7 @@ import type { UserFeedback } from "@/lib/feedback";
 import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import type { OkrRecord, OkrTreeResponse } from "@/lib/okr/types";
 import { nextQuarterPeriod } from "@/lib/periods";
+import { allowedPeriodMoves, deriveDefaultPeriodId, isOpenPeriod, movePeriod, periodStageLabel } from "@/lib/period-stages";
 import { cn } from "@/lib/utils";
 
 type TabId = "status" | "periods" | "organization" | "feedback" | "recovery";
@@ -52,7 +53,7 @@ type VersionDiff = {
 
 const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof Activity }> = [
   { id: "status", label: "运行状态", description: "查看当前周期和待处理事项", icon: Activity },
-  { id: "periods", label: "周期管理", description: "创建、启用和锁定周期", icon: CalendarRange },
+  { id: "periods", label: "周期管理", description: "开放制定、启动、收尾和锁定周期", icon: CalendarRange },
   { id: "organization", label: "组织与权限", description: "维护团队、成员和有效权限", icon: Users },
   { id: "feedback", label: "用户反馈", description: "查看用户提交的问题和建议", icon: MessageSquareText },
   { id: "recovery", label: "审计与恢复", description: "追踪变更、比较版本和回滚", icon: History }
@@ -432,6 +433,7 @@ function FeedbackReview({ feedback, onFeedbackChange }: { feedback: UserFeedback
 function RuntimeStatus({ config, events, versions, records, onNavigate }: { config: AdminConfig; events: AdminEvent[]; versions: SnapshotVersion[]; records: OkrRecord[]; onNavigate: (tab: TabId) => void }) {
   const summary = useMemo(() => getAdminRuntimeSummary(config, events, records), [config, events, records]);
   const activePeriod = config.periods.find((period) => period.id === summary.activePeriodId);
+  const otherOpenPeriods = config.periods.filter((period) => period.id !== summary.activePeriodId && isOpenPeriod(period.status));
   return (
     <div className="space-y-4">
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
@@ -441,8 +443,11 @@ function RuntimeStatus({ config, events, versions, records, onNavigate }: { conf
               <div className="text-sm text-slate-300">当前运行周期</div>
               <div className="mt-2 text-3xl font-semibold">{activePeriod?.shortLabel ?? summary.activePeriodId}</div>
               <div className="mt-2 text-sm text-slate-300">{activePeriod?.label}</div>
+              {otherOpenPeriods.length > 0 && (
+                <div className="mt-2 text-sm text-slate-300">同时开放：{otherOpenPeriods.map((period) => `${period.shortLabel}（${periodStageLabel(period.status, "zh")}）`).join("、")}</div>
+              )}
             </div>
-            <StatusBadge tone="green">进行中</StatusBadge>
+            {activePeriod && <PeriodStatus status={activePeriod.status} />}
           </div>
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             <RuntimeMetric label="团队发布" value={`${summary.publishedTeamCount}/${summary.enabledTeamCount}`} />
@@ -485,18 +490,12 @@ function RuntimeStatus({ config, events, versions, records, onNavigate }: { conf
 }
 
 function PeriodManagement({ config, setConfig }: AdminSectionProps) {
-  function activatePeriod(period: AdminPeriod) {
-    if (!window.confirm(`确认启用 ${period.shortLabel}？当前周期将自动锁定。`)) return;
-    setConfig({
-      ...config,
-      defaultPeriodId: period.id,
-      periods: config.periods.map((item) => ({ ...item, status: item.id === period.id ? "active" : item.status === "active" ? "locked" : item.status }))
-    });
-  }
+  const activePeriod = config.periods.find((period) => period.status === "active");
 
-  function setStatus(period: AdminPeriod, status: AdminPeriod["status"]) {
-    if (period.status === "active") return;
-    setConfig({ ...config, periods: config.periods.map((item) => item.id === period.id ? { ...item, status } : item) });
+  function move(period: AdminPeriod, to: AdminPeriod["status"]) {
+    if (!window.confirm(periodMoveConfirmation(period, to, activePeriod))) return;
+    const periods = movePeriod(config.periods, period.id, to);
+    setConfig({ ...config, periods, defaultPeriodId: deriveDefaultPeriodId(periods) });
   }
 
   function addPeriod() {
@@ -506,7 +505,7 @@ function PeriodManagement({ config, setConfig }: AdminSectionProps) {
   return (
     <div className="space-y-4">
       <Panel>
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-950">周期状态</h3><p className="mt-1 text-sm text-muted-foreground">系统始终只有一个进行中的周期；旧周期锁定后不可编辑或发布。</p></div><button type="button" onClick={addPeriod} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"><Plus className="h-4 w-4" />创建周期</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-950">周期状态</h3><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">同一时间最多一个进行中的周期，另一个周期可以同时处于制定中或收尾中。制定中：可以填写和发布 OKR；进行中：OKR 和进展都能改；收尾中：只能更新进展；计划中的周期只有管理员能看到。</p></div><button type="button" onClick={addPeriod} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"><Plus className="h-4 w-4" />创建周期</button></div>
       </Panel>
       <div className="space-y-3">
         {config.periods.map((period) => (
@@ -517,11 +516,19 @@ function PeriodManagement({ config, setConfig }: AdminSectionProps) {
               <div className="flex items-center gap-2 lg:pb-0.5"><PeriodStatus status={period.status} /></div>
               <TextField label="短名称" value={period.shortLabel} onChange={(shortLabel) => updatePeriod(config, setConfig, period.id, { shortLabel })} />
               <div className="text-xs leading-5 text-slate-500">周期标识 <span className="font-mono">{period.id}</span> 由系统自动维护；管理员只需要管理名称和运行状态。</div>
-              <div className="flex flex-wrap justify-end gap-2">
-                {period.status === "planned" && <button type="button" onClick={() => activatePeriod(period)} className="h-9 rounded-md bg-slate-950 px-3 text-sm font-medium text-white">设为当前周期</button>}
-                {period.status === "planned" && <button type="button" onClick={() => setStatus(period, "locked")} className="h-9 rounded-md border border-border px-3 text-sm text-slate-700">锁定</button>}
-                {period.status === "locked" && <button type="button" onClick={() => setStatus(period, "planned")} className="h-9 rounded-md border border-border px-3 text-sm text-slate-700">重新开放为计划</button>}
-                {period.status === "active" && <span className="self-center text-xs text-slate-500">请先启用其他周期，再锁定当前周期。</span>}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {allowedPeriodMoves(period, config.periods).map((option, index) => option.blockedBy ? (
+                  <span key={option.to} className="text-xs text-slate-500">{option.blockedBy} 正在进行中，需先把它转为收尾中才能{periodMoveLabel(period.status, option.to)}。</span>
+                ) : (
+                  <button
+                    key={option.to}
+                    type="button"
+                    onClick={() => move(period, option.to)}
+                    className={index === 0 ? "h-9 rounded-md bg-slate-950 px-3 text-sm font-medium text-white" : "h-9 rounded-md border border-border px-3 text-sm text-slate-700"}
+                  >
+                    {periodMoveLabel(period.status, option.to)}
+                  </button>
+                ))}
               </div>
             </div>
           </Panel>
@@ -928,7 +935,49 @@ function RuntimeMetric({ label, value }: { label: string; value: string }) { ret
 function HealthRow({ label, value }: { label: string; value: number }) { return <div className="flex items-center justify-between gap-3"><span className="text-sm text-slate-600">{label}</span><StatusBadge tone={value > 0 ? "amber" : "green"}>{value}</StatusBadge></div>; }
 function EventRow({ event }: { event: AdminEvent }) { return <div className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[145px_120px_1fr]"><span className="text-slate-500">{formatDate(event.createdAt)}</span><span className={event.status === "ok" ? "text-emerald-700" : "text-rose-700"}>{eventTypeLabel(event.type)}</span><span className="text-slate-800">{event.message}</span></div>; }
 function EmptyState({ text }: { text: string }) { return <div className="px-4 py-8 text-center text-sm text-muted-foreground">{text}</div>; }
-function PeriodStatus({ status }: { status: AdminPeriod["status"] }) { return <StatusBadge tone={status === "active" ? "green" : status === "locked" ? "neutral" : "blue"}>{status === "active" ? "进行中" : status === "locked" ? "已锁定" : "计划中"}</StatusBadge>; }
+function PeriodStatus({ status }: { status: AdminPeriod["status"] }) {
+  const tone = ({ planned: "neutral", setting: "blue", active: "green", closing: "amber", locked: "neutral" } as const)[status];
+  return <StatusBadge tone={tone}>{periodStageLabel(status, "zh")}</StatusBadge>;
+}
+
+const periodMoveLabels: Record<AdminPeriod["status"], string> = {
+  planned: "撤回为计划",
+  setting: "开放制定",
+  active: "启动周期",
+  closing: "进入收尾",
+  locked: "锁定"
+};
+
+function periodMoveLabel(from: AdminPeriod["status"], to: AdminPeriod["status"]) {
+  if (from === "closing" && to === "active") return "退回进行中";
+  if (from === "locked" && to === "closing") return "重新开放收尾";
+  return periodMoveLabels[to];
+}
+
+/** Every move changes what people can do, so the confirmation spells that out. */
+function periodMoveConfirmation(period: AdminPeriod, to: AdminPeriod["status"], activePeriod: AdminPeriod | undefined) {
+  const name = period.shortLabel;
+  switch (to) {
+    case "setting":
+      return `开放 ${name} 制定？所有人都能看到这个周期并开始填写、发布 OKR，但还不能更新进展。`;
+    case "active": {
+      const outgoing = activePeriod && activePeriod.id !== period.id
+        ? `${activePeriod.shortLabel} 将转为收尾中：仍可更新进展和打分，但不能再修改 OKR 内容。`
+        : "";
+      return period.status === "closing"
+        ? `把 ${name} 退回进行中？OKR 内容和进展都会重新开放编辑。`
+        : `启动 ${name}？它会成为大家默认看到的周期，OKR 和进展都可以编辑。${outgoing}`;
+    }
+    case "planned":
+      return `把 ${name} 撤回为计划？普通用户将看不到这个周期，已填写的草稿会保留。`;
+    case "closing":
+      return period.status === "locked"
+        ? `重新开放 ${name} 的收尾？成员可以再次更新进展，OKR 内容仍然冻结。`
+        : `${name} 进入收尾？之后不能再修改 OKR 内容，只能更新进展和打分。`;
+    case "locked":
+      return `锁定 ${name}？锁定后所有人都不能再修改它的 OKR 和进展。`;
+  }
+}
 function DiffMetric({ label, value, tone }: { label: string; value: number; tone: "green" | "blue" | "rose" }) { return <div className="rounded-lg border border-border bg-white px-4 py-3"><div className="text-xs text-slate-500">{label}</div><div className={cn("mt-1 text-2xl font-semibold", tone === "green" && "text-emerald-700", tone === "blue" && "text-blue-700", tone === "rose" && "text-rose-700")}>{value}</div></div>; }
 
 function TextField({ label, value, onChange, hint, disabled = false }: { label: string; value: string; onChange: (value: string) => void; hint?: string; disabled?: boolean }) { return <label className="block"><span className="text-xs font-medium text-slate-500">{label}</span><input value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-500" />{hint && <span className="mt-1 block text-xs leading-5 text-slate-500">{hint}</span>}</label>; }

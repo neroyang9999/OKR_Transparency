@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiAccess } from "../../../lib/admin/api-access";
 import { readAdminConfig } from "../../../lib/admin/config";
-import { canEditTeamOwner, resolveRequestAccess, validateEditablePeriod } from "../../../lib/admin/permissions";
+import { canEditTeamOwner, resolveRequestAccess, validateProgressPeriod } from "../../../lib/admin/permissions";
 import { readPeriodRecords, updatePublishedRecordProgress } from "../../../lib/okr/drafts";
 import { readProgressNotesForObjective, writeProgressNote } from "../../../lib/okr/progress-notes";
 import type { ConfidenceLevel } from "../../../lib/okr/types";
@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest) {
     if (!body.team || !body.periodId || !body.objectiveId) {
       return NextResponse.json({ error: "team, periodId, and objectiveId are required" }, { status: 400 });
     }
-    const period = validateEditablePeriod(config, body.periodId);
+    const period = validateProgressPeriod(config, body.periodId);
     if (!period.ok) return NextResponse.json({ error: period.error }, { status: 403 });
     const periodRecords = await readPeriodRecords(body.periodId) ?? [];
     const objective = periodRecords.find((record) => record.team === body.team && record.okr_id === body.objectiveId);

@@ -76,12 +76,14 @@ Admin configuration is normalized to v2 when read. Legacy JSON remains readable 
 
 ## My Action Center
 
-`/my` is the signed-in user's focused operating view for the active period. It derives four lists from existing OKR, progress-note, draft, owner, and permission data:
+`/my` is the signed-in user's focused operating view for every open period, grouped by period while one quarter closes and the next is drafted. It derives four lists from existing OKR, progress-note, draft, owner, and permission data:
 
 - My KRs: published KRs whose owner matches the user's configured aliases.
 - Update due: owned KRs with no record or parent-Objective progress activity for more than seven days.
 - Risks and decisions: owned KRs that are Yellow/Red or contain risk or decision-needed context.
 - Review queue: unpublished team drafts inside a team leader's or system administrator's publish scope.
+
+What a period asks for depends on its stage: update-due and risk items appear only while it takes check-ins (in progress or closing), review items only while it takes OKR changes (drafting or in progress), and a period taking OKRs in which the user owns nothing asks them to add their KRs.
 
 The action center does not maintain a second task model. Its links open the existing member-scoped editor, team draft editor, and OKR detail pages.
 

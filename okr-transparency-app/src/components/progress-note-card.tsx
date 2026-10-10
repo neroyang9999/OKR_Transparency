@@ -22,6 +22,8 @@ type ProgressNoteCardProps = {
   currentProgress?: number | null;
   currentEvidenceUrl?: string;
   syncPublishedState?: boolean;
+  /** Set when the period takes no check-ins: history stays readable, the form is replaced by this. */
+  readOnlyNote?: string;
 };
 
 const recentHistoryLimit = 4;
@@ -38,7 +40,8 @@ export function ProgressNoteCard({
   currentActual = "",
   currentProgress = null,
   currentEvidenceUrl = "",
-  syncPublishedState = false
+  syncPublishedState = false,
+  readOnlyNote
 }: ProgressNoteCardProps) {
   const copy = lang === "en" ? en : zh;
   const [open, setOpen] = useState(false);
@@ -108,6 +111,47 @@ export function ProgressNoteCard({
     setOpen(false);
   }
 
+  const history = notes.length > 0 && (
+    <div className="mt-4 border-t border-blue-100 pt-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+        <CalendarDays className="h-3.5 w-3.5" />
+        {copy.recentHistoryTitle}
+      </div>
+      <div className="space-y-2">
+        {recentNotes.map((note) => (
+          <div key={note.weekStart} className="rounded-md border border-blue-100 bg-white px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-slate-700">{copy.weekOf} {note.weekStart}</div>
+              <StatusPill status={note.status} lang={lang} />
+            </div>
+            <div className="mt-1 text-sm leading-5 text-slate-700">{note.summary}</div>
+            {(note.actual || note.progress !== null || note.evidenceUrl) && (
+              <div className="mt-2 text-xs text-slate-500">
+                {note.actual && <span className="mr-3">{copy.actualLabel}: {note.actual}</span>}
+                {note.progress !== null && <span className="mr-3">{copy.progressLabel}: {note.progress}%</span>}
+                {note.evidenceUrl && <a href={note.evidenceUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{copy.evidenceLabel}</a>}
+              </div>
+            )}
+            {(note.risks || note.nextSteps) && (
+              <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-500 md:grid-cols-2">
+                {note.risks && <HistoryField icon="risk" label={copy.risksLabel} value={note.risks} />}
+                {note.nextSteps && <HistoryField icon="next" label={copy.nextStepsLabel} value={note.nextSteps} />}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {notes.length > recentHistoryLimit && (
+        <Link
+          href={fullHistoryHref}
+          className="mt-3 inline-flex text-xs font-semibold text-blue-700 hover:text-blue-800"
+        >
+          {copy.viewFullHistory}
+        </Link>
+      )}
+    </div>
+  );
+
   return (
     <div className={cn("mt-5 rounded-md bg-slate-50 transition", open && "bg-blue-50/70")}>
       <button
@@ -138,7 +182,14 @@ export function ProgressNoteCard({
         </div>
       </button>
 
-      {open && (
+      {open && readOnlyNote && (
+        <div className="border-t border-blue-100 px-3 pb-3">
+          <div className="pt-3 text-xs text-slate-500">{readOnlyNote}</div>
+          {history}
+        </div>
+      )}
+
+      {open && !readOnlyNote && (
         <div className="border-t border-blue-100 px-3 pb-3">
           <div className="grid gap-3 pt-3 md:grid-cols-[1fr_160px]">
             <label className="block">
@@ -251,46 +302,7 @@ export function ProgressNoteCard({
             </div>
           </div>
 
-          {notes.length > 0 && (
-            <div className="mt-4 border-t border-blue-100 pt-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <CalendarDays className="h-3.5 w-3.5" />
-                {copy.recentHistoryTitle}
-              </div>
-              <div className="space-y-2">
-                {recentNotes.map((note) => (
-                  <div key={note.weekStart} className="rounded-md border border-blue-100 bg-white px-3 py-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-xs font-semibold text-slate-700">{copy.weekOf} {note.weekStart}</div>
-                      <StatusPill status={note.status} lang={lang} />
-                    </div>
-                    <div className="mt-1 text-sm leading-5 text-slate-700">{note.summary}</div>
-                    {(note.actual || note.progress !== null || note.evidenceUrl) && (
-                      <div className="mt-2 text-xs text-slate-500">
-                        {note.actual && <span className="mr-3">{copy.actualLabel}: {note.actual}</span>}
-                        {note.progress !== null && <span className="mr-3">{copy.progressLabel}: {note.progress}%</span>}
-                        {note.evidenceUrl && <a href={note.evidenceUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{copy.evidenceLabel}</a>}
-                      </div>
-                    )}
-                    {(note.risks || note.nextSteps) && (
-                      <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-500 md:grid-cols-2">
-                        {note.risks && <HistoryField icon="risk" label={copy.risksLabel} value={note.risks} />}
-                        {note.nextSteps && <HistoryField icon="next" label={copy.nextStepsLabel} value={note.nextSteps} />}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {notes.length > recentHistoryLimit && (
-                <Link
-                  href={fullHistoryHref}
-                  className="mt-3 inline-flex text-xs font-semibold text-blue-700 hover:text-blue-800"
-                >
-                  {copy.viewFullHistory}
-                </Link>
-              )}
-            </div>
-          )}
+          {history}
         </div>
       )}
     </div>

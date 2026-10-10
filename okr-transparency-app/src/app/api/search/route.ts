@@ -3,7 +3,7 @@ import { requireApiAccess } from "@/lib/admin/api-access";
 import { searchOkrs } from "@/lib/okr/search";
 import { readPeriodSnapshot } from "@/lib/okr/drafts";
 import { confidenceLevels, okrTypes, type ConfidenceLevel, type OkrType } from "@/lib/okr/types";
-import { normalizePeriod } from "@/lib/periods";
+import { resolveViewerPeriod } from "@/lib/period-stages";
 
 export async function GET(request: NextRequest) {
   const authorization = await requireApiAccess(request);
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { config } = authorization;
-  const snapshot = await readPeriodSnapshot(normalizePeriod(params.get("period") ?? undefined, config.periods, config.defaultPeriodId));
+  const snapshot = await readPeriodSnapshot(resolveViewerPeriod(params.get("period"), config, authorization.access.role));
   const results = searchOkrs(snapshot.records, {
     q: params.get("q") ?? "",
     team: params.get("team") ?? "",
