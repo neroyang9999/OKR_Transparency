@@ -261,7 +261,7 @@ describe("progress updates under period snapshot contention", () => {
 
     await expect(updatePublishedRecordProgress(input)).rejects.toBeInstanceOf(SnapshotConflictError);
 
-    expect(periodWrites()).toHaveLength(4);
+    expect(periodWrites()).toHaveLength(6);
     expect(writeSnapshotVersion).not.toHaveBeenCalled();
   });
 

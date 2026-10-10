@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import { draftToRecords, filterDraftByOwner, mergeDraftByOwner, normalizeDraft, recordsToDraft, validateDraft, type OkrDraft } from "./edit-types";
@@ -18,7 +19,14 @@ import { writeAppLog } from "../app-log";
 const dataDir = path.join(process.cwd(), "data");
 const draftPath = path.join(dataDir, "okr-drafts.json");
 const periodSnapshotPath = path.join(dataDir, "okr-period-snapshots.json");
-const snapshotWriteAttempts = 4;
+const snapshotWriteAttempts = 6;
+
+// Writers that lose a race together would retry together and collide again —
+// a quarter's kickoff has many teams publishing at once. A short random pause,
+// growing with each attempt, lets them land one after another.
+function pauseBeforeRetry(attempt: number) {
+  return new Promise((resolve) => setTimeout(resolve, Math.random() * 60 * attempt));
+}
 
 type DraftFile = {
   version: 1;
@@ -145,7 +153,10 @@ export async function publishDraft(team: string, periodId: string, teamOwner = t
     try {
       await writePeriodRecords(periodId, nextPeriodRecords, currentState.revision);
     } catch (error) {
-      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) continue;
+      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) {
+        await pauseBeforeRetry(attempt);
+        continue;
+      }
       throw error;
     }
 
@@ -191,7 +202,10 @@ export async function rollbackTeamVersion(versionId: string) {
     try {
       await writePeriodRecords(version.periodId, nextPeriodRecords, currentState.revision);
     } catch (error) {
-      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) continue;
+      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) {
+        await pauseBeforeRetry(attempt);
+        continue;
+      }
       throw error;
     }
 
@@ -241,7 +255,10 @@ export async function updatePublishedRecordProgress(input: {
     try {
       await writePeriodRecords(input.periodId, nextPeriodRecords, currentState.revision);
     } catch (error) {
-      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) continue;
+      if (error instanceof SnapshotConflictError && attempt < snapshotWriteAttempts) {
+        await pauseBeforeRetry(attempt);
+        continue;
+      }
       throw error;
     }
 
@@ -381,19 +398,31 @@ async function readDraftFile(): Promise<DraftFile> {
  * Every period shares one local file, so its lock token covers the whole file:
  * a write to any period invalidates readers of all of them. That only costs a
  * retry, and it is what keeps the read-modify-write of the file from losing
- * another period's update.
+ * another period's update. The token is the content itself — a check-in can
+ * change a digit without changing the size, inside one timestamp tick.
  */
 async function readPeriodSnapshotFileState(): Promise<{ file: PeriodSnapshotFile; revision: string }> {
   try {
-    const [text, stat] = await Promise.all([fs.readFile(periodSnapshotPath, "utf8"), fs.stat(periodSnapshotPath)]);
+    const text = await fs.readFile(periodSnapshotPath, "utf8");
     const parsed = JSON.parse(text) as PeriodSnapshotFile;
     return {
       file: Array.isArray(parsed.periods) ? parsed : { version: 1, periods: [] },
-      revision: `${stat.mtimeMs}:${stat.size}`
+      revision: createHash("sha1").update(text).digest("hex")
     };
   } catch {
     return { file: { version: 1, periods: [] }, revision: "missing" };
   }
+}
+
+// Requests overlap inside one server process. Without a queue, two writers can
+// both pass the revision check and then interleave their writes, leaving the
+// file with one write's tail after the other's end.
+let periodFileWrites: Promise<unknown> = Promise.resolve();
+
+function serializePeriodFileWrite(write: () => Promise<void>) {
+  const next = periodFileWrites.then(write, write);
+  periodFileWrites = next.catch(() => undefined);
+  return next;
 }
 
 /**
@@ -414,15 +443,43 @@ export async function writePeriodRecords(periodId: string, records: OkrRecord[],
     return;
   }
 
-  const { file, revision } = await readPeriodSnapshotFileState();
-  if (expectedRevision && revision !== expectedRevision) throw new SnapshotConflictError();
-  const index = file.periods.findIndex((period) => period.periodId === periodId);
-  const periods = index >= 0
-    ? file.periods.map((period, periodIndex) => periodIndex === index ? nextPeriod : period)
-    : [...file.periods, nextPeriod];
+  await serializePeriodFileWrite(async () => {
+    const { file, revision } = await readPeriodSnapshotFileState();
+    if (expectedRevision && revision !== expectedRevision) throw new SnapshotConflictError();
+    const index = file.periods.findIndex((period) => period.periodId === periodId);
+    const periods = index >= 0
+      ? file.periods.map((period, periodIndex) => periodIndex === index ? nextPeriod : period)
+      : [...file.periods, nextPeriod];
 
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(periodSnapshotPath, JSON.stringify({ version: 1, periods }, null, 2), "utf8");
+    // Readers do not queue, and a file rewritten in place is empty for a moment.
+    // Replacing it whole means a reader sees either the old version or the new.
+    const temporaryPath = `${periodSnapshotPath}.${process.pid}-${Date.now().toString(36)}.tmp`;
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(temporaryPath, JSON.stringify({ version: 1, periods }, null, 2), "utf8");
+    await replaceFile(temporaryPath, periodSnapshotPath);
+  });
+}
+
+/**
+ * Windows refuses to replace a file for a moment while another request is
+ * reading it or a virus scanner holds it, so those refusals are waited out
+ * rather than failing the write.
+ */
+async function replaceFile(from: string, to: string) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await fs.rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (attempt < 20 && ["EPERM", "EACCES", "EBUSY"].includes(code)) {
+        await new Promise((resolve) => setTimeout(resolve, 10 * attempt));
+        continue;
+      }
+      await fs.rm(from, { force: true });
+      throw error;
+    }
+  }
 }
 
 function draftDocumentPath(team: string, periodId: string) {

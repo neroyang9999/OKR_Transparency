@@ -177,13 +177,13 @@ function advancePeriod() {
     shortLabel: `${year} Q${quarter}`,
     status: "active"
   };
+  // The tracked config still describes periods with the legacy `editable` / `locked` flags, so
+  // the outgoing period is found by id and given an explicit status, which wins over them.
   writeJson(join(dataDir, "okr-admin-config.json"), {
     ...config,
     defaultPeriodId: nextPeriod.id,
-    periods: [nextPeriod, ...(config.periods ?? []).map((period) => ({
-      ...period,
-      status: period.status === "active" ? "locked" : period.status
-    }))]
+    periods: [nextPeriod, ...(config.periods ?? []).map((period) =>
+      period.id === config.defaultPeriodId ? { ...period, status: "locked", editable: false, locked: true } : period)]
   });
   return nextPeriod.id;
 }
