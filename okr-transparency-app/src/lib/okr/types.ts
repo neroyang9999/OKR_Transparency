@@ -61,6 +61,8 @@ export type SyncStatus = {
   lastSyncedAt: string;
   message: string;
   rowCount: number;
+  /** The period these records belong to. Builds that kept `okrSnapshots/current` as a source of truth wrote it without one. */
+  periodId?: string;
 };
 
 export type OkrSnapshot = {

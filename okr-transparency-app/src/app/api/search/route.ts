@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiAccess } from "@/lib/admin/api-access";
 import { searchOkrs } from "@/lib/okr/search";
-import { readOkrSnapshot } from "@/lib/okr/store";
+import { readPeriodSnapshot } from "@/lib/okr/drafts";
 import { confidenceLevels, okrTypes, type ConfidenceLevel, type OkrType } from "@/lib/okr/types";
+import { normalizePeriod } from "@/lib/periods";
 
 export async function GET(request: NextRequest) {
   const authorization = await requireApiAccess(request);
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid type filter" }, { status: 400 });
   }
 
-  const snapshot = await readOkrSnapshot();
+  const { config } = authorization;
+  const snapshot = await readPeriodSnapshot(normalizePeriod(params.get("period") ?? undefined, config.periods, config.defaultPeriodId));
   const results = searchOkrs(snapshot.records, {
     q: params.get("q") ?? "",
     team: params.get("team") ?? "",

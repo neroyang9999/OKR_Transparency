@@ -6,8 +6,8 @@ import { ConfidenceBadge, Score, TypeBadge } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
-import { readPeriodRecords } from "@/lib/okr/drafts";
-import { getOkrTreeResponse } from "@/lib/okr/store";
+import { readPeriodRecords, readPeriodSnapshot } from "@/lib/okr/drafts";
+import { toOkrTreeResponse } from "@/lib/okr/store";
 import type { OkrRecord } from "@/lib/okr/types";
 import { periodLabel, type Period } from "@/lib/periods";
 
@@ -25,7 +25,7 @@ export default async function TeamsPage({
     );
   }
 
-  const data = await getOkrTreeResponse();
+  const data = toOkrTreeResponse(await readPeriodSnapshot(pageAccess.adminConfig.defaultPeriodId));
   const lang = normalizeLang(rawLang);
   const allLabel = t(lang, "all");
   const selectedTeam = team ?? allLabel;

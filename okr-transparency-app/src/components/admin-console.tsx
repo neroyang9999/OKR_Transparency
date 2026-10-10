@@ -38,6 +38,7 @@ import { applyUserImport, parseUserImport, type UserImportRow } from "@/lib/admi
 import type { UserFeedback } from "@/lib/feedback";
 import type { SnapshotVersion } from "@/lib/okr/snapshot-versions";
 import type { OkrRecord, OkrTreeResponse } from "@/lib/okr/types";
+import { nextQuarterPeriod } from "@/lib/periods";
 import { cn } from "@/lib/utils";
 
 type TabId = "status" | "periods" | "organization" | "feedback" | "recovery";
@@ -499,8 +500,7 @@ function PeriodManagement({ config, setConfig }: AdminSectionProps) {
   }
 
   function addPeriod() {
-    const id = `period-${Date.now().toString(36)}`;
-    setConfig({ ...config, periods: [{ id, label: "新 OKR 周期", labelEn: "New OKR period", shortLabel: "New period", status: "planned" }, ...config.periods] });
+    setConfig({ ...config, periods: [{ ...nextQuarterPeriod(config.periods), status: "planned" }, ...config.periods] });
   }
 
   return (
@@ -516,7 +516,7 @@ function PeriodManagement({ config, setConfig }: AdminSectionProps) {
               <TextField label="英文名称" value={period.labelEn} onChange={(labelEn) => updatePeriod(config, setConfig, period.id, { labelEn })} />
               <div className="flex items-center gap-2 lg:pb-0.5"><PeriodStatus status={period.status} /></div>
               <TextField label="短名称" value={period.shortLabel} onChange={(shortLabel) => updatePeriod(config, setConfig, period.id, { shortLabel })} />
-              <div className="text-xs leading-5 text-slate-500">周期标识由系统自动维护；管理员只需要管理名称和运行状态。</div>
+              <div className="text-xs leading-5 text-slate-500">周期标识 <span className="font-mono">{period.id}</span> 由系统自动维护；管理员只需要管理名称和运行状态。</div>
               <div className="flex flex-wrap justify-end gap-2">
                 {period.status === "planned" && <button type="button" onClick={() => activatePeriod(period)} className="h-9 rounded-md bg-slate-950 px-3 text-sm font-medium text-white">设为当前周期</button>}
                 {period.status === "planned" && <button type="button" onClick={() => setStatus(period, "locked")} className="h-9 rounded-md border border-border px-3 text-sm text-slate-700">锁定</button>}

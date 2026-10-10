@@ -6,7 +6,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { confidenceTone } from "@/components/okr-status";
 import { Badge } from "@/components/ui/badge";
 import type { AdminTeam } from "@/lib/admin/config";
-import { hrefWithLang, t, translateText, type Lang } from "@/lib/i18n";
+import { t, translateText, type Lang } from "@/lib/i18n";
+import { okrDetailHref } from "@/lib/periods";
 import {
   buildAlignmentMapModel,
   type AlignmentEmptyNote,
@@ -55,11 +56,13 @@ export function OkrAlignmentMap({
   records,
   teams,
   teamOwners,
+  period,
   lang
 }: {
   records: OkrRecord[];
   teams: AdminTeam[];
   teamOwners: Record<string, string>;
+  period: string;
   lang: Lang;
 }) {
   const model = useMemo(() => buildAlignmentMapModel(records, teams, teamOwners), [records, teams, teamOwners]);
@@ -658,7 +661,7 @@ export function OkrAlignmentMap({
         </div>
       </div>
 
-      <PathBar trail={trail} nodeIndex={nodeIndex} lang={lang} />
+      <PathBar trail={trail} nodeIndex={nodeIndex} period={period} lang={lang} />
     </div>
   );
 }
@@ -1099,10 +1102,12 @@ function DashedNote({ note, lang, variant }: { note: AlignmentEmptyNote; lang: L
 function PathBar({
   trail,
   nodeIndex,
+  period,
   lang
 }: {
   trail: string[];
   nodeIndex: Map<string, { label: string; okrId?: string; downstream: number; isRoot: boolean }>;
+  period: string;
   lang: Lang;
 }) {
   const focused = trail.length > 0 ? nodeIndex.get(trail[trail.length - 1]) : undefined;
@@ -1143,7 +1148,7 @@ function PathBar({
           <span className="flex-1" />
           {focused?.okrId && (
             <Link
-              href={hrefWithLang(`/okr/${encodeURIComponent(focused.okrId)}`, lang)}
+              href={okrDetailHref(focused.okrId, period, lang)}
               className="flex-none rounded-md border border-[#e4e9f0] px-[9px] py-[3px] text-[11.5px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950"
             >
               {lang === "en" ? "Open detail" : "查看详情"}

@@ -4,7 +4,6 @@ import { OkrAlignmentMap } from "@/components/okr-alignment-map";
 import { teamOwnerDisplayNames } from "@/lib/admin/team-owners";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { readPeriodRecords } from "@/lib/okr/drafts";
-import { readOkrSnapshot } from "@/lib/okr/store";
 import { hrefWithLang, normalizeLang, t, type Lang } from "@/lib/i18n";
 import { normalizePeriod, periodLabel } from "@/lib/periods";
 import { cn } from "@/lib/utils";
@@ -28,10 +27,7 @@ export default async function MapPage({
   const lang = normalizeLang(params.lang);
   const configuredPeriods = pageAccess.adminConfig.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
   const selectedPeriod = normalizePeriod(params.period, configuredPeriods, pageAccess.adminConfig.defaultPeriodId);
-  const snapshot = await readOkrSnapshot();
-  const periodRecords = selectedPeriod === pageAccess.adminConfig.defaultPeriodId
-    ? snapshot.records
-    : await readPeriodRecords(selectedPeriod) ?? [];
+  const periodRecords = await readPeriodRecords(selectedPeriod) ?? [];
   const teamScope = buildMapTeamScope(pageAccess.adminConfig.teams, periodRecords, params.team);
 
   return (
@@ -121,6 +117,7 @@ export default async function MapPage({
         records={teamScope.records}
         teams={pageAccess.adminConfig.teams}
         teamOwners={teamOwnerDisplayNames(pageAccess.adminConfig.users, pageAccess.adminConfig.teams)}
+        period={selectedPeriod}
         lang={lang}
       />
     </AppShell>

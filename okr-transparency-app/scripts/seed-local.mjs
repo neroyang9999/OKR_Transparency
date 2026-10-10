@@ -24,6 +24,7 @@
  *   node scripts/seed-local.mjs --team "AP OPS" --as zhicheng@unitxlabs.com
  *   node scripts/seed-local.mjs --no-member-aligned    # member Objectives all start unaligned
  *   node scripts/seed-local.mjs --map                  # every configured team, for the map view
+ *   node scripts/seed-local.mjs --advance-period       # seed this period, then make the next quarter the default
  *   node scripts/seed-local.mjs --restore              # undo everything this wrote
  *
  * `--map` seeds the whole configured org rather than one chain, because the alignment map only
@@ -31,6 +32,11 @@
  * one parent (which is what makes the channels share), cards of noticeably different heights (which
  * is what puts a small rise between two that look level), and rows far enough apart that focusing
  * one has to lift the others a long way.
+ *
+ * `--advance-period` then does what "设为当前周期" does to the config: adds the next quarter, makes
+ * it the default, and locks the period the records were seeded into. The seeded records stay where
+ * they were, which is the state a quarter rollover leaves behind — the new default period has no
+ * snapshot of its own yet, while `okr-snapshot.json` still holds the old quarter.
  */
 
 import { execFileSync } from "node:child_process";
@@ -43,7 +49,7 @@ const dataDir = join(appRoot, "data");
 const backupDir = join(dataDir, "seed-local-backups");
 
 /** Tracked files the seed overwrites. Backed up so `--restore` works without git. */
-const trackedTargets = ["okr-period-snapshots.json", "okr-drafts.json"];
+const trackedTargets = ["okr-period-snapshots.json", "okr-drafts.json", "okr-admin-config.json"];
 /** Untracked files the seed creates outright. */
 const untrackedTargets = ["okr-snapshot.json"];
 
@@ -110,6 +116,22 @@ function seed() {
   const query = new URLSearchParams({ team, period: periodId, lang: "zh" });
   const memberQuery = new URLSearchParams({ team, member: memberEmail, period: periodId, mode: "edit", lang: "zh" });
 
+  if (args.advancePeriod) {
+    const nextPeriodId = advancePeriod();
+    const nextQuery = new URLSearchParams({ team, period: nextPeriodId, lang: "zh" });
+    const nextMemberQuery = new URLSearchParams({ team, member: memberEmail, period: nextPeriodId, mode: "edit", lang: "zh" });
+    console.log(`seeded ${records.length} records for ${team} / ${periodId}, then made ${nextPeriodId} the default (${periodId} locked)`);
+    console.log(`  signed in as ${memberEmail}`);
+    console.log("");
+    console.log("start the app, then open:");
+    console.log(`  new period, team page     /?${nextQuery}            (expect: empty)`);
+    console.log(`  new period, member edit   /?${nextMemberQuery}  (expect: blank draft)`);
+    console.log(`  old period, team page     /?${query}            (expect: the seeded records)`);
+    console.log("");
+    console.log("when done:  node scripts/seed-local.mjs --restore");
+    return;
+  }
+
   if (args.map) {
     const teamObjectives = records.filter((item) => !item.parent_id && item.objective_scope === "team");
     const memberObjectives = records.filter((item) => item.objective_scope === "member");
@@ -135,6 +157,35 @@ function seed() {
     console.log("");
   }
   console.log("when done:  node scripts/seed-local.mjs --restore");
+}
+
+/** Mirrors `nextQuarterPeriod` in src/lib/periods.ts and the admin console's "设为当前周期". */
+function advancePeriod() {
+  const quarterIndexes = (config.periods ?? []).flatMap((period) => {
+    const match = /^(\d{4})-q([1-4])$/i.exec(String(period.id ?? "").trim());
+    return match ? [Number(match[1]) * 4 + Number(match[2]) - 1] : [];
+  });
+  const index = Math.max(...quarterIndexes) + 1;
+  const year = Math.floor(index / 4);
+  const quarter = (index % 4) + 1;
+  const startMonth = (quarter - 1) * 3 + 1;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const nextPeriod = {
+    id: `${year}-q${quarter}`,
+    label: `${year} 年 ${startMonth} 月 - ${startMonth + 2} 月`,
+    labelEn: `${months[startMonth - 1]} - ${months[startMonth + 1]} ${year}`,
+    shortLabel: `${year} Q${quarter}`,
+    status: "active"
+  };
+  writeJson(join(dataDir, "okr-admin-config.json"), {
+    ...config,
+    defaultPeriodId: nextPeriod.id,
+    periods: [nextPeriod, ...(config.periods ?? []).map((period) => ({
+      ...period,
+      status: period.status === "active" ? "locked" : period.status
+    }))]
+  });
+  return nextPeriod.id;
 }
 
 function buildRecords() {
@@ -381,7 +432,7 @@ function restore() {
   for (const name of untrackedTargets) rmSync(join(dataDir, name), { force: true });
   rmSync(join(appRoot, ".env.local"), { force: true });
   rmSync(backupDir, { recursive: true, force: true });
-  console.log(`restored ${restored} tracked file(s), removed the seeded snapshot and .env.local`);
+  console.log(`restored ${restored} tracked file(s) (including the admin config), removed the seeded snapshot and .env.local`);
   if (restored < trackedTargets.length) {
     console.log("no backup found for every file — run `git checkout -- data/` if anything looks off");
   }
@@ -404,6 +455,7 @@ function parseArgs(argv) {
     if (key === "restore") { parsed.restore = true; continue; }
     if (key === "noMemberAligned") { parsed.memberAligned = false; continue; }
     if (key === "map") { parsed.map = true; continue; }
+    if (key === "advancePeriod") { parsed.advancePeriod = true; continue; }
     parsed[key] = argv[index + 1];
     index += 1;
   }

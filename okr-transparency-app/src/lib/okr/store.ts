@@ -9,6 +9,9 @@ import { readAdminConfig, type AdminConfig } from "../admin/config";
 import { resolveAdminTeamName } from "../admin/team-rename";
 
 const dataDir = path.join(process.cwd(), "data");
+// A mirror of the default period, kept for rolling back to builds that read it.
+// Period records come from `readPeriodRecords` / `readPeriodSnapshot` in drafts.ts,
+// which reads this only to take over from such a build.
 const snapshotPath = path.join(dataDir, "okr-snapshot.json");
 const snapshotDocumentPath = "okrSnapshots/current";
 
@@ -65,8 +68,7 @@ export class SnapshotConflictError extends Error {
   }
 }
 
-export async function getOkrTreeResponse(): Promise<OkrTreeResponse> {
-  const snapshot = await readOkrSnapshot();
+export function toOkrTreeResponse(snapshot: OkrSnapshot): OkrTreeResponse {
   return {
     meta: snapshot.meta,
     records: snapshot.records,

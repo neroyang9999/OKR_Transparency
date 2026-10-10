@@ -4,7 +4,6 @@ import { readAdminConfig } from "../../../lib/admin/config";
 import { canEditTeamOwner, resolveRequestAccess, validateEditablePeriod } from "../../../lib/admin/permissions";
 import { readPeriodRecords, updatePublishedRecordProgress } from "../../../lib/okr/drafts";
 import { readProgressNotesForObjective, writeProgressNote } from "../../../lib/okr/progress-notes";
-import { readOkrSnapshot } from "../../../lib/okr/store";
 import type { ConfidenceLevel } from "../../../lib/okr/types";
 
 export async function GET(request: NextRequest) {
@@ -51,7 +50,7 @@ export async function PUT(request: NextRequest) {
     }
     const period = validateEditablePeriod(config, body.periodId);
     if (!period.ok) return NextResponse.json({ error: period.error }, { status: 403 });
-    const periodRecords = await readPeriodRecords(body.periodId) ?? (await readOkrSnapshot()).records;
+    const periodRecords = await readPeriodRecords(body.periodId) ?? [];
     const objective = periodRecords.find((record) => record.team === body.team && record.okr_id === body.objectiveId);
     if (!objective) return NextResponse.json({ error: "Published OKR record not found" }, { status: 404 });
     if (!canEditTeamOwner(config, body.team, access, objective.owner ?? "")) {
