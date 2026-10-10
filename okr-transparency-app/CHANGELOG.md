@@ -4,6 +4,11 @@ All notable product changes are recorded here. This project follows Semantic Ver
 
 ## Unreleased
 
+## v0.8.8 - 2026-10-10
+
+- Let a quarter close while the next one is drafted. Periods now move planned → drafting → in progress → closing → locked, and two can be open at once: one being drafted or closing next to the one in progress. Drafting takes OKR changes but no check-ins; closing takes check-ins and scores while its OKRs stay frozen; planned periods are shown to administrators only. Starting a period moves the one in progress into closing instead of locking it, so Q4 OKRs can be written and published while Q3 progress is still being finished. The overview, progress cards, My Actions, the KR entry page, search and the alignment map follow the stage of the period being viewed, and My Actions lists every open period.
+- Read every period from its own snapshot. Switching the default period used to show the previous quarter's OKRs as the new one, seed its drafts from them, and copy every other team's old records into it on the first publish. A new period now starts empty, concurrent publishes and check-ins into any period are serialised on that period's own lock instead of overwriting each other, and detail links carry their period.
+
 ## v0.8.7 - 2026-09-03
 
 - Stop prefetching every team, period and KR detail link on the overview page. One load fired 63 requests in 15 sequential waves over 6.6 seconds, 59 of them link prefetches the server answered in 6-41ms each -- the wait was round trips, not work, and the waves were spaced at the round-trip time to the region. Because the page navigates by query parameter, each team, period and detail panel is a separate payload, so the request count grew with the org and the OKR tree. The detail panels, team sidebar, period switcher, language toggle and edit button no longer prefetch: 44 prefetch requests on a seeded org drop to 10. Clicking one of those links now costs a single round trip for a payload under a kilobyte. The top navigation still prefetches.
