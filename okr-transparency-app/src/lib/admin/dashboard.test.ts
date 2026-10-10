@@ -28,6 +28,18 @@ it("turns missing operational state into actionable attention items", () => {
   expect(summary.attention.map((item) => item.id)).toEqual(expect.arrayContaining(["single-admin", "unpublished-teams"]));
 });
 
+it("flags having no open period, and a period left open after closing", () => {
+  const period = (id: string, status: AdminConfig["periods"][number]["status"]) => ({ id, label: id, labelEn: id, shortLabel: id, status });
+  const allLocked = getAdminRuntimeSummary({ ...config, periods: [period("2026-q3", "locked")] }, [], [objective]);
+  expect(allLocked.attention.map((item) => item.id)).toContain("no-open-period");
+
+  const overlap = getAdminRuntimeSummary({ ...config, periods: [period("2026-q4", "setting"), period("2026-q3", "active")] }, [], [objective]);
+  expect(overlap.attention.map((item) => item.id)).not.toContain("too-many-open-periods");
+
+  const forgotten = getAdminRuntimeSummary({ ...config, periods: [period("2026-q4", "active"), period("2026-q3", "closing"), period("2026-q2", "closing")] }, [], [objective]);
+  expect(forgotten.attention.find((item) => item.id === "too-many-open-periods")?.title).toBe("3 个周期同时开放");
+});
+
 it("hides stale weekly-update health when progress notes are disabled", () => {
   const staleKr = { ...objective, okr_id: "SW-KR1", parent_id: "SW-O1", kr: "Ship", last_update: "2026-01-01" };
   const summary = getAdminRuntimeSummary(

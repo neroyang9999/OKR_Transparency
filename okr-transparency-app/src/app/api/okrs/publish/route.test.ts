@@ -10,7 +10,7 @@ vi.mock("@/lib/admin/permissions", () => ({
   authorizePublish: vi.fn(),
   getTeamEditPolicy: vi.fn(),
   resolveRequestAccess: vi.fn(),
-  validateEditablePeriod: vi.fn()
+  validateOkrEditablePeriod: vi.fn()
 }));
 vi.mock("@/lib/okr/drafts", () => ({ publishDraft: vi.fn() }));
 vi.mock("@/lib/okr/owner-scope", () => ({

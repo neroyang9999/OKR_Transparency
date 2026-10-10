@@ -3,7 +3,7 @@ import { appendAdminEvent, readAdminConfig, type AdminConfig } from "@/lib/admin
 import { publishDraft } from "@/lib/okr/drafts";
 import { ownerScopeForMember, ownerScopeForTeam } from "@/lib/okr/owner-scope";
 import { SnapshotConflictError } from "@/lib/okr/store";
-import { authorizePublish, getTeamEditPolicy, resolveRequestAccess, validateEditablePeriod, type UserAccess } from "@/lib/admin/permissions";
+import { authorizePublish, getTeamEditPolicy, resolveRequestAccess, validateOkrEditablePeriod, type UserAccess } from "@/lib/admin/permissions";
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 }
 
 function authorizeOwnerScopedPublish(config: AdminConfig, access: UserAccess | null, team: string, periodId: string, ownerEmail: string) {
-  const period = validateEditablePeriod(config, periodId);
+  const period = validateOkrEditablePeriod(config, periodId);
   if (!period.ok) return period;
 
   const policy = getTeamEditPolicy(config, team, access);

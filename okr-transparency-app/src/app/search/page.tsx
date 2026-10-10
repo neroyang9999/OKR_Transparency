@@ -7,11 +7,12 @@ import { toOkrTreeResponse } from "@/lib/okr/store";
 import { searchOkrs } from "@/lib/okr/search";
 import { confidenceLevels, okrTypes, type ConfidenceLevel, type OkrType } from "@/lib/okr/types";
 import { normalizeLang, t } from "@/lib/i18n";
+import { periodsForViewer, periodStageLabel, resolveViewerPeriod } from "@/lib/period-stages";
 
 export default async function SearchPage({
   searchParams
 }: {
-  searchParams: Promise<{ q?: string; team?: string; confidence?: string; type?: string; lang?: string }>;
+  searchParams: Promise<{ q?: string; team?: string; confidence?: string; type?: string; lang?: string; period?: string }>;
 }) {
   const [params, pageAccess] = await Promise.all([searchParams, getPageAccess()]);
   if (!pageAccess.access) {
@@ -22,7 +23,10 @@ export default async function SearchPage({
     );
   }
 
-  const data = toOkrTreeResponse(await readPeriodSnapshot(pageAccess.adminConfig.defaultPeriodId));
+  // While a quarter closes and the next is drafted, both are worth searching.
+  const periods = periodsForViewer(pageAccess.adminConfig, pageAccess.access.role);
+  const selectedPeriod = resolveViewerPeriod(params.period, pageAccess.adminConfig, pageAccess.access.role);
+  const data = toOkrTreeResponse(await readPeriodSnapshot(selectedPeriod));
   const lang = normalizeLang(params.lang);
   const results = searchOkrs(data.records, {
     q: params.q ?? "",
@@ -40,7 +44,7 @@ export default async function SearchPage({
         </p>
       </div>
 
-      <form className="mb-5 grid gap-3 rounded-lg border border-border bg-white p-4 shadow-subtle md:grid-cols-[1fr_160px_160px_160px_auto]">
+      <form className="mb-5 grid gap-3 rounded-lg border border-border bg-white p-4 shadow-subtle md:grid-cols-[1fr_180px_160px_160px_160px_auto]">
         {lang === "en" && <input type="hidden" name="lang" value="en" />}
         <input
           name="q"
@@ -48,6 +52,15 @@ export default async function SearchPage({
           placeholder={t(lang, "searchPlaceholder")}
           className="h-10 rounded-md border border-border px-3 text-sm outline-none focus:border-blue-400"
         />
+        <select name="period" defaultValue={selectedPeriod} aria-label={lang === "en" ? "Period" : "周期"} className="h-10 rounded-md border border-border px-3 text-sm">
+          {periods.map((period) => (
+            <option key={period.id} value={period.id}>
+              {period.status === "setting" || period.status === "closing" || period.status === "planned"
+                ? `${period.shortLabel} · ${periodStageLabel(period.status, lang)}`
+                : period.shortLabel}
+            </option>
+          ))}
+        </select>
         <select name="team" defaultValue={params.team ?? ""} className="h-10 rounded-md border border-border px-3 text-sm">
           <option value="">{t(lang, "allTeams")}</option>
           {data.stats.teams.map((team) => <option key={team} value={team}>{team}</option>)}

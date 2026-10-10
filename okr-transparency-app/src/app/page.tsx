@@ -6,7 +6,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { LoginPanel } from "@/components/login-panel";
 import { OkrDetailDrawer, OkrDetailLink } from "@/components/okr-detail-drawer";
-import { PeriodSwitcher } from "@/components/period-switcher";
+import { PeriodStageTag, PeriodSwitcher } from "@/components/period-switcher";
 import { ProgressNoteCard } from "@/components/progress-note-card";
 import { TeamSidebar, type TeamNavItem } from "@/components/team-sidebar";
 import { resolveTeamOwner, selectableTeamOwners } from "@/lib/admin/team-owners";
@@ -23,7 +23,8 @@ import { getAlignmentOptions } from "@/lib/okr/alignment-candidates";
 import { readDraft, readPeriodSnapshot } from "@/lib/okr/drafts";
 import { ownerScopeForTeam, ownerScopeForUser, teamScopedRecords } from "@/lib/okr/owner-scope";
 import { readProgressNotes, type ProgressNote } from "@/lib/okr/progress-notes";
-import { okrDetailHref, type Period } from "@/lib/periods";
+import { okrDetailHref } from "@/lib/periods";
+import { allowsOkrEdits, allowsProgressUpdates, okrEditsClosedReason, periodsForViewer, progressClosedReason, resolveViewerPeriod } from "@/lib/period-stages";
 import { hrefWithLang, normalizeLang, t, translateText, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -39,9 +40,12 @@ export default async function HomePage({
   const { adminConfig, sessionUser, access } = pageAccess;
   const lang = normalizeLang(rawLang ?? adminConfig.settings.defaultLanguage);
   const selectedTeam = normalizeTeam(team, adminConfig);
-  const selectedPeriod = normalizePeriodFromConfig(period, adminConfig);
-  const periods = getConfiguredPeriods(adminConfig);
-  const selectedPeriodLabel = periods.find((item) => item.id === selectedPeriod)?.shortLabel ?? selectedPeriod;
+  const periods = periodsForViewer(adminConfig, access?.role);
+  const selectedPeriod = resolveViewerPeriod(period, adminConfig, access?.role);
+  const selectedPeriodInfo = periods.find((item) => item.id === selectedPeriod);
+  const selectedPeriodLabel = selectedPeriodInfo?.shortLabel ?? selectedPeriod;
+  const okrEditable = allowsOkrEdits(selectedPeriodInfo?.status);
+  const progressReadOnlyNote = allowsProgressUpdates(selectedPeriodInfo?.status) ? undefined : progressClosedReason(selectedPeriodInfo?.status, lang);
   const teamNav = buildTeamNav(adminConfig);
   const selectedMember = normalizeMember(member, selectedTeam, adminConfig);
   const selectedTeamOwner = adminConfig.teams.find((item) => item.name === selectedTeam && item.enabled)?.owner ?? selectedTeam;
@@ -64,7 +68,9 @@ export default async function HomePage({
     adminConfig.settings.allowProgressNotes ? readProgressNotes() : Promise.resolve([])
   ]);
   const editPolicy = getTeamEditPolicy(adminConfig, selectedTeam, access);
-  const baseDraft = mode === "edit" && editPolicy.canEdit ? await readDraft(selectedTeam, selectedPeriod) : null;
+  const baseDraft = mode === "edit" && editPolicy.canEdit && okrEditable ? await readDraft(selectedTeam, selectedPeriod) : null;
+  // Asked for the editor on a period that takes no OKR changes: show why rather than an editor whose saves fail.
+  const editClosedReason = mode === "edit" && editPolicy.canEdit && !okrEditable ? okrEditsClosedReason(selectedPeriodInfo?.status, lang) : "";
   const draft = baseDraft ? filterDraftByOwner(baseDraft, selectedOwnerAliases, selectedOwner, selectedOwnerScope) : null;
   const periodRecords = periodSnapshot.records;
   const teamRecords = periodRecords.filter((record) => record.team === selectedTeam);
@@ -125,6 +131,7 @@ export default async function HomePage({
                     </>
                   )}
                   <span>{selectedPeriodLabel}</span>
+                  {selectedPeriodInfo && <PeriodStageTag period={selectedPeriodInfo} lang={lang} />}
                   <span>·</span>
                   <span>{displayRecordCount} {t(lang, "records")}</span>
                   <span>·</span>
@@ -134,7 +141,7 @@ export default async function HomePage({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <PeriodSwitcher selectedPeriod={selectedPeriod} selectedTeam={selectedTeam} selectedMemberEmail={selectedMember?.email} lang={lang} periodsOverride={periods} />
-              {adminConfig.settings.showEditLinks && editPolicy.canEdit && (
+              {adminConfig.settings.showEditLinks && editPolicy.canEdit && okrEditable && (
                 <Link
                   href={hrefWithLang(buildOverviewHref({
                     team: selectedTeam,
@@ -152,6 +159,10 @@ export default async function HomePage({
             </div>
           </div>
 
+          {editClosedReason && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{editClosedReason}</div>
+          )}
+
           {rootObjectives.length === 0 ? (
             <EmptyTeam lang={lang} />
           ) : (
@@ -168,6 +179,7 @@ export default async function HomePage({
                   selectedPeriod={selectedPeriod}
                   progressNotes={progressNotes}
                   showProgressNotes={adminConfig.settings.allowProgressNotes}
+                  progressReadOnlyNote={progressReadOnlyNote}
                   detailHref={detailHref}
                   displayOwner={selectedOwner}
                   lang={lang}
@@ -195,6 +207,7 @@ export default async function HomePage({
             records={periodRecords}
             progressNotes={progressNotes}
             showProgressNotes={adminConfig.settings.allowProgressNotes}
+            progressReadOnlyNote={progressReadOnlyNote}
             selectedPeriod={selectedPeriod}
             selectedDetailId={detail}
             lang={lang}
@@ -215,6 +228,7 @@ function ObjectiveBlock({
   selectedPeriod,
   progressNotes,
   showProgressNotes,
+  progressReadOnlyNote,
   detailHref,
   displayOwner,
   lang
@@ -226,6 +240,7 @@ function ObjectiveBlock({
   selectedPeriod: string;
   progressNotes: ProgressNote[];
   showProgressNotes: boolean;
+  progressReadOnlyNote?: string;
   detailHref: (okrId: string) => string;
   displayOwner: string;
   lang: Lang;
@@ -288,6 +303,7 @@ function ObjectiveBlock({
                   : t(lang, "noHighRisk")}
               defaultStatus={objective.confidence}
               fullHistoryHref={okrDetailHref(objective.okr_id, selectedPeriod, lang)}
+              readOnlyNote={progressReadOnlyNote}
               lang={lang}
             />
           )}
@@ -489,14 +505,6 @@ function initials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-}
-
-function normalizePeriodFromConfig(period: string | undefined, config: AdminConfig) {
-  return config.periods.some((item) => item.id === period) ? period! : config.defaultPeriodId;
-}
-
-function getConfiguredPeriods(config: AdminConfig): Period[] {
-  return config.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
 }
 
 function buildOverviewHref({

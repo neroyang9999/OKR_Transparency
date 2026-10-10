@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { buildMyKrEntryTeams, type MyKrEntryTeam } from "@/lib/action-center-entry";
 import { getPageAccess } from "@/lib/admin/page-access";
 import { hrefWithLang, normalizeLang, type Lang } from "@/lib/i18n";
+import { allowsOkrEdits, periodsForViewer, periodStageLabel, sortNewestFirst } from "@/lib/period-stages";
 
 export default async function MyKrSetupPage({
   searchParams
 }: {
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; period?: string }>;
 }) {
   const [query, pageAccess] = await Promise.all([searchParams, getPageAccess()]);
   const lang = normalizeLang(query.lang ?? pageAccess.adminConfig.settings.defaultLanguage);
@@ -24,10 +25,12 @@ export default async function MyKrSetupPage({
 
   const { access, adminConfig } = pageAccess;
   const copy = copies[lang];
-  const periodId = adminConfig.defaultPeriodId;
-  const period = adminConfig.periods.find((item) => item.id === periodId);
+  // A quarter being drafted and the one in progress both take OKRs; the newest is what people usually came for.
+  const editablePeriods = sortNewestFirst(periodsForViewer(adminConfig, access.role).filter((item) => allowsOkrEdits(item.status)));
+  const period = editablePeriods.find((item) => item.id === query.period) ?? editablePeriods[0];
+  const periodId = period?.id ?? adminConfig.defaultPeriodId;
   const teams = buildMyKrEntryTeams(adminConfig, access);
-  const periodLocked = period?.status !== "active";
+  const periodLocked = !period;
 
   return (
     <AppShell active="myActions">
@@ -44,7 +47,24 @@ export default async function MyKrSetupPage({
             <h1 className="mt-2 text-2xl font-semibold text-slate-950">{copy.title}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.subtitle}</p>
           </div>
-          <Badge tone="blue">{period?.shortLabel ?? periodId}</Badge>
+          {editablePeriods.length > 1 ? (
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label={copy.choosePeriod}>
+              {editablePeriods.map((item) => (
+                <Link
+                  key={item.id}
+                  href={hrefWithLang(`/my/setup?period=${encodeURIComponent(item.id)}`, lang)}
+                  aria-current={item.id === periodId ? "page" : undefined}
+                  className={item.id === periodId
+                    ? "inline-flex h-8 items-center gap-1.5 rounded-full bg-blue-600 px-3 text-xs font-medium text-white"
+                    : "inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white px-3 text-xs font-medium text-slate-700 hover:border-blue-200 hover:text-blue-700"}
+                >
+                  {item.shortLabel} · {periodStageLabel(item.status, lang)}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <Badge tone="blue">{period?.shortLabel ?? periodId}</Badge>
+          )}
         </div>
       </section>
 
@@ -135,8 +155,9 @@ const copies = {
     teamDescription: "进入该团队的完整 OKR 编辑范围。",
     fillMyKr: "填写我的 KR",
     editTeamKr: "编辑团队 KR",
-    periodLocked: "当前周期不可编辑",
-    periodLockedDescription: "请切换到活动周期后再填写 KR。",
+    choosePeriod: "选择周期",
+    periodLocked: "没有可填写 OKR 的周期",
+    periodLockedDescription: "现在没有处于制定中或进行中的周期，请联系管理员开放周期。",
     noTeam: "没有可填写的团队",
     noTeamDescription: "请联系管理员先把你的账号加入对应团队。"
   },
@@ -154,8 +175,9 @@ const copies = {
     teamDescription: "Open the full OKR editor for this team.",
     fillMyKr: "Add my KRs",
     editTeamKr: "Edit team KRs",
-    periodLocked: "The active period is not editable",
-    periodLockedDescription: "Switch to an active period before adding KRs.",
+    choosePeriod: "Choose a period",
+    periodLocked: "No period is taking OKRs",
+    periodLockedDescription: "No period is being drafted or in progress right now. Ask an administrator to open one.",
     noTeam: "No editable teams",
     noTeamDescription: "Ask an administrator to add your account to the appropriate team first."
   }

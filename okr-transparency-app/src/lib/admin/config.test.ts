@@ -24,7 +24,7 @@ describe("admin config v2", () => {
     expect(config).not.toHaveProperty("permissions");
   });
 
-  it("rejects ambiguous active periods and fewer than two valid administrators", () => {
+  it("rejects two periods in progress and fewer than two valid administrators", () => {
     const config = normalizeAdminConfig({});
     const invalid = {
       ...config,
@@ -32,9 +32,36 @@ describe("admin config v2", () => {
       users: config.users.map((user) => ({ ...user, enabled: false }))
     };
     expect(validateAdminConfig(invalid)).toEqual(expect.arrayContaining([
-      "Exactly one active period is required",
+      "At most one period can be in progress",
       "At least two enabled system administrators with valid email addresses are required"
     ]));
+  });
+
+  it("lets a quarter close while the next one is drafted, and lands people on the one in progress", () => {
+    const config = normalizeAdminConfig({
+      periods: [
+        { id: "2026-q4", label: "Q4", labelEn: "Q4", shortLabel: "Q4", status: "setting" },
+        { id: "2026-q3", label: "Q3", labelEn: "Q3", shortLabel: "Q3", status: "active" },
+        { id: "2026-q2", label: "Q2", labelEn: "Q2", shortLabel: "Q2", status: "closing" }
+      ]
+    });
+
+    expect(config.periods.map((period) => period.status)).toEqual(["setting", "active", "closing"]);
+    expect(config.defaultPeriodId).toBe("2026-q3");
+    expect(validateAdminConfig(config)).not.toContain("At most one period can be in progress");
+  });
+
+  it("derives the default period instead of trusting a stored one", () => {
+    const config = normalizeAdminConfig({
+      defaultPeriodId: "2026-q3",
+      periods: [
+        { id: "2026-q4", label: "Q4", labelEn: "Q4", shortLabel: "Q4", status: "active" },
+        { id: "2026-q3", label: "Q3", labelEn: "Q3", shortLabel: "Q3", status: "closing" }
+      ]
+    });
+
+    expect(config.defaultPeriodId).toBe("2026-q4");
+    expect(config.periods.map((period) => period.status)).toEqual(["active", "closing"]);
   });
 
   it("maps legacy System and Infra team names without changing stored owner aliases", () => {

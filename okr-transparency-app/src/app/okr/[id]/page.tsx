@@ -11,7 +11,8 @@ import { getPopulatedOkrDetailFields } from "@/lib/okr/detail-fields";
 import { readPeriodRecords } from "@/lib/okr/drafts";
 import { readProgressNotesForObjective, type ProgressNote } from "@/lib/okr/progress-notes";
 import type { ConfidenceLevel, LocalizedText } from "@/lib/okr/types";
-import { normalizePeriod, okrDetailHref } from "@/lib/periods";
+import { okrDetailHref } from "@/lib/periods";
+import { periodsForViewer, resolveViewerPeriod } from "@/lib/period-stages";
 
 export default async function OkrDetailPage({
   params,
@@ -36,7 +37,8 @@ export default async function OkrDetailPage({
 
   const { adminConfig } = pageAccess;
   const okrId = decodeURIComponent(id);
-  const period = normalizePeriod(query.period, adminConfig.periods, adminConfig.defaultPeriodId);
+  const viewerPeriods = periodsForViewer(adminConfig, pageAccess.access.role);
+  const period = resolveViewerPeriod(query.period, adminConfig, pageAccess.access.role);
   const records = await readPeriodRecords(period) ?? [];
   const record = records.find((item) => item.okr_id === okrId);
 
@@ -44,7 +46,7 @@ export default async function OkrDetailPage({
     // Links shared before they carried a period have none, and stop resolving
     // once the default period moves on; send them to the period that has the OKR.
     if (!query.period) {
-      for (const candidate of adminConfig.periods.filter((item) => item.id !== period)) {
+      for (const candidate of viewerPeriods.filter((item) => item.id !== period)) {
         if ((await readPeriodRecords(candidate.id))?.some((item) => item.okr_id === okrId)) {
           redirect(okrDetailHref(okrId, candidate.id, lang));
         }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type { AdminConfig } from "./config";
 import { isIapAuthenticationRequired, verifyIapJwt } from "../iap-auth";
-import { authorizeDraftChange, authorizePublish, canEditTeamOwner, getAccessForSessionUser, getTeamEditPolicy, resolveRequestAccess } from "./permissions";
+import { authorizeDraftChange, authorizePublish, canEditTeamOwner, getAccessForSessionUser, getTeamEditPolicy, resolveRequestAccess, validateOkrEditablePeriod, validateProgressPeriod } from "./permissions";
 import type { OkrDraft } from "../okr/edit-types";
 
 vi.mock("../iap-auth", () => ({
@@ -242,7 +242,23 @@ describe("role-based OKR permissions", () => {
 
   it("prevents every role from editing locked periods", () => {
     const access = getAccessForSessionUser(config, { email: "admin@company.com", name: "Admin" });
-    expect(authorizePublish(config, access, "Software", "2026-q2")).toMatchObject({ ok: false, error: "Period is locked" });
+    expect(authorizePublish(config, access, "Software", "2026-q2")).toMatchObject({ ok: false, error: "Period is not open for OKR changes" });
+  });
+
+  it("splits OKR changes from check-ins by period stage", () => {
+    const staged: AdminConfig = {
+      ...config,
+      periods: (["planned", "setting", "active", "closing", "locked"] as const).map((status, index) => ({
+        id: `2026-q${index}`, label: status, labelEn: status, shortLabel: status, status
+      }))
+    };
+    const okrs = staged.periods.map((period) => validateOkrEditablePeriod(staged, period.id).ok);
+    const progress = staged.periods.map((period) => validateProgressPeriod(staged, period.id).ok);
+
+    // planned, setting, active, closing, locked
+    expect(okrs).toEqual([false, true, true, false, false]);
+    expect(progress).toEqual([false, false, true, true, false]);
+    expect(validateOkrEditablePeriod(staged, "2026-q3").error).toBe("Period is closing: OKRs are frozen");
   });
 
   it("allows personal OKR accounts to edit only KR records matching their owner aliases", () => {

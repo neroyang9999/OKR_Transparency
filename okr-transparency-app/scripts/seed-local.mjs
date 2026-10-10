@@ -24,7 +24,8 @@
  *   node scripts/seed-local.mjs --team "AP OPS" --as zhicheng@unitxlabs.com
  *   node scripts/seed-local.mjs --no-member-aligned    # member Objectives all start unaligned
  *   node scripts/seed-local.mjs --map                  # every configured team, for the map view
- *   node scripts/seed-local.mjs --advance-period       # seed this period, then make the next quarter the default
+ *   node scripts/seed-local.mjs --open-next-period     # this period stays in progress, the next quarter opens for drafting
+ *   node scripts/seed-local.mjs --advance-period       # the next quarter starts, this period moves into closing
  *   node scripts/seed-local.mjs --restore              # undo everything this wrote
  *
  * `--map` seeds the whole configured org rather than one chain, because the alignment map only
@@ -33,10 +34,12 @@
  * is what puts a small rise between two that look level), and rows far enough apart that focusing
  * one has to lift the others a long way.
  *
- * `--advance-period` then does what "设为当前周期" does to the config: adds the next quarter, makes
- * it the default, and locks the period the records were seeded into. The seeded records stay where
- * they were, which is the state a quarter rollover leaves behind — the new default period has no
- * snapshot of its own yet, while `okr-snapshot.json` still holds the old quarter.
+ * The two period flags add the next quarter to the config the way the admin console would, which
+ * is how the overlap between quarters is reproduced. `--open-next-period` is "开放制定": the
+ * seeded period stays in progress and the next one is drafted alongside it. `--advance-period` is
+ * "启动周期": the next quarter becomes the one in progress and the seeded period moves into closing.
+ * Either way the seeded records stay in their period, so the new quarter has no snapshot of its own
+ * yet while `okr-snapshot.json` still holds the old one.
  */
 
 import { execFileSync } from "node:child_process";
@@ -116,17 +119,23 @@ function seed() {
   const query = new URLSearchParams({ team, period: periodId, lang: "zh" });
   const memberQuery = new URLSearchParams({ team, member: memberEmail, period: periodId, mode: "edit", lang: "zh" });
 
-  if (args.advancePeriod) {
-    const nextPeriodId = advancePeriod();
+  if (args.advancePeriod || args.openNextPeriod) {
+    const advancing = Boolean(args.advancePeriod);
+    const nextPeriodId = addNextPeriod(advancing);
     const nextQuery = new URLSearchParams({ team, period: nextPeriodId, lang: "zh" });
     const nextMemberQuery = new URLSearchParams({ team, member: memberEmail, period: nextPeriodId, mode: "edit", lang: "zh" });
-    console.log(`seeded ${records.length} records for ${team} / ${periodId}, then made ${nextPeriodId} the default (${periodId} locked)`);
+    console.log(advancing
+      ? `seeded ${records.length} records for ${team} / ${periodId}, then started ${nextPeriodId} (${periodId} is closing)`
+      : `seeded ${records.length} records for ${team} / ${periodId} (in progress), then opened ${nextPeriodId} for drafting`);
     console.log(`  signed in as ${memberEmail}`);
     console.log("");
     console.log("start the app, then open:");
-    console.log(`  new period, team page     /?${nextQuery}            (expect: empty)`);
-    console.log(`  new period, member edit   /?${nextMemberQuery}  (expect: blank draft)`);
-    console.log(`  old period, team page     /?${query}            (expect: the seeded records)`);
+    console.log(`  ${nextPeriodId} member edit   /?${nextMemberQuery}  (expect: blank draft that can be published)`);
+    console.log(`  ${nextPeriodId} team page     /?${nextQuery}`);
+    console.log(advancing
+      ? `  ${periodId} team page     /?${query}  (expect: seeded records, no edit button, check-ins still open)`
+      : `  ${periodId} team page     /?${query}  (expect: seeded records, editable as before)`);
+    console.log("  my actions        /my?lang=zh  (expect: a section for each open period)");
     console.log("");
     console.log("when done:  node scripts/seed-local.mjs --restore");
     return;
@@ -159,8 +168,11 @@ function seed() {
   console.log("when done:  node scripts/seed-local.mjs --restore");
 }
 
-/** Mirrors `nextQuarterPeriod` in src/lib/periods.ts and the admin console's "设为当前周期". */
-function advancePeriod() {
+/**
+ * Mirrors `nextQuarterPeriod` in src/lib/periods.ts, then either "开放制定" (the next quarter is
+ * drafted next to the seeded one) or "启动周期" (it starts and the seeded one moves into closing).
+ */
+function addNextPeriod(advancing) {
   const quarterIndexes = (config.periods ?? []).flatMap((period) => {
     const match = /^(\d{4})-q([1-4])$/i.exec(String(period.id ?? "").trim());
     return match ? [Number(match[1]) * 4 + Number(match[2]) - 1] : [];
@@ -175,15 +187,16 @@ function advancePeriod() {
     label: `${year} 年 ${startMonth} 月 - ${startMonth + 2} 月`,
     labelEn: `${months[startMonth - 1]} - ${months[startMonth + 1]} ${year}`,
     shortLabel: `${year} Q${quarter}`,
-    status: "active"
+    status: advancing ? "active" : "setting"
   };
   // The tracked config still describes periods with the legacy `editable` / `locked` flags, so
-  // the outgoing period is found by id and given an explicit status, which wins over them.
+  // the seeded period is found by id and given an explicit status, which wins over them. The
+  // app derives the default period from the stages, so `defaultPeriodId` is only kept in step.
   writeJson(join(dataDir, "okr-admin-config.json"), {
     ...config,
-    defaultPeriodId: nextPeriod.id,
+    defaultPeriodId: advancing ? nextPeriod.id : config.defaultPeriodId,
     periods: [nextPeriod, ...(config.periods ?? []).map((period) =>
-      period.id === config.defaultPeriodId ? { ...period, status: "locked", editable: false, locked: true } : period)]
+      period.id === config.defaultPeriodId ? { ...period, status: advancing ? "closing" : "active" } : period)]
   });
   return nextPeriod.id;
 }
@@ -456,6 +469,7 @@ function parseArgs(argv) {
     if (key === "noMemberAligned") { parsed.memberAligned = false; continue; }
     if (key === "map") { parsed.map = true; continue; }
     if (key === "advancePeriod") { parsed.advancePeriod = true; continue; }
+    if (key === "openNextPeriod") { parsed.openNextPeriod = true; continue; }
     parsed[key] = argv[index + 1];
     index += 1;
   }

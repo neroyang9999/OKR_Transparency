@@ -10,6 +10,7 @@ import { readPeriodRecords, readPeriodSnapshot } from "@/lib/okr/drafts";
 import { toOkrTreeResponse } from "@/lib/okr/store";
 import type { OkrRecord } from "@/lib/okr/types";
 import { periodLabel, type Period } from "@/lib/periods";
+import { periodsForViewer } from "@/lib/period-stages";
 
 export default async function TeamsPage({
   searchParams
@@ -31,7 +32,7 @@ export default async function TeamsPage({
   const selectedTeam = team ?? allLabel;
   const currentRecords = team ? data.records.filter((record) => record.team === team) : data.records;
   const teams = team ? [team] : data.stats.teams;
-  const configuredPeriods = pageAccess.adminConfig.periods.map(({ id, label, labelEn, shortLabel }) => ({ id, label, labelEn, shortLabel }));
+  const configuredPeriods = periodsForViewer(pageAccess.adminConfig, pageAccess.access.role);
   const periodRows = await getPeriodRows(team, data.records, lang, configuredPeriods, pageAccess.adminConfig.defaultPeriodId);
   const attentionRecords = currentRecords
     .filter((record) => record.confidence !== "Green" || record.risks || record.decisions_needed)

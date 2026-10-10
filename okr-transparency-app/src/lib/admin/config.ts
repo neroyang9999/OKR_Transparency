@@ -3,13 +3,14 @@ import path from "path";
 import { listFirestoreCollection, readFirestoreDocument, writeFirestoreDocument } from "../storage/firestore";
 import { isFirestoreStorageEnabled } from "../storage/mode";
 import { canonicalOwnerName, canonicalTeamName } from "../team-names";
+import { deriveDefaultPeriodId, periodStatuses } from "../period-stages";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath = path.join(dataDir, "okr-admin-config.json");
 const eventsPath = path.join(dataDir, "okr-admin-events.json");
 const configDocumentPath = "okrAdmin/config";
 
-export type AdminPeriodStatus = "planned" | "active" | "locked";
+export type AdminPeriodStatus = "planned" | "setting" | "active" | "closing" | "locked";
 
 export type AdminPeriod = {
   id: string;
@@ -148,9 +149,7 @@ export function validateAdminConfig(config: AdminConfig) {
   addDuplicateErrors(emails, "user email", errors);
 
   if (config.periods.length === 0) errors.push("At least one period is required");
-  const activePeriods = config.periods.filter((period) => period.status === "active");
-  if (activePeriods.length !== 1) errors.push("Exactly one active period is required");
-  if (activePeriods[0]?.id !== config.defaultPeriodId) errors.push("The default period must be the active period");
+  if (config.periods.filter((period) => period.status === "active").length > 1) errors.push("At most one period can be in progress");
   config.periods.forEach((period) => {
     if (!period.id.trim()) errors.push("Period id is required");
     if (!period.label.trim()) errors.push(`${period.id || "Period"}: Chinese label is required`);
@@ -214,14 +213,10 @@ function isValidEmail(value: string) {
 export function normalizeAdminConfig(input: AdminConfigInput): AdminConfig {
   const fallback = defaultAdminConfig();
   const sourcePeriods = Array.isArray(input.periods) && input.periods.length > 0 ? input.periods : fallback.periods;
-  const preliminaryPeriods = sourcePeriods.map((period, index) => normalizePeriod(period, index));
-  const requestedDefault = preliminaryPeriods.some((period) => period.id === input.defaultPeriodId)
-    ? String(input.defaultPeriodId)
-    : preliminaryPeriods.find((period) => period.status === "active")?.id ?? preliminaryPeriods[0]?.id ?? fallback.defaultPeriodId;
-  const periods = preliminaryPeriods.map((period) => ({
-    ...period,
-    status: period.id === requestedDefault ? "active" as const : period.status === "active" ? "planned" as const : period.status
-  }));
+  const periods = sourcePeriods.map((period, index) => normalizePeriod(period, index));
+  // The default period follows from the stages rather than being set on its
+  // own, so it can never point at a period people cannot work in.
+  const defaultPeriodId = deriveDefaultPeriodId(periods) || fallback.defaultPeriodId;
 
   const sourceTeams = Array.isArray(input.teams) && input.teams.length > 0 ? input.teams : fallback.teams;
   const users = normalizeUsers(input.users, fallback.users);
@@ -233,7 +228,7 @@ export function normalizeAdminConfig(input: AdminConfigInput): AdminConfig {
   return {
     version: 2,
     revision: normalizeRevision(input.revision),
-    defaultPeriodId: requestedDefault,
+    defaultPeriodId,
     periods,
     defaultTeam,
     teams,
@@ -285,7 +280,7 @@ export async function appendAdminEvent(input: Omit<AdminEvent, "id" | "createdAt
 
 function normalizePeriod(period: LegacyPeriod, index: number): AdminPeriod {
   const id = String(period.id ?? `period-${index + 1}`).trim() || `period-${index + 1}`;
-  const explicitStatus = period.status === "planned" || period.status === "active" || period.status === "locked" ? period.status : null;
+  const explicitStatus = periodStatuses.includes(period.status as AdminPeriodStatus) ? period.status as AdminPeriodStatus : null;
   const legacyStatus: AdminPeriodStatus = period.locked || period.editable === false ? "locked" : period.editable ? "active" : "planned";
   return {
     id,

@@ -40,8 +40,14 @@ export function buildActionCenter(input: {
   records: OkrRecord[];
   progressNotes: ProgressNote[];
   drafts: OkrDraft[];
+  /** The period takes check-ins; otherwise nothing is due and Yellow defaults are not risks yet. */
+  progressOpen?: boolean;
+  /** The period takes OKR changes; otherwise drafts cannot be published and are not waiting on review. */
+  okrOpen?: boolean;
   now?: Date;
 }): ActionCenterData {
+  const progressOpen = input.progressOpen ?? true;
+  const okrOpen = input.okrOpen ?? true;
   const now = input.now ?? new Date();
   const aliases = input.access.ownerAliases.map(normalizeToken).filter(Boolean);
   const periodNotes = input.progressNotes.filter((note) => note.periodId === input.periodId);
@@ -51,11 +57,11 @@ export function buildActionCenter(input: {
     .map((record) => buildKrItem(record, periodNotes, now))
     .sort(compareKrs);
   const relevantTeams = new Set(input.access.teams);
-  const staleKrs = input.config.settings.allowProgressNotes
+  const staleKrs = input.config.settings.allowProgressNotes && progressOpen
     ? ownedKrs.filter((item) => item.isStale).sort(compareOldestActivity)
     : [];
   const cycleStart = parsePeriodStart(input.periodId);
-  const cycleMissingKrs = cycleStart === null ? [] : ownedKrs
+  const cycleMissingKrs = cycleStart === null || !progressOpen ? [] : ownedKrs
     .filter((item) => {
       const lastUpdate = parseTimestamp(item.record.last_update);
       return lastUpdate === null || lastUpdate < cycleStart;
@@ -66,7 +72,7 @@ export function buildActionCenter(input: {
     ownedKrs,
     staleKrs,
     updateDueKrs: input.config.settings.allowProgressNotes ? staleKrs : cycleMissingKrs,
-    attentionKrs: ownedKrs
+    attentionKrs: !progressOpen ? [] : ownedKrs
       .filter(({ record }) => record.confidence !== "Green" || Boolean(record.risks.trim()) || Boolean(record.decisions_needed.trim()))
       .sort(compareAttention),
     alignmentUpdates: input.records
@@ -80,7 +86,7 @@ export function buildActionCenter(input: {
       )
       .map(({ source, target }) => ({ source, target, lastActivityAt: normalizeDate(source.last_update) }))
       .sort((left, right) => right.lastActivityAt.localeCompare(left.lastActivityAt) || left.source.team.localeCompare(right.source.team)),
-    pendingReviews: input.drafts
+    pendingReviews: !okrOpen ? [] : input.drafts
       .filter((draft) => getTeamEditPolicy(input.config, draft.team, input.access).canPublish)
       .map((draft) => ({
         team: draft.team,
